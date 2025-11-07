@@ -224,4 +224,37 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- Excel Import Section -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-excel me-2"></i>Import from Excel/CSV</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h6 class="mb-2">Bulk Import Data</h6>
+                        <p class="text-muted mb-0">
+                            Upload an Excel or CSV file to import categories, dishes, ingredients, and dish ingredients all at once. 
+                            Save time by importing multiple records in a single operation.
+                        </p>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Supported formats: CSV, Excel (.xls, .xlsx) | Maximum file size: 10MB
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <a href="import_excel.php" class="btn btn-success btn-lg">
+                            <i class="bi bi-upload me-2"></i>Import from Excel
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php include __DIR__ . '/../includes/footer.php'; ?>
