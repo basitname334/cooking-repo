@@ -1,0 +1,28 @@
+services:
+  # Web Service
+  - type: web
+    name: food-management-system
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+    healthCheckPath: /
+
+databases:
+  # MySQL Database
+  - name: food-management-db
+    databaseName: food_management_system
+    plan: free
+    user: food_user
+

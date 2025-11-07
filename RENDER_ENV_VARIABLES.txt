@@ -1,0 +1,24 @@
+# Copy and paste these environment variables into Render Dashboard
+
+# Go to: Your Web Service → Environment → Add Environment Variable
+
+DB_HOST=mysql-36bf6fed-zainkhalid0347-58f4.i.aivencloud.com
+DB_USER=avnadmin
+DB_PASS=AVNS_tGhVB4Sijemqa7ffP4M
+DB_NAME=defaultdb
+DB_PORT=18568
+DB_SSL_REQUIRED=true
+
+# Instructions:
+# 1. Copy each line above
+# 2. Go to Render dashboard → Your Web Service → Environment tab
+# 3. Click "Add Environment Variable"
+# 4. Paste the KEY (left side) and VALUE (right side)
+# 5. Repeat for all 6 variables
+# 6. Save and let Render redeploy
+
+# After deployment:
+# - Your app will automatically connect to Aiven MySQL
+# - Visit: https://your-app.onrender.com/import_database.php
+# - After importing, DELETE import_database.php for security!
+

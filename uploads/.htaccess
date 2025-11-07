@@ -1,0 +1,5 @@
+# Deny direct access to uploaded files
+# Allow only through PHP scripts
+Order Deny,Allow
+Deny from all
+
