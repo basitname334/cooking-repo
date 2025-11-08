@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/language.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 requireAdmin();
 
@@ -71,8 +72,82 @@ $categories_data = [
 ];
 
 /**
+ * Helper function to ensure UTF-8 encoding for text
+ * Handles BOM and encoding conversion for proper Urdu/Arabic text support
+ */
+function ensureUtf8($text) {
+    if (empty($text)) {
+        return $text;
+    }
+    
+    // Remove UTF-8 BOM if present
+    if (substr($text, 0, 3) === "\xEF\xBB\xBF") {
+        $text = substr($text, 3);
+    }
+    
+    // Check if already UTF-8
+    if (mb_check_encoding($text, 'UTF-8')) {
+        return $text;
+    }
+    
+    // Try to detect and convert encoding
+    $detected = mb_detect_encoding($text, ['UTF-8', 'Windows-1256', 'ISO-8859-1', 'Windows-1252'], true);
+    if ($detected && $detected !== 'UTF-8') {
+        $text = mb_convert_encoding($text, 'UTF-8', $detected);
+    }
+    
+    return $text;
+}
+
+/**
+ * Read CSV file with proper UTF-8 encoding support for Urdu/Arabic text
+ */
+function readCsvFile($file_path) {
+    $rows = [];
+    
+    // Try to detect file encoding
+    $file_content = file_get_contents($file_path);
+    
+    // Remove BOM if present
+    if (substr($file_content, 0, 3) === "\xEF\xBB\xBF") {
+        $file_content = substr($file_content, 3);
+    }
+    
+    // Detect encoding
+    $encoding = mb_detect_encoding($file_content, ['UTF-8', 'Windows-1256', 'ISO-8859-1', 'Windows-1252'], true);
+    
+    // Convert to UTF-8 if not already
+    if ($encoding && $encoding !== 'UTF-8') {
+        $file_content = mb_convert_encoding($file_content, 'UTF-8', $encoding);
+    } elseif (!$encoding) {
+        // If detection fails, assume UTF-8
+        $encoding = 'UTF-8';
+    }
+    
+    // Write converted content to temporary file
+    $temp_file = tempnam(sys_get_temp_dir(), 'csv_utf8_');
+    file_put_contents($temp_file, $file_content);
+    
+    // Read CSV with UTF-8 encoding
+    if (($handle = fopen($temp_file, 'r')) !== false) {
+        while (($row = fgetcsv($handle)) !== false) {
+            // Ensure each cell is UTF-8
+            $utf8_row = array_map('ensureUtf8', $row);
+            $rows[] = $utf8_row;
+        }
+        fclose($handle);
+    }
+    
+    // Clean up temp file
+    @unlink($temp_file);
+    
+    return $rows;
+}
+
+/**
  * Parse Excel/CSV file and extract categories and ingredients
  * Expected format: Column A = Ingredient Name, Column B = Category
+ * Supports Urdu/Arabic text with proper UTF-8 encoding
  */
 function parseExcelFile($file_path) {
     $data = [];
@@ -81,15 +156,17 @@ function parseExcelFile($file_path) {
     $file_extension = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
     
     if ($file_extension === 'csv') {
-        // Parse CSV file
-        if (($handle = fopen($file_path, 'r')) !== false) {
+        // Parse CSV file with UTF-8 encoding support for Urdu/Arabic text
+        $csv_rows = readCsvFile($file_path);
+        
+        if (!empty($csv_rows)) {
             // Skip header row if exists
-            $header = fgetcsv($handle);
+            array_shift($csv_rows);
             
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv_rows as $row) {
                 if (count($row) >= 2) {
-                    $ingredient_name = trim($row[0]);
-                    $category_name = trim($row[1]);
+                    $ingredient_name = ensureUtf8(trim($row[0]));
+                    $category_name = ensureUtf8(trim($row[1]));
                     
                     if (!empty($ingredient_name) && !empty($category_name)) {
                         if (!isset($data[$category_name])) {
@@ -99,7 +176,6 @@ function parseExcelFile($file_path) {
                     }
                 }
             }
-            fclose($handle);
         }
     } elseif (in_array($file_extension, ['xls', 'xlsx'])) {
         // Try to use PhpSpreadsheet if available
@@ -111,8 +187,8 @@ function parseExcelFile($file_path) {
                 
                 // Start from row 2 (skip header)
                 for ($row = 2; $row <= $highestRow; $row++) {
-                    $ingredient_name = trim($worksheet->getCell('A' . $row)->getValue());
-                    $category_name = trim($worksheet->getCell('B' . $row)->getValue());
+                    $ingredient_name = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                    $category_name = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
                     
                     if (!empty($ingredient_name) && !empty($category_name)) {
                         if (!isset($data[$category_name])) {

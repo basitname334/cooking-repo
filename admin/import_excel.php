@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/language.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 requireAdmin();
 
@@ -18,6 +19,79 @@ $import_stats = [
     'dishes' => ['created' => 0, 'skipped' => 0],
     'dish_ingredients' => ['created' => 0, 'skipped' => 0]
 ];
+
+/**
+ * Helper function to ensure UTF-8 encoding for text
+ * Handles BOM and encoding conversion for proper Urdu/Arabic text support
+ */
+function ensureUtf8($text) {
+    if (empty($text)) {
+        return $text;
+    }
+    
+    // Remove UTF-8 BOM if present
+    if (substr($text, 0, 3) === "\xEF\xBB\xBF") {
+        $text = substr($text, 3);
+    }
+    
+    // Check if already UTF-8
+    if (mb_check_encoding($text, 'UTF-8')) {
+        return $text;
+    }
+    
+    // Try to detect and convert encoding
+    $detected = mb_detect_encoding($text, ['UTF-8', 'Windows-1256', 'ISO-8859-1', 'Windows-1252'], true);
+    if ($detected && $detected !== 'UTF-8') {
+        $text = mb_convert_encoding($text, 'UTF-8', $detected);
+    }
+    
+    return $text;
+}
+
+/**
+ * Read CSV file with proper UTF-8 encoding support for Urdu/Arabic text
+ */
+function readCsvFile($file_path) {
+    $rows = [];
+    
+    // Try to detect file encoding
+    $file_content = file_get_contents($file_path);
+    
+    // Remove BOM if present
+    if (substr($file_content, 0, 3) === "\xEF\xBB\xBF") {
+        $file_content = substr($file_content, 3);
+    }
+    
+    // Detect encoding
+    $encoding = mb_detect_encoding($file_content, ['UTF-8', 'Windows-1256', 'ISO-8859-1', 'Windows-1252'], true);
+    
+    // Convert to UTF-8 if not already
+    if ($encoding && $encoding !== 'UTF-8') {
+        $file_content = mb_convert_encoding($file_content, 'UTF-8', $encoding);
+    } elseif (!$encoding) {
+        // If detection fails, assume UTF-8
+        $encoding = 'UTF-8';
+    }
+    
+    // Write converted content to temporary file
+    $temp_file = tempnam(sys_get_temp_dir(), 'csv_utf8_');
+    file_put_contents($temp_file, $file_content);
+    
+    // Read CSV with UTF-8 encoding
+    if (($handle = fopen($temp_file, 'r')) !== false) {
+        while (($row = fgetcsv($handle)) !== false) {
+            // Ensure each cell is UTF-8
+            $utf8_row = array_map('ensureUtf8', $row);
+            $rows[] = $utf8_row;
+        }
+        fclose($handle);
+    }
+    
+    // Clean up temp file
+    @unlink($temp_file);
+    
+    return $rows;
+}
 
 /**
  * Parse Excel/CSV file and extract data
@@ -38,28 +112,32 @@ function parseExcelFile($file_path) {
     $file_extension = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
     
     if ($file_extension === 'csv') {
-        // Parse CSV file - single sheet format
-        if (($handle = fopen($file_path, 'r')) !== false) {
-            // Read header row
-            $header = fgetcsv($handle);
+        // Parse CSV file with UTF-8 encoding support for Urdu/Arabic text
+        $csv_rows = readCsvFile($file_path);
+        
+        if (!empty($csv_rows)) {
+            // Skip header row if exists
+            $header = array_shift($csv_rows);
             $current_section = null;
             
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($csv_rows as $row) {
                 if (count($row) < 2) continue;
                 
-                $first_col = trim($row[0]);
+                // Ensure UTF-8 encoding for all text
+                $first_col = ensureUtf8(trim($row[0]));
                 
-                // Detect section markers
-                if (in_array(strtolower($first_col), ['[categories]', '[category]', 'categories', 'category'])) {
+                // Detect section markers (case-insensitive, supports Urdu)
+                $first_col_lower = mb_strtolower($first_col, 'UTF-8');
+                if (in_array($first_col_lower, ['[categories]', '[category]', 'categories', 'category', '[اقسام]', 'اقسام'])) {
                     $current_section = 'categories';
                     continue;
-                } elseif (in_array(strtolower($first_col), ['[ingredients]', '[ingredient]', 'ingredients', 'ingredient'])) {
+                } elseif (in_array($first_col_lower, ['[ingredients]', '[ingredient]', 'ingredients', 'ingredient', '[اجزاء]', 'اجزاء'])) {
                     $current_section = 'ingredients';
                     continue;
-                } elseif (in_array(strtolower($first_col), ['[dishes]', '[dish]', 'dishes', 'dish'])) {
+                } elseif (in_array($first_col_lower, ['[dishes]', '[dish]', 'dishes', 'dish', '[پکوان]', 'پکوان'])) {
                     $current_section = 'dishes';
                     continue;
-                } elseif (in_array(strtolower($first_col), ['[dish_ingredients]', '[dish ingredients]', 'dish_ingredients', 'dish ingredients'])) {
+                } elseif (in_array($first_col_lower, ['[dish_ingredients]', '[dish ingredients]', 'dish_ingredients', 'dish ingredients', '[پکوان اجزاء]', 'پکوان اجزاء'])) {
                     $current_section = 'dish_ingredients';
                     continue;
                 }
@@ -68,41 +146,40 @@ function parseExcelFile($file_path) {
                 if ($current_section === 'categories' || (count($row) >= 2 && !$current_section)) {
                     if (count($row) >= 2) {
                         $data['categories'][] = [
-                            'name' => trim($row[0]),
-                            'description' => isset($row[1]) ? trim($row[1]) : ''
+                            'name' => ensureUtf8(trim($row[0])),
+                            'description' => ensureUtf8(isset($row[1]) ? trim($row[1]) : '')
                         ];
                     }
                 } elseif ($current_section === 'ingredients' || count($row) >= 3) {
                     if (count($row) >= 3) {
                         $data['ingredients'][] = [
-                            'name' => trim($row[0]),
-                            'category_name' => trim($row[1]),
-                            'unit' => isset($row[2]) ? trim($row[2]) : ''
+                            'name' => ensureUtf8(trim($row[0])),
+                            'category_name' => ensureUtf8(trim($row[1])),
+                            'unit' => ensureUtf8(isset($row[2]) ? trim($row[2]) : '')
                         ];
                     }
                 } elseif ($current_section === 'dishes' || count($row) >= 4) {
                     if (count($row) >= 4) {
                         $data['dishes'][] = [
-                            'name' => trim($row[0]),
-                            'description' => isset($row[1]) ? trim($row[1]) : '',
-                            'category_name' => trim($row[2]),
+                            'name' => ensureUtf8(trim($row[0])),
+                            'description' => ensureUtf8(isset($row[1]) ? trim($row[1]) : ''),
+                            'category_name' => ensureUtf8(trim($row[2])),
                             'number_of_persons' => isset($row[3]) ? intval($row[3]) : 1,
                             'base_quantity' => isset($row[4]) ? floatval($row[4]) : 1.0,
-                            'base_unit' => isset($row[5]) ? trim($row[5]) : 'serving'
+                            'base_unit' => ensureUtf8(isset($row[5]) ? trim($row[5]) : 'serving')
                         ];
                     }
                 } elseif ($current_section === 'dish_ingredients' || count($row) >= 4) {
                     if (count($row) >= 4) {
                         $data['dish_ingredients'][] = [
-                            'dish_name' => trim($row[0]),
-                            'ingredient_name' => trim($row[1]),
+                            'dish_name' => ensureUtf8(trim($row[0])),
+                            'ingredient_name' => ensureUtf8(trim($row[1])),
                             'quantity' => floatval($row[2]),
-                            'unit' => isset($row[3]) ? trim($row[3]) : ''
+                            'unit' => ensureUtf8(isset($row[3]) ? trim($row[3]) : '')
                         ];
                     }
                 }
             }
-            fclose($handle);
         }
     } elseif (in_array($file_extension, ['xls', 'xlsx'])) {
         // Try to use PhpSpreadsheet if available
@@ -121,8 +198,8 @@ function parseExcelFile($file_path) {
                     if (strpos($sheet_name, 'categor') !== false || ($sheet_index == 0 && $highestRow > 0)) {
                         // Categories sheet
                         for ($row = 2; $row <= $highestRow; $row++) {
-                            $name = trim($worksheet->getCell('A' . $row)->getValue());
-                            $description = trim($worksheet->getCell('B' . $row)->getValue());
+                            $name = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                            $description = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
                             if (!empty($name)) {
                                 $data['categories'][] = ['name' => $name, 'description' => $description];
                             }
@@ -130,9 +207,9 @@ function parseExcelFile($file_path) {
                     } elseif (strpos($sheet_name, 'ingredient') !== false || ($sheet_index == 1 && $highestRow > 0)) {
                         // Ingredients sheet
                         for ($row = 2; $row <= $highestRow; $row++) {
-                            $name = trim($worksheet->getCell('A' . $row)->getValue());
-                            $category = trim($worksheet->getCell('B' . $row)->getValue());
-                            $unit = trim($worksheet->getCell('C' . $row)->getValue());
+                            $name = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                            $category = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
+                            $unit = ensureUtf8(trim($worksheet->getCell('C' . $row)->getFormattedValue()));
                             if (!empty($name) && !empty($category)) {
                                 $data['ingredients'][] = ['name' => $name, 'category_name' => $category, 'unit' => $unit];
                             }
@@ -140,12 +217,12 @@ function parseExcelFile($file_path) {
                     } elseif (strpos($sheet_name, 'dish') !== false && strpos($sheet_name, 'ingredient') === false || ($sheet_index == 2 && $highestRow > 0)) {
                         // Dishes sheet
                         for ($row = 2; $row <= $highestRow; $row++) {
-                            $name = trim($worksheet->getCell('A' . $row)->getValue());
-                            $description = trim($worksheet->getCell('B' . $row)->getValue());
-                            $category = trim($worksheet->getCell('C' . $row)->getValue());
+                            $name = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                            $description = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
+                            $category = ensureUtf8(trim($worksheet->getCell('C' . $row)->getFormattedValue()));
                             $persons = intval($worksheet->getCell('D' . $row)->getValue() ?: 1);
                             $base_qty = floatval($worksheet->getCell('E' . $row)->getValue() ?: 1);
-                            $base_unit = trim($worksheet->getCell('F' . $row)->getValue() ?: 'serving');
+                            $base_unit = ensureUtf8(trim($worksheet->getCell('F' . $row)->getFormattedValue() ?: 'serving'));
                             if (!empty($name) && !empty($category)) {
                                 $data['dishes'][] = [
                                     'name' => $name,
@@ -160,10 +237,10 @@ function parseExcelFile($file_path) {
                     } elseif (strpos($sheet_name, 'dish') !== false && strpos($sheet_name, 'ingredient') !== false || ($sheet_index == 3 && $highestRow > 0)) {
                         // Dish Ingredients sheet
                         for ($row = 2; $row <= $highestRow; $row++) {
-                            $dish = trim($worksheet->getCell('A' . $row)->getValue());
-                            $ingredient = trim($worksheet->getCell('B' . $row)->getValue());
+                            $dish = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                            $ingredient = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
                             $quantity = floatval($worksheet->getCell('C' . $row)->getValue() ?: 0);
-                            $unit = trim($worksheet->getCell('D' . $row)->getValue());
+                            $unit = ensureUtf8(trim($worksheet->getCell('D' . $row)->getFormattedValue()));
                             if (!empty($dish) && !empty($ingredient) && $quantity > 0) {
                                 $data['dish_ingredients'][] = [
                                     'dish_name' => $dish,
@@ -185,14 +262,14 @@ function parseExcelFile($file_path) {
                     // Check column headers to determine format
                     $header_row = [];
                     for ($col = 'A'; $col <= $highestCol; $col++) {
-                        $header_row[] = strtolower(trim($worksheet->getCell($col . '1')->getValue()));
+                        $header_row[] = mb_strtolower(ensureUtf8(trim($worksheet->getCell($col . '1')->getFormattedValue())), 'UTF-8');
                     }
                     
                     // Multi-column format detection
                     for ($row = 2; $row <= $highestRow; $row++) {
-                        $col_a = trim($worksheet->getCell('A' . $row)->getValue());
-                        $col_b = trim($worksheet->getCell('B' . $row)->getValue());
-                        $col_c = trim($worksheet->getCell('C' . $row)->getValue());
+                        $col_a = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                        $col_b = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
+                        $col_c = ensureUtf8(trim($worksheet->getCell('C' . $row)->getFormattedValue()));
                         
                         if (empty($col_a)) continue;
                         
@@ -202,19 +279,20 @@ function parseExcelFile($file_path) {
                             $data['categories'][] = ['name' => $col_a, 'description' => $col_b];
                         } elseif (!empty($col_a) && !empty($col_b) && !empty($col_c)) {
                             // Could be ingredient or dish
-                            $col_d = trim($worksheet->getCell('D' . $row)->getValue());
-                            if (empty($col_d)) {
+                            $col_d_raw = $worksheet->getCell('D' . $row)->getValue();
+                            $col_d = ensureUtf8(trim($worksheet->getCell('D' . $row)->getFormattedValue()));
+                            if (empty($col_d) || (is_numeric($col_d_raw) && $col_d_raw == 0)) {
                                 // Likely ingredient (Name, Category, Unit)
                                 $data['ingredients'][] = ['name' => $col_a, 'category_name' => $col_b, 'unit' => $col_c];
                             } else {
                                 // Likely dish (Name, Description, Category, ...)
                                 $col_e = floatval($worksheet->getCell('E' . $row)->getValue() ?: 1);
-                                $col_f = trim($worksheet->getCell('F' . $row)->getValue() ?: 'serving');
+                                $col_f = ensureUtf8(trim($worksheet->getCell('F' . $row)->getFormattedValue() ?: 'serving'));
                                 $data['dishes'][] = [
                                     'name' => $col_a,
                                     'description' => $col_b,
                                     'category_name' => $col_c,
-                                    'number_of_persons' => intval($col_d ?: 1),
+                                    'number_of_persons' => is_numeric($col_d_raw) ? intval($col_d_raw) : 1,
                                     'base_quantity' => $col_e,
                                     'base_unit' => $col_f
                                 ];
@@ -222,8 +300,8 @@ function parseExcelFile($file_path) {
                         }
                         
                         // Check for dish ingredients (Dish, Ingredient, Quantity, Unit)
-                        $dish_col = trim($worksheet->getCell('A' . $row)->getValue());
-                        $ing_col = trim($worksheet->getCell('B' . $row)->getValue());
+                        $dish_col = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
+                        $ing_col = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
                         $qty_col = floatval($worksheet->getCell('C' . $row)->getValue() ?: 0);
                         if (!empty($dish_col) && !empty($ing_col) && $qty_col > 0 && 
                             !in_array($dish_col, array_column($data['dishes'], 'name')) &&
@@ -232,7 +310,7 @@ function parseExcelFile($file_path) {
                                 'dish_name' => $dish_col,
                                 'ingredient_name' => $ing_col,
                                 'quantity' => $qty_col,
-                                'unit' => trim($worksheet->getCell('D' . $row)->getValue() ?: '')
+                                'unit' => ensureUtf8(trim($worksheet->getCell('D' . $row)->getFormattedValue() ?: ''))
                             ];
                         }
                     }

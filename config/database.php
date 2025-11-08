@@ -37,11 +37,18 @@ function getDBConnection() {
             $connected = @$conn->real_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, (int)DB_PORT, null, MYSQLI_CLIENT_SSL);
             if (!$connected) {
                 $conn = false;
+            } else {
+                // Set UTF-8 charset for proper Unicode support (Urdu, Arabic, etc.)
+                $conn->set_charset("utf8mb4");
             }
         }
     } else {
         // Standard connection for local development
         $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, (int)DB_PORT);
+        // Set UTF-8 charset for proper Unicode support (Urdu, Arabic, etc.)
+        if ($conn && !$conn->connect_error) {
+            $conn->set_charset("utf8mb4");
+        }
     }
     
     // Check connection
@@ -54,6 +61,10 @@ function getDBConnection() {
                 $temp_conn->close();
                 // Try connecting again
                 $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, (int)DB_PORT);
+                // Set UTF-8 charset after reconnection
+                if ($conn && !$conn->connect_error) {
+                    $conn->set_charset("utf8mb4");
+                }
             }
         }
         
@@ -146,6 +157,9 @@ function ensureDatabaseSetup() {
                     $connected = @$conn->real_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, (int)DB_PORT, null, MYSQLI_CLIENT_SSL);
                     if (!$connected || $conn->connect_error) {
                         return false;
+                    } else {
+                        // Set UTF-8 charset for proper Unicode support (Urdu, Arabic, etc.)
+                        $conn->set_charset("utf8mb4");
                     }
                 } else {
                     return false;
@@ -156,6 +170,9 @@ function ensureDatabaseSetup() {
                 
                 if ($conn->connect_error) {
                     return false;
+                } else {
+                    // Set UTF-8 charset for proper Unicode support (Urdu, Arabic, etc.)
+                    $conn->set_charset("utf8mb4");
                 }
             }
         }
