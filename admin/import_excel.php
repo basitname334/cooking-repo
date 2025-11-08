@@ -142,24 +142,29 @@ function parseExcelFile($file_path) {
                     continue;
                 }
                 
-                // Parse based on column count and section
-                if ($current_section === 'categories' || (count($row) >= 2 && !$current_section)) {
+                // Parse based on section marker (priority) or column count
+                // Only process if we have a section marker OR if no section is set, use column count
+                if ($current_section === 'categories') {
+                    // Explicit categories section
                     if (count($row) >= 2) {
                         $data['categories'][] = [
                             'name' => ensureUtf8(trim($row[0])),
                             'description' => ensureUtf8(isset($row[1]) ? trim($row[1]) : '')
                         ];
                     }
-                } elseif ($current_section === 'ingredients' || count($row) >= 3) {
-                    if (count($row) >= 3) {
+                } elseif ($current_section === 'ingredients') {
+                    // Explicit ingredients section
+                    if (count($row) >= 2) {
+                        // Ingredients: Name, Category (required), Unit (optional)
                         $data['ingredients'][] = [
                             'name' => ensureUtf8(trim($row[0])),
                             'category_name' => ensureUtf8(trim($row[1])),
                             'unit' => ensureUtf8(isset($row[2]) ? trim($row[2]) : '')
                         ];
                     }
-                } elseif ($current_section === 'dishes' || count($row) >= 4) {
-                    if (count($row) >= 4) {
+                } elseif ($current_section === 'dishes') {
+                    // Explicit dishes section
+                    if (count($row) >= 3) {
                         $data['dishes'][] = [
                             'name' => ensureUtf8(trim($row[0])),
                             'description' => ensureUtf8(isset($row[1]) ? trim($row[1]) : ''),
@@ -169,14 +174,56 @@ function parseExcelFile($file_path) {
                             'base_unit' => ensureUtf8(isset($row[5]) ? trim($row[5]) : 'serving')
                         ];
                     }
-                } elseif ($current_section === 'dish_ingredients' || count($row) >= 4) {
-                    if (count($row) >= 4) {
+                } elseif ($current_section === 'dish_ingredients') {
+                    // Explicit dish_ingredients section
+                    if (count($row) >= 3) {
                         $data['dish_ingredients'][] = [
                             'dish_name' => ensureUtf8(trim($row[0])),
                             'ingredient_name' => ensureUtf8(trim($row[1])),
                             'quantity' => floatval($row[2]),
                             'unit' => ensureUtf8(isset($row[3]) ? trim($row[3]) : '')
                         ];
+                    }
+                } elseif (!$current_section) {
+                    // No section marker - auto-detect based on column count
+                    // This is less reliable, so we prioritize common formats
+                    if (count($row) >= 3 && !empty(trim($row[1]))) {
+                        // 3+ columns: Most likely ingredient (Name, Category, Unit)
+                        // Only if column 2 (category) is not empty
+                        $data['ingredients'][] = [
+                            'name' => ensureUtf8(trim($row[0])),
+                            'category_name' => ensureUtf8(trim($row[1])),
+                            'unit' => ensureUtf8(isset($row[2]) ? trim($row[2]) : '')
+                        ];
+                    } elseif (count($row) == 2) {
+                        // Exactly 2 columns: Could be category (Name, Description)
+                        $data['categories'][] = [
+                            'name' => ensureUtf8(trim($row[0])),
+                            'description' => ensureUtf8(trim($row[1]))
+                        ];
+                    } elseif (count($row) >= 4) {
+                        // 4+ columns: Could be dish or dish_ingredient
+                        // Check if column C is numeric (likely dish_ingredient quantity)
+                        $col_c_value = trim($row[2]);
+                        if (is_numeric($col_c_value) && floatval($col_c_value) > 0) {
+                            // Likely dish_ingredient (Dish, Ingredient, Quantity, Unit)
+                            $data['dish_ingredients'][] = [
+                                'dish_name' => ensureUtf8(trim($row[0])),
+                                'ingredient_name' => ensureUtf8(trim($row[1])),
+                                'quantity' => floatval($col_c_value),
+                                'unit' => ensureUtf8(isset($row[3]) ? trim($row[3]) : '')
+                            ];
+                        } else {
+                            // Likely dish (Name, Description, Category, Persons, ...)
+                            $data['dishes'][] = [
+                                'name' => ensureUtf8(trim($row[0])),
+                                'description' => ensureUtf8(trim($row[1])),
+                                'category_name' => ensureUtf8(trim($row[2])),
+                                'number_of_persons' => isset($row[3]) ? intval($row[3]) : 1,
+                                'base_quantity' => isset($row[4]) ? floatval($row[4]) : 1.0,
+                                'base_unit' => ensureUtf8(isset($row[5]) ? trim($row[5]) : 'serving')
+                            ];
+                        }
                     }
                 }
             }
@@ -274,44 +321,82 @@ function parseExcelFile($file_path) {
                         if (empty($col_a)) continue;
                         
                         // Determine type based on column count and content
-                        if (!empty($col_a) && !empty($col_b) && empty($col_c)) {
-                            // Likely category
-                            $data['categories'][] = ['name' => $col_a, 'description' => $col_b];
-                        } elseif (!empty($col_a) && !empty($col_b) && !empty($col_c)) {
-                            // Could be ingredient or dish
-                            $col_d_raw = $worksheet->getCell('D' . $row)->getValue();
-                            $col_d = ensureUtf8(trim($worksheet->getCell('D' . $row)->getFormattedValue()));
-                            if (empty($col_d) || (is_numeric($col_d_raw) && $col_d_raw == 0)) {
-                                // Likely ingredient (Name, Category, Unit)
-                                $data['ingredients'][] = ['name' => $col_a, 'category_name' => $col_b, 'unit' => $col_c];
-                            } else {
-                                // Likely dish (Name, Description, Category, ...)
+                        // Priority: Check column headers first, then content
+                        $col_d_exists = $worksheet->getCell('D' . $row)->getValue();
+                        $col_d = ensureUtf8(trim($worksheet->getCell('D' . $row)->getFormattedValue()));
+                        
+                        // Check if this looks like an ingredient row (most common: 3 columns with category in column B)
+                        // Ingredients format: Name (A), Category (B), Unit (C - optional)
+                        // Key: If column B looks like a category name (not a description), it's likely an ingredient
+                        if (!empty($col_a) && !empty($col_b)) {
+                            // Check if column D exists and has content
+                            $has_col_d = !empty($col_d_exists) && ($col_d_exists !== null && $col_d_exists !== '');
+                            
+                            if (!$has_col_d && empty($col_c)) {
+                                // 2 columns with no D: Could be category (Name, Description) OR ingredient (Name, Category with no unit)
+                                // We can't be 100% sure, but if there's no section marker, prioritize ingredients
+                                // since that's the more common import format
+                                // However, to be safe, check if we already have ingredients - if so, this might be a category
+                                if (count($data['ingredients']) > 0 || count($data['categories']) == 0) {
+                                    // If we have ingredients already or no categories, this is likely an ingredient
+                                    $data['ingredients'][] = [
+                                        'name' => $col_a, 
+                                        'category_name' => $col_b, 
+                                        'unit' => ''
+                                    ];
+                                } else {
+                                    // If we have categories but no ingredients, this might be a category
+                                    $data['categories'][] = ['name' => $col_a, 'description' => $col_b];
+                                }
+                            } elseif (!$has_col_d && !empty($col_c)) {
+                                // 3 columns with empty D: Ingredient (Name, Category, Unit)
+                                // This is the most common format for ingredients
+                                $data['ingredients'][] = [
+                                    'name' => $col_a, 
+                                    'category_name' => $col_b, 
+                                    'unit' => $col_c
+                                ];
+                            } elseif (!$has_col_d) {
+                                // Fallback: 2 columns, assume category if no other data suggests otherwise
+                                $data['categories'][] = ['name' => $col_a, 'description' => $col_b];
+                            }
+                        }
+                        
+                        // Handle rows with 4+ columns separately
+                        if (!empty($col_a) && !empty($col_b) && !empty($col_c) && !empty($col_d)) {
+                            // 4+ columns: Could be dish or dish_ingredient
+                            // Check if column C is numeric (dish_ingredient) or text (dish)
+                            $col_c_raw = $worksheet->getCell('C' . $row)->getValue();
+                            if (is_numeric($col_c_raw) && floatval($col_c_raw) > 0) {
+                                // Column C is numeric: Dish ingredient (Dish, Ingredient, Quantity, Unit)
+                                $data['dish_ingredients'][] = [
+                                    'dish_name' => $col_a,
+                                    'ingredient_name' => $col_b,
+                                    'quantity' => floatval($col_c_raw),
+                                    'unit' => $col_c
+                                ];
+                            } elseif (is_numeric($col_d) && intval($col_d) > 0 && intval($col_d) <= 50) {
+                                // Column D is a small number (1-50): Likely dish (persons)
                                 $col_e = floatval($worksheet->getCell('E' . $row)->getValue() ?: 1);
                                 $col_f = ensureUtf8(trim($worksheet->getCell('F' . $row)->getFormattedValue() ?: 'serving'));
                                 $data['dishes'][] = [
                                     'name' => $col_a,
                                     'description' => $col_b,
                                     'category_name' => $col_c,
-                                    'number_of_persons' => is_numeric($col_d_raw) ? intval($col_d_raw) : 1,
+                                    'number_of_persons' => intval($col_d),
                                     'base_quantity' => $col_e,
                                     'base_unit' => $col_f
                                 ];
+                            } else {
+                                // Default for 4+ columns with text: Could be ingredient with extra data
+                                // But be conservative - if it has 4 columns, it's more likely a dish
+                                // Only treat as ingredient if column structure clearly suggests it
+                                $data['ingredients'][] = [
+                                    'name' => $col_a, 
+                                    'category_name' => $col_b, 
+                                    'unit' => $col_c
+                                ];
                             }
-                        }
-                        
-                        // Check for dish ingredients (Dish, Ingredient, Quantity, Unit)
-                        $dish_col = ensureUtf8(trim($worksheet->getCell('A' . $row)->getFormattedValue()));
-                        $ing_col = ensureUtf8(trim($worksheet->getCell('B' . $row)->getFormattedValue()));
-                        $qty_col = floatval($worksheet->getCell('C' . $row)->getValue() ?: 0);
-                        if (!empty($dish_col) && !empty($ing_col) && $qty_col > 0 && 
-                            !in_array($dish_col, array_column($data['dishes'], 'name')) &&
-                            !in_array($dish_col, array_column($data['categories'], 'name'))) {
-                            $data['dish_ingredients'][] = [
-                                'dish_name' => $dish_col,
-                                'ingredient_name' => $ing_col,
-                                'quantity' => $qty_col,
-                                'unit' => ensureUtf8(trim($worksheet->getCell('D' . $row)->getFormattedValue() ?: ''))
-                            ];
                         }
                     }
                 }
