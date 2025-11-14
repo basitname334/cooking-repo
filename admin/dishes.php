@@ -207,7 +207,62 @@ include __DIR__ . '/../includes/header.php';
                     <?php echo count($dishes); ?> <?php echo count($dishes) == 1 ? 'dish' : 'dishes'; ?> in your menu
                 </p>
             </div>
+            <div>
+                <button type="button" class="btn btn-primary" onclick="printDishesPage()">
+                    <i class="bi bi-printer-fill me-2"></i>
+                    Print Page
+                </button>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- Print Banner (Hidden on screen, shown when printing) -->
+<div class="print-banner no-print-screen">
+    <div class="banner-left">
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
+            <div class="banner-left-name" style="margin-top: 0;">حسن کک</div>
+            <div class="banner-left-phone">0308-6977778</div>
+            <div class="banner-left-phone">0312-6396398</div>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
+            <div class="banner-left-name" style="margin-top: 15px;">سلیم</div>
+            <div class="banner-left-phone">0308-6977778</div>
+            <div class="banner-left-phone">0312-6396398</div>
+        </div>
+    </div>
+    <div class="banner-right">
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
+            <div class="banner-right-service" style="margin-top: 0;">ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</div>
+            <div class="banner-right-service yellow">سلیم فروٹ ٹریفل اسپیشلسٹ</div>
+            <div class="banner-address-bar">
+                <div class="banner-address-text">چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ چاہ گہنے والا نزد برف کارخانہ</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Contact Information (Shown below banner when printing) -->
+<div class="banner-contact-info no-print-screen">
+    <h4>Contact Information</h4>
+    <p><strong>حسن کک:</strong> 0308-6977778, 0312-6396398</p>
+    <p><strong>سلیم:</strong> 0308-6977778, 0312-6396398</p>
+</div>
+
+<!-- Number of Persons Section (Shown below banner when printing) -->
+<div class="persons-info-section no-print-screen">
+    <h4>Number of Persons per Dish</h4>
+    <div class="persons-list">
+        <?php if (!empty($dishes)): ?>
+            <?php foreach ($dishes as $dish): ?>
+                <div class="person-item">
+                    <span class="dish-name"><?php echo htmlspecialchars($dish['name']); ?></span>
+                    <span class="person-count"><?php echo intval($dish['number_of_persons'] ?? 1); ?> <?php echo (intval($dish['number_of_persons'] ?? 1) == 1) ? 'Person' : 'Persons'; ?></span>
+                </div>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <p class="text-muted">No dishes available</p>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -264,15 +319,28 @@ include __DIR__ . '/../includes/header.php';
                                     <i class="bi bi-folder me-1 text-primary"></i>
                                     Category <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select" id="category_id" name="category_id" required>
-                                    <option value="">-- Select Category --</option>
-                                    <?php foreach ($categories as $cat): ?>
-                                        <option value="<?php echo $cat['id']; ?>" 
-                                            <?php echo ($edit_dish && $edit_dish['category_id'] == $cat['id']) ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($cat['name']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <div class="d-flex gap-2">
+                                    <div class="searchable-select-wrapper flex-grow-1" id="category_wrapper">
+                                        <input type="text" class="form-control searchable-select-input" 
+                                               id="category_id_search" 
+                                               placeholder="Search..." 
+                                               autocomplete="off"
+                                               style="display: none;">
+                                        <select class="form-select searchable-select" id="category_id" name="category_id" required tabindex="0">
+                                            <option value="">-- Select Category --</option>
+                                            <?php foreach ($categories as $cat): ?>
+                                                <option value="<?php echo $cat['id']; ?>" 
+                                                    data-search="<?php echo strtolower(htmlspecialchars($cat['name'])); ?>"
+                                                    <?php echo ($edit_dish && $edit_dish['category_id'] == $cat['id']) ? 'selected' : ''; ?>>
+                                                    <?php echo htmlspecialchars($cat['name']); ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal" title="Add New Category">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Description -->
@@ -468,7 +536,884 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<style>
+.searchable-select-wrapper {
+    position: relative;
+    cursor: pointer;
+    min-height: 38px;
+}
+
+.searchable-select-wrapper:not(.active) {
+    cursor: pointer;
+}
+
+.searchable-select-wrapper:not(.active) .searchable-select {
+    cursor: pointer;
+}
+
+.searchable-select-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    border-radius: 0.375rem;
+    background: white;
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    height: calc(1.5em + 1rem + 2px);
+    border: 1px solid #ced4da;
+    width: 100%;
+}
+
+.searchable-select-input:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    outline: none;
+}
+
+.searchable-select {
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+}
+
+.searchable-select-wrapper.active .searchable-select {
+    display: none !important;
+    pointer-events: none;
+}
+
+.searchable-select-wrapper.active .searchable-select-input {
+    display: block !important;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom: none;
+}
+
+/* When not active, hide search input and show select */
+.searchable-select-wrapper:not(.active) .searchable-select-input {
+    display: none !important;
+}
+
+.ingredient-row-item .searchable-select-wrapper {
+    margin-bottom: 0;
+}
+
+/* Custom dropdown styling - clean and simple */
+.searchable-select-dropdown {
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    border: 1px solid #ced4da !important;
+    border-top: none !important;
+    border-radius: 0 0 0.375rem 0.375rem !important;
+    max-height: 350px !important;
+    min-height: 120px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    z-index: 1001 !important;
+    display: none !important;
+    margin-top: -1px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    padding: 0 !important;
+}
+
+.searchable-select-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.searchable-select-dropdown::-webkit-scrollbar-track {
+    background: #f8f9fa;
+}
+
+.searchable-select-dropdown::-webkit-scrollbar-thumb {
+    background: #dee2e6;
+    border-radius: 3px;
+}
+
+.searchable-select-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
+
+.searchable-select-option {
+    padding: 10px 12px !important;
+    cursor: pointer !important;
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
+    color: #495057 !important;
+    background: white !important;
+    transition: background-color 0.15s ease !important;
+    border: none !important;
+    text-align: left !important;
+    width: 100% !important;
+}
+
+.searchable-select-option:hover {
+    background-color: #f8f9fa !important;
+    color: #212529 !important;
+}
+
+.searchable-select-option.selected {
+    background-color: #e9ecef !important;
+    color: #212529 !important;
+    font-weight: normal !important;
+}
+
+/* No results message */
+.searchable-select-dropdown .no-results {
+    padding: 16px 12px !important;
+    text-align: center !important;
+    color: #6c757d !important;
+    font-size: 0.9rem !important;
+    font-style: italic !important;
+    background: white !important;
+}
+
+/* Banner Styles (for screen and print) */
+.print-banner.no-print-screen {
+    display: none;
+}
+
+.print-banner {
+    width: 100%;
+    margin-bottom: 20px;
+    border: 3px solid #000;
+    overflow: visible;
+    box-sizing: border-box;
+    min-height: 150px;
+}
+
+.banner-left {
+    width: 25%;
+    background-color: #FFEB3B; /* Yellow background */
+    background: #FFEB3B; /* Yellow background */
+    padding: 15px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
+    border-right: 2px solid #000;
+}
+
+.banner-left-name {
+    font-size: 18px;
+    font-weight: 900;
+    color: #000;
+    margin-bottom: 8px;
+    text-align: center;
+    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+    line-height: 1.4;
+}
+
+.banner-left-phone {
+    font-size: 12px;
+    color: #000;
+    margin: 2px 0;
+    text-align: center;
+    direction: ltr;
+    font-weight: bold;
+    font-family: Arial, sans-serif;
+}
+
+.banner-right {
+    width: 75%;
+    background-color: #DC143C; /* Red background */
+    background: #DC143C; /* Red background */
+    padding: 15px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.banner-right-service {
+    color: #FFFFFF;
+    font-size: 16px;
+    font-weight: 700;
+    margin: 5px 0;
+    text-align: center;
+    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+    line-height: 1.4;
+}
+
+.banner-right-service.yellow {
+    color: #FFD700;
+    font-size: 18px;
+    font-weight: 900;
+}
+
+.banner-address-bar {
+    background-color: #2E7D32; /* Dark green background */
+    background: #2E7D32; /* Dark green background */
+    padding: 10px 15px;
+    border: 2px solid #1B5E20;
+    border-radius: 8px;
+    margin-top: 12px;
+    width: calc(100% - 110px);
+    text-align: center;
+}
+
+.banner-address-text {
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+}
+
+.banner-contact-info.no-print-screen {
+    display: none;
+}
+
+.banner-contact-info {
+    margin-top: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.banner-contact-info h4 {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #000;
+}
+
+.banner-contact-info p {
+    font-size: 12px;
+    margin: 3px 0;
+    color: #333;
+}
+
+.persons-info-section.no-print-screen {
+    display: none;
+}
+
+.persons-info-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-radius: 5px;
+    page-break-inside: avoid;
+}
+
+.persons-info-section h4 {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 12px;
+    color: #000;
+    text-align: center;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 8px;
+}
+
+.persons-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 10px;
+}
+
+.person-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.person-item .dish-name {
+    font-weight: 600;
+    color: #333;
+    flex: 1;
+}
+
+.person-item .person-count {
+    font-weight: bold;
+    color: #0d6efd;
+    font-size: 14px;
+}
+
+/* Print Styles - Preserve Colors */
+@media print {
+    @page {
+        size: A4;
+        margin: 0.5cm;
+    }
+    
+    /* Preserve colors when printing - CRITICAL for color printing */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    html, body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        font-size: 12px !important;
+    }
+    
+    /* Hide non-printable elements */
+    .no-print,
+    button,
+    .btn,
+    .card-header,
+    .alert,
+    .searchable-select-wrapper,
+    .input-group {
+        display: none !important;
+    }
+    
+    /* Show print-only elements */
+    .no-print-screen {
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    .print-banner.no-print-screen {
+        display: flex !important;
+        visibility: visible !important;
+    }
+    
+    .persons-info-section.no-print-screen {
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    /* Print Banner Styles */
+    .print-banner {
+        display: flex !important;
+        width: 100% !important;
+        margin-bottom: 20px !important;
+        border: 3px solid #000 !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+        min-height: 150px !important;
+        page-break-inside: avoid !important;
+        page-break-after: avoid !important;
+        visibility: visible !important;
+    }
+    
+    .banner-contact-info {
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    .banner-left {
+        width: 25% !important;
+        background-color: #FFEB3B !important; /* Yellow background */
+        background: #FFEB3B !important; /* Yellow background */
+        padding: 15px 12px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        box-sizing: border-box !important;
+        border-right: 2px solid #000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    .banner-left-name {
+        font-size: 18px !important;
+        font-weight: 900 !important;
+        color: #000 !important;
+        margin-bottom: 8px !important;
+        text-align: center !important;
+        font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif !important;
+        line-height: 1.4 !important;
+    }
+    
+    .banner-left-phone {
+        font-size: 12px !important;
+        color: #000 !important;
+        margin: 2px 0 !important;
+        text-align: center !important;
+        direction: ltr !important;
+        font-weight: bold !important;
+        font-family: Arial, sans-serif !important;
+    }
+    
+    .banner-right {
+        width: 75% !important;
+        background-color: #DC143C !important; /* Red background */
+        background: #DC143C !important; /* Red background */
+        padding: 15px 20px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        position: relative !important;
+        box-sizing: border-box !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    .banner-right-service {
+        color: #FFFFFF !important;
+        font-size: 16px !important;
+        font-weight: 700 !important;
+        margin: 5px 0 !important;
+        text-align: center !important;
+        font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif !important;
+        line-height: 1.4 !important;
+    }
+    
+    .banner-right-service.yellow {
+        color: #FFD700 !important;
+        font-size: 18px !important;
+        font-weight: 900 !important;
+    }
+    
+    .banner-address-bar {
+        background-color: #2E7D32 !important; /* Dark green background */
+        background: #2E7D32 !important; /* Dark green background */
+        padding: 10px 15px !important;
+        border: 2px solid #1B5E20 !important;
+        border-radius: 8px !important;
+        margin-top: 12px !important;
+        width: calc(100% - 110px) !important;
+        text-align: center !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    .persons-info-section {
+        display: block !important;
+        visibility: visible !important;
+        margin-top: 20px !important;
+        padding: 15px !important;
+        background: #f8f9fa !important;
+        border: 2px solid #dee2e6 !important;
+        border-radius: 5px !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .persons-info-section h4 {
+        font-size: 16px !important;
+        font-weight: bold !important;
+        margin-bottom: 12px !important;
+        color: #000 !important;
+        text-align: center !important;
+        border-bottom: 2px solid #dee2e6 !important;
+        padding-bottom: 8px !important;
+    }
+    
+    .persons-list {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)) !important;
+        gap: 10px !important;
+    }
+    
+    .person-item {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 8px 12px !important;
+        background: white !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 4px !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .person-item .dish-name {
+        font-weight: 600 !important;
+        color: #333 !important;
+        flex: 1 !important;
+    }
+    
+    .person-item .person-count {
+        font-weight: bold !important;
+        color: #0d6efd !important;
+        font-size: 14px !important;
+    }
+    
+    .banner-address-text {
+        color: #FFFFFF !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        line-height: 1.5 !important;
+        font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif !important;
+    }
+    
+    .banner-contact-info {
+        margin-top: 15px !important;
+        padding: 10px !important;
+        background: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 5px !important;
+        text-align: center !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .banner-contact-info h4 {
+        font-size: 14px !important;
+        font-weight: bold !important;
+        margin-bottom: 8px !important;
+        color: #000 !important;
+    }
+    
+    .banner-contact-info p {
+        font-size: 12px !important;
+        margin: 3px 0 !important;
+        color: #333 !important;
+    }
+    
+    /* Card styles for print */
+    .card {
+        border: 1px solid #dee2e6 !important;
+        page-break-inside: avoid !important;
+        margin-bottom: 15px !important;
+    }
+    
+    .card-body {
+        padding: 15px !important;
+    }
+    
+    /* Table styles */
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    
+    table th,
+    table td {
+        border: 1px solid #dee2e6 !important;
+        padding: 8px !important;
+    }
+}
+</style>
+
 <script>
+// Searchable Select Functionality
+function initSearchableSelect(selectElement) {
+    if (!selectElement || selectElement.classList.contains('searchable-initialized')) {
+        return;
+    }
+    
+    selectElement.classList.add('searchable-initialized');
+    const wrapper = selectElement.closest('.searchable-select-wrapper');
+    if (!wrapper) return;
+    
+    let searchInput = wrapper.querySelector('.searchable-select-input');
+    if (!searchInput) {
+        searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'form-control searchable-select-input';
+        searchInput.placeholder = 'Search...';
+        searchInput.autocomplete = 'off';
+        searchInput.style.display = 'none';
+        wrapper.insertBefore(searchInput, selectElement);
+    }
+    
+    // Show search on focus or click
+    function showSearch() {
+        if (wrapper.classList.contains('active')) {
+            return; // Already active
+        }
+        
+        wrapper.classList.add('active');
+        searchInput.style.display = 'block';
+        searchInput.value = ''; // Clear search to show all options
+        searchInput.placeholder = 'Search...';
+        
+        // Show all options initially
+        const options = selectElement.querySelectorAll('option:not([value=""])');
+        let visibleCount = 0;
+        options.forEach(option => {
+            option.style.display = '';
+            visibleCount++;
+        });
+        
+        // Show all options in custom dropdown immediately
+        updateCustomDropdown(visibleCount);
+        
+        // Focus the search input and ensure dropdown is visible
+        setTimeout(() => {
+            searchInput.focus();
+            searchInput.select();
+            // Double-check dropdown is visible after a brief delay
+            if (customDropdown && visibleCount > 0) {
+                customDropdown.style.display = 'block';
+            }
+        }, 50);
+    }
+    
+    // Primary click handler on wrapper - catches all clicks
+    wrapper.addEventListener('click', function(e) {
+        // Don't trigger if clicking inside the custom dropdown
+        const dropdown = wrapper.querySelector('.searchable-select-dropdown');
+        if (dropdown && dropdown.contains(e.target)) {
+            return;
+        }
+        
+        // Don't trigger if clicking on the search input (let it handle its own focus)
+        if (e.target === searchInput) {
+            return;
+        }
+        
+        // If not active, show search for any click on wrapper/select
+        if (!wrapper.classList.contains('active')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showSearch();
+        }
+    });
+    
+    // Also handle mousedown on select to catch it early
+    selectElement.addEventListener('mousedown', function(e) {
+        if (!wrapper.classList.contains('active')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showSearch();
+            return false;
+        }
+    });
+    
+    // Handle focus event
+    selectElement.addEventListener('focus', function(e) {
+        if (!wrapper.classList.contains('active')) {
+            showSearch();
+        }
+    });
+    
+    // Backup click handler on select
+    selectElement.addEventListener('click', function(e) {
+        if (!wrapper.classList.contains('active')) {
+            e.preventDefault();
+            e.stopPropagation();
+            showSearch();
+            return false;
+        }
+    });
+    
+    // Close on Escape key
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideSearch();
+            selectElement.blur();
+        }
+    });
+    
+    // Filter options on search and show dropdown
+    searchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        const options = selectElement.querySelectorAll('option');
+        let visibleCount = 0;
+        
+        options.forEach(option => {
+            const searchText = option.getAttribute('data-search') || option.textContent.toLowerCase();
+            if (searchText.includes(searchTerm) || option.value === '') {
+                option.style.display = '';
+                if (option.value !== '') {
+                    visibleCount++;
+                }
+            } else {
+                option.style.display = 'none';
+            }
+        });
+        
+        // Show filtered options in a custom dropdown
+        updateCustomDropdown(visibleCount);
+        
+        // Ensure dropdown is visible when typing
+        if (customDropdown && wrapper.classList.contains('active')) {
+            customDropdown.style.display = 'block';
+        }
+    });
+    
+    // Create custom dropdown for displaying filtered options
+    let customDropdown = null;
+    function updateCustomDropdown(visibleCount) {
+        if (!customDropdown) {
+            customDropdown = document.createElement('div');
+            customDropdown.className = 'searchable-select-dropdown';
+            wrapper.appendChild(customDropdown);
+        }
+        
+        // Always show dropdown when active
+        if (wrapper.classList.contains('active')) {
+            customDropdown.innerHTML = '';
+            const options = selectElement.querySelectorAll('option:not([value=""])');
+            let hasVisible = false;
+            
+            options.forEach(option => {
+                if (option.style.display !== 'none') {
+                    hasVisible = true;
+                    const item = document.createElement('div');
+                    item.className = 'searchable-select-option';
+                    
+                    // Add selected class if this is the current value
+                    if (selectElement.value === option.value) {
+                        item.classList.add('selected');
+                    }
+                    
+                    // Simple text content - clean and minimal
+                    item.textContent = option.textContent.trim();
+                    
+                    item.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        selectElement.value = option.value;
+                        selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+                        hideSearch();
+                    });
+                    
+                    customDropdown.appendChild(item);
+                }
+            });
+            
+            // Show dropdown if we have visible options
+            if (hasVisible && visibleCount > 0) {
+                customDropdown.style.display = 'block';
+            } else if (searchInput && searchInput.value.trim()) {
+                // Show no results message if searching but nothing found
+                customDropdown.innerHTML = '<div class="no-results">No results found</div>';
+                customDropdown.style.display = 'block';
+            } else if (visibleCount > 0) {
+                // Show all options if no search term and we have options
+                customDropdown.style.display = 'block';
+            } else {
+                // Even if no visible options, show dropdown if active (might be loading)
+                if (wrapper.classList.contains('active')) {
+                    customDropdown.innerHTML = '<div class="no-results">No options available</div>';
+                    customDropdown.style.display = 'block';
+                } else {
+                    customDropdown.style.display = 'none';
+                }
+            }
+        } else {
+            // Hide dropdown when not active
+            customDropdown.style.display = 'none';
+        }
+    }
+    
+    function hideCustomDropdown() {
+        if (customDropdown) {
+            customDropdown.style.display = 'none';
+        }
+    }
+    
+    // Handle keyboard navigation in search
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+            e.preventDefault();
+            selectElement.focus();
+            // Trigger keyboard event on select
+            const keyEvent = new KeyboardEvent('keydown', {
+                key: e.key,
+                bubbles: true,
+                cancelable: true
+            });
+            selectElement.dispatchEvent(keyEvent);
+        }
+    });
+    
+    // Hide search when clicking outside or on option select
+    selectElement.addEventListener('change', function() {
+        hideSearch();
+    });
+    
+    function hideSearch() {
+        wrapper.classList.remove('active');
+        searchInput.style.display = 'none';
+        searchInput.value = '';
+        selectElement.size = 1;
+        hideCustomDropdown();
+        // Reset all options visibility
+        const options = selectElement.querySelectorAll('option');
+        options.forEach(option => {
+            option.style.display = '';
+        });
+    }
+    
+    // Hide search when clicking outside (using event delegation)
+    if (!window.searchableSelectClickHandler) {
+        window.searchableSelectClickHandler = function(e) {
+            document.querySelectorAll('.searchable-select-wrapper.active').forEach(wrapper => {
+                if (!wrapper.contains(e.target)) {
+                    const searchInput = wrapper.querySelector('.searchable-select-input');
+                    const selectElement = wrapper.querySelector('.searchable-select');
+                    const customDropdown = wrapper.querySelector('.searchable-select-dropdown');
+                    wrapper.classList.remove('active');
+                    if (searchInput) {
+                        searchInput.style.display = 'none';
+                        searchInput.value = '';
+                    }
+                    if (customDropdown) {
+                        customDropdown.style.display = 'none';
+                    }
+                    if (selectElement) {
+                        selectElement.size = 1;
+                        // Reset all options visibility
+                        const options = selectElement.querySelectorAll('option');
+                        options.forEach(option => {
+                            option.style.display = '';
+                        });
+                    }
+                }
+            });
+        };
+        document.addEventListener('click', window.searchableSelectClickHandler);
+    }
+}
+
+// Initialize all searchable selects on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize dish category select
+    const dishCategorySelect = document.getElementById('category_id');
+    if (dishCategorySelect) {
+        initSearchableSelect(dishCategorySelect);
+    }
+    
+    // Initialize existing ingredient selects
+    document.querySelectorAll('.ingredient-category-select, .ingredient-select').forEach(select => {
+        initSearchableSelect(select);
+    });
+    
+    // Use MutationObserver to initialize dynamically added selects
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.nodeType === 1) { // Element node
+                    const selects = node.querySelectorAll ? node.querySelectorAll('.ingredient-category-select, .ingredient-select') : [];
+                    selects.forEach(select => {
+                        initSearchableSelect(select);
+                    });
+                    // Also check if the node itself is a select
+                    if (node.classList && (node.classList.contains('ingredient-category-select') || node.classList.contains('ingredient-select'))) {
+                        initSearchableSelect(node);
+                    }
+                }
+            });
+        });
+    });
+    
+    const container = document.getElementById('ingredientsContainer');
+    if (container) {
+        observer.observe(container, { childList: true, subtree: true });
+    }
+});
+
 // Search functionality
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchDishes');
@@ -566,7 +1511,8 @@ window.addIngredientRow = function() {
         for (const [catId, ingredients] of Object.entries(ingredientsByCategory)) {
             // Get category name from first ingredient or use category ID
             const catName = ingredients.length > 0 ? ingredients[0].category_name || `Category ${catId}` : `Category ${catId}`;
-            categoryOptions += `<option value="${catId}">${catName}</option>`;
+            const searchText = catName.toLowerCase();
+            categoryOptions += `<option value="${catId}" data-search="${searchText}">${catName}</option>`;
         }
     } else {
         // If ingredients aren't loaded yet, show a loading message
@@ -582,24 +1528,46 @@ window.addIngredientRow = function() {
         <div class="card border shadow-sm ingredient-row-card">
             <div class="card-body p-3">
                 <div class="row g-3 align-items-end">
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold mb-2 d-block">
-                            <i class="bi bi-folder-fill me-2 text-primary"></i>
-                            Category <span class="text-danger">*</span>
-                        </label>
-                        <select class="form-select ingredient-category-select" name="ingredient_categories[]" onchange="loadIngredientsForRow('${rowId}', this.value)" required>
-                            ${categoryOptions}
-                        </select>
-                    </div>
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold mb-2 d-block">
-                            <i class="bi bi-basket-fill me-2 text-success"></i>
-                            Ingredient <span class="text-danger">*</span>
-                        </label>
-                        <select class="form-select ingredient-select" name="ingredients[]" required>
-                            <option value="">Select Category First</option>
-                        </select>
-                    </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label fw-semibold mb-2 d-block">
+                                        <i class="bi bi-folder-fill me-2 text-primary"></i>
+                                        Category <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="d-flex gap-2">
+                                        <div class="searchable-select-wrapper flex-grow-1">
+                                            <input type="text" class="form-control searchable-select-input" 
+                                                   placeholder="Search..." 
+                                                   autocomplete="off"
+                                                   style="display: none;">
+                                            <select class="form-select searchable-select ingredient-category-select" name="ingredient_categories[]" onchange="loadIngredientsForRow('${rowId}', this.value)" required>
+                                                ${categoryOptions}
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addCategoryModal" data-context="ingredient" data-row-id="${rowId}" title="Add New Category">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label fw-semibold mb-2 d-block">
+                                        <i class="bi bi-basket-fill me-2 text-success"></i>
+                                        Ingredient <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="d-flex gap-2">
+                                        <div class="searchable-select-wrapper flex-grow-1">
+                                            <input type="text" class="form-control searchable-select-input" 
+                                                   placeholder="Search..." 
+                                                   autocomplete="off"
+                                                   style="display: none;">
+                                            <select class="form-select searchable-select ingredient-select" name="ingredients[]" required>
+                                                <option value="">Select Category First</option>
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn btn-success btn-sm" onclick="openAddIngredientModal('${rowId}')" title="Add New Ingredient">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
                     <div class="col-lg-2 col-md-4 col-sm-6">
                         <label class="form-label fw-semibold mb-2 d-block">
                             <i class="bi bi-123 me-2 text-info"></i>
@@ -644,6 +1612,12 @@ window.addIngredientRow = function() {
     
     container.appendChild(row);
     ingredientRowCount++;
+    
+    // Initialize searchable selects for the new row
+    const newCategorySelect = row.querySelector('.ingredient-category-select');
+    const newIngredientSelect = row.querySelector('.ingredient-select');
+    if (newCategorySelect) initSearchableSelect(newCategorySelect);
+    if (newIngredientSelect) initSearchableSelect(newIngredientSelect);
 };
 
 // Load ingredients when page loads
@@ -660,8 +1634,19 @@ function loadAllIngredients() {
         .then(response => response.json())
         .then(data => {
             ingredientsByCategory = data;
+            console.log('Ingredients loaded:', Object.keys(data).length, 'categories');
             // Refresh all category dropdowns
             refreshCategoryDropdowns();
+            // Also refresh any existing ingredient rows
+            document.querySelectorAll('.ingredient-category-select').forEach(select => {
+                if (select.value) {
+                    const row = select.closest('.ingredient-row-item');
+                    if (row) {
+                        const rowId = row.id;
+                        loadIngredientsForRow(rowId, select.value);
+                    }
+                }
+            });
             <?php if ($edit_dish): ?>
                 loadIngredients();
                 // Populate edit form after data is loaded
@@ -695,9 +1680,13 @@ function refreshCategoryDropdowns() {
         for (const [catId, ingredients] of Object.entries(ingredientsByCategory)) {
             const catName = ingredients.length > 0 ? ingredients[0].category_name || `Category ${catId}` : `Category ${catId}`;
             const selected = select.value == catId ? 'selected' : '';
-            categoryOptions += `<option value="${catId}" ${selected}>${catName}</option>`;
+            const searchText = catName.toLowerCase();
+            categoryOptions += `<option value="${catId}" data-search="${searchText}" ${selected}>${catName}</option>`;
         }
         select.innerHTML = categoryOptions;
+        
+        // Re-initialize searchable select after updating options
+        initSearchableSelect(select);
     });
 }
 
@@ -727,11 +1716,15 @@ window.loadIngredientsForRow = function(rowId, categoryId) {
     let options = '<option value="">Select ingredient</option>';
     ingredients.forEach(ing => {
         const unitText = ing.unit ? ` (${ing.unit})` : '';
-        options += `<option value="${ing.id}">${ing.name}${unitText}</option>`;
+        const searchText = (ing.name + unitText).toLowerCase();
+        options += `<option value="${ing.id}" data-search="${searchText}">${ing.name}${unitText}</option>`;
     });
     
     ingredientSelect.innerHTML = options;
     ingredientSelect.disabled = false;
+    
+    // Re-initialize searchable select for the new options
+    initSearchableSelect(ingredientSelect);
 }
 
 // Remove ingredient row
@@ -805,7 +1798,8 @@ window.populateEditForm = function() {
                     const catIdNum = parseInt(catId);
                     const catName = ingredients.length > 0 ? ingredients[0].category_name || `Category ${catId}` : `Category ${catId}`;
                     const selected = (ingredientCategoryId !== null && catIdNum == ingredientCategoryId) ? 'selected' : '';
-                    categoryOptions += `<option value="${catId}" ${selected}>${catName}</option>`;
+                    const searchText = catName.toLowerCase();
+                    categoryOptions += `<option value="${catId}" data-search="${searchText}" ${selected}>${catName}</option>`;
                 }
                 
                 // Build ingredient options for the selected category
@@ -818,11 +1812,12 @@ window.populateEditForm = function() {
                     ingredients.forEach(ing => {
                         const unitText = ing.unit ? ` (${ing.unit})` : '';
                         const selected = parseInt(ing.id) == ingredientId ? 'selected' : '';
-                        ingredientOptions += `<option value="${ing.id}" ${selected}>${ing.name}${unitText}</option>`;
+                        const searchText = (ing.name + unitText).toLowerCase();
+                        ingredientOptions += `<option value="${ing.id}" data-search="${searchText}" ${selected}>${ing.name}${unitText}</option>`;
                     });
                 } else {
                     // If ingredient not found in category, still show it
-                    ingredientOptions += `<option value="${ingredientId}" selected>Ingredient #${ingredientId}</option>`;
+                    ingredientOptions += `<option value="${ingredientId}" data-search="ingredient #${ingredientId}" selected>Ingredient #${ingredientId}</option>`;
                 }
                 
                 let unitOptions = '<option value="">Unit</option>';
@@ -859,18 +1854,40 @@ window.populateEditForm = function() {
                                         <i class="bi bi-folder-fill me-2 text-primary"></i>
                                         Category <span class="text-danger">*</span>
                                     </label>
-                                    <select class="form-select ingredient-category-select" name="ingredient_categories[]" onchange="loadIngredientsForRow('${rowId}', this.value)" required>
-                                        ${categoryOptions}
-                                    </select>
+                                    <div class="d-flex gap-2">
+                                        <div class="searchable-select-wrapper flex-grow-1">
+                                            <input type="text" class="form-control searchable-select-input" 
+                                                   placeholder="Search..." 
+                                                   autocomplete="off"
+                                                   style="display: none;">
+                                            <select class="form-select searchable-select ingredient-category-select" name="ingredient_categories[]" onchange="loadIngredientsForRow('${rowId}', this.value)" required>
+                                                ${categoryOptions}
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addCategoryModal" data-context="ingredient" data-row-id="${rowId}" title="Add New Category">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="col-lg-3 col-md-6">
                                     <label class="form-label fw-semibold mb-2 d-block">
                                         <i class="bi bi-basket-fill me-2 text-success"></i>
                                         Ingredient <span class="text-danger">*</span>
                                     </label>
-                                    <select class="form-select ingredient-select" name="ingredients[]" required>
-                                        ${ingredientOptions}
-                                    </select>
+                                    <div class="d-flex gap-2">
+                                        <div class="searchable-select-wrapper flex-grow-1">
+                                            <input type="text" class="form-control searchable-select-input" 
+                                                   placeholder="Search..." 
+                                                   autocomplete="off"
+                                                   style="display: none;">
+                                            <select class="form-select searchable-select ingredient-select" name="ingredients[]" required>
+                                                ${ingredientOptions}
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn btn-success btn-sm" onclick="openAddIngredientModal('${rowId}')" title="Add New Ingredient">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="col-lg-2 col-md-4 col-sm-6">
                                     <label class="form-label fw-semibold mb-2 d-block">
@@ -903,6 +1920,12 @@ window.populateEditForm = function() {
                 `;
                 container.appendChild(row);
                 ingredientRowCount++;
+                
+                // Initialize searchable selects for the new row
+                const newCategorySelect = row.querySelector('.ingredient-category-select');
+                const newIngredientSelect = row.querySelector('.ingredient-select');
+                if (newCategorySelect) initSearchableSelect(newCategorySelect);
+                if (newIngredientSelect) initSearchableSelect(newIngredientSelect);
             } catch (error) {
                 console.error('Error creating ingredient row:', error);
                 console.error('Ingredient data:', {
@@ -920,6 +1943,753 @@ window.populateEditForm = function() {
             addIngredientRow();
         <?php endif; ?>
     <?php endif; ?>
+}
+</script>
+
+<!-- Add Category Modal -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="addCategoryModalLabel">
+                    <i class="bi bi-folder-plus me-2"></i>Select or Add Category
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Tabs -->
+                <ul class="nav nav-tabs mb-3" id="categoryModalTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="browse-categories-tab" data-bs-toggle="tab" data-bs-target="#browse-categories" type="button" role="tab">
+                            <i class="bi bi-list-ul me-2"></i>Browse Categories
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="add-category-tab" data-bs-toggle="tab" data-bs-target="#add-category" type="button" role="tab">
+                            <i class="bi bi-plus-circle me-2"></i>Add New
+                        </button>
+                    </li>
+                </ul>
+                
+                <!-- Tab Content -->
+                <div class="tab-content" id="categoryModalTabContent">
+                    <!-- Browse Categories Tab -->
+                    <div class="tab-pane fade show active" id="browse-categories" role="tabpanel">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="searchCategoriesModal" 
+                                       placeholder="Search categories...">
+                            </div>
+                        </div>
+                        <div id="categoriesListModal" style="max-height: 400px; overflow-y: auto;" class="border rounded p-2">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="text-muted mt-2">Loading categories...</p>
+                            </div>
+                        </div>
+                        <div id="noCategoriesFoundModal" class="text-center py-4" style="display: none;">
+                            <i class="bi bi-search display-6 text-muted d-block mb-2"></i>
+                            <p class="text-muted">No categories found</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Add New Category Tab -->
+                    <div class="tab-pane fade" id="add-category" role="tabpanel">
+                        <form id="addCategoryForm">
+                            <div class="mb-3">
+                                <label for="newCategoryName" class="form-label fw-semibold">
+                                    Category Name <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="newCategoryName" name="name" required 
+                                       placeholder="e.g., Grains, Vegetables, Spices">
+                            </div>
+                            <div class="mb-3">
+                                <label for="newCategoryDescription" class="form-label fw-semibold">
+                                    Description (Optional)
+                                </label>
+                                <textarea class="form-control" id="newCategoryDescription" name="description" rows="2"
+                                          placeholder="Brief description of this category"></textarea>
+                            </div>
+                            <div id="addCategoryError" class="alert alert-danger" style="display: none;"></div>
+                            <div id="addCategorySuccess" class="alert alert-success" style="display: none;"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveCategoryBtn" onclick="saveCategory()" style="display: none;">
+                    <i class="bi bi-check-lg me-2"></i>Add Category
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Ingredient Modal -->
+<div class="modal fade" id="addIngredientModal" tabindex="-1" aria-labelledby="addIngredientModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="addIngredientModalLabel">
+                    <i class="bi bi-basket-fill me-2"></i>Select or Add Ingredient
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Tabs -->
+                <ul class="nav nav-tabs mb-3" id="ingredientModalTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="browse-ingredients-tab" data-bs-toggle="tab" data-bs-target="#browse-ingredients" type="button" role="tab">
+                            <i class="bi bi-list-ul me-2"></i>Browse Ingredients
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="add-ingredient-tab" data-bs-toggle="tab" data-bs-target="#add-ingredient" type="button" role="tab">
+                            <i class="bi bi-plus-circle me-2"></i>Add New
+                        </button>
+                    </li>
+                </ul>
+                
+                <!-- Tab Content -->
+                <div class="tab-content" id="ingredientModalTabContent">
+                    <!-- Browse Ingredients Tab -->
+                    <div class="tab-pane fade show active" id="browse-ingredients" role="tabpanel">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="searchIngredientsModal" 
+                                       placeholder="Search ingredients...">
+                            </div>
+                        </div>
+                        <div id="ingredientsListModal" style="max-height: 400px; overflow-y: auto;" class="border rounded p-2">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-success" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="text-muted mt-2">Loading ingredients...</p>
+                            </div>
+                        </div>
+                        <div id="noIngredientsFoundModal" class="text-center py-4" style="display: none;">
+                            <i class="bi bi-search display-6 text-muted d-block mb-2"></i>
+                            <p class="text-muted">No ingredients found</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Add New Ingredient Tab -->
+                    <div class="tab-pane fade" id="add-ingredient" role="tabpanel">
+                        <form id="addIngredientForm">
+                            <div class="mb-3">
+                                <label for="newIngredientName" class="form-label fw-semibold">
+                                    Ingredient Name <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="newIngredientName" name="name" required 
+                                       placeholder="e.g., Chicken Breast, Rice, Onion">
+                            </div>
+                            <div class="mb-3">
+                                <label for="newIngredientCategory" class="form-label fw-semibold">
+                                    Category <span class="text-danger">*</span>
+                                </label>
+                                <div class="d-flex gap-2">
+                                    <select class="form-select flex-grow-1" id="newIngredientCategory" name="category_id" required>
+                                        <option value="">-- Select Category --</option>
+                                        <?php foreach ($categories as $cat): ?>
+                                            <option value="<?php echo $cat['id']; ?>">
+                                                <?php echo htmlspecialchars($cat['name']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal" data-bs-dismiss="modal" title="Add New Category">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="addIngredientError" class="alert alert-danger" style="display: none;"></div>
+                            <div id="addIngredientSuccess" class="alert alert-success" style="display: none;"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="saveIngredientBtn" onclick="saveIngredient()" style="display: none;">
+                    <i class="bi bi-check-lg me-2"></i>Add Ingredient
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Store the current row ID for adding ingredient
+let currentIngredientRowId = null;
+let allCategoriesData = [];
+let allIngredientsData = [];
+let categoryModalContext = null; // 'dish' or 'ingredient'
+
+// Function to open add ingredient modal with row context
+window.openAddIngredientModal = function(rowId) {
+    currentIngredientRowId = rowId;
+    const row = document.getElementById(rowId);
+    if (row) {
+        const categorySelect = row.querySelector('.ingredient-category-select');
+        if (categorySelect && categorySelect.value) {
+            document.getElementById('newIngredientCategory').value = categorySelect.value;
+        }
+    }
+    const modal = new bootstrap.Modal(document.getElementById('addIngredientModal'));
+    modal.show();
+    loadIngredientsForModal();
+};
+
+// Load categories for modal
+function loadCategoriesForModal() {
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    
+    fetch(basePath + 'api/get_categories.php')
+        .then(response => response.json())
+        .then(categories => {
+            allCategoriesData = categories;
+            displayCategoriesInModal(categories);
+        })
+        .catch(error => {
+            console.error('Error loading categories:', error);
+            document.getElementById('categoriesListModal').innerHTML = 
+                '<div class="alert alert-danger">Error loading categories. Please try again.</div>';
+        });
+}
+
+// Display categories in modal
+function displayCategoriesInModal(categories, searchTerm = '') {
+    const container = document.getElementById('categoriesListModal');
+    const noResults = document.getElementById('noCategoriesFoundModal');
+    
+    if (!categories || categories.length === 0) {
+        container.innerHTML = '';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    noResults.style.display = 'none';
+    
+    // Filter categories if search term provided
+    const filtered = searchTerm ? 
+        categories.filter(cat => 
+            cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (cat.description && cat.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        ) : categories;
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    container.innerHTML = '<div class="row g-2">' + 
+        filtered.map(cat => `
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 border shadow-sm category-card-modal" 
+                     style="cursor: pointer; transition: all 0.2s;"
+                     onclick="selectCategory(${cat.id}, '${cat.name.replace(/'/g, "\\'")}')"
+                     onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)'"
+                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-folder2 me-2 text-primary fs-5"></i>
+                            <div class="flex-grow-1">
+                                <h6 class="card-title mb-1 fw-bold" style="font-size: 0.9rem;">${cat.name}</h6>
+                                ${cat.description ? `<p class="text-muted small mb-0" style="font-size: 0.75rem;">${cat.description}</p>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('') + '</div>';
+}
+
+// Select category from modal
+function selectCategory(categoryId, categoryName) {
+    // Determine which select to update based on context
+    if (categoryModalContext === 'ingredient' && currentIngredientRowId) {
+        // Update ingredient row category
+        const row = document.getElementById(currentIngredientRowId);
+        if (row) {
+            const categorySelect = row.querySelector('.ingredient-category-select');
+            if (categorySelect) {
+                categorySelect.value = categoryId;
+                categorySelect.dispatchEvent(new Event('change'));
+            }
+        }
+    } else {
+        // Update dish category select
+        const dishCategorySelect = document.getElementById('category_id');
+        if (dishCategorySelect) {
+            dishCategorySelect.value = categoryId;
+            dishCategorySelect.dispatchEvent(new Event('change'));
+        }
+    }
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('addCategoryModal'));
+    modal.hide();
+    categoryModalContext = null;
+}
+
+// Load ingredients for modal
+function loadIngredientsForModal() {
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    
+    fetch(basePath + 'api/get_all_ingredients.php')
+        .then(response => response.json())
+        .then(ingredients => {
+            allIngredientsData = ingredients;
+            displayIngredientsInModal(ingredients);
+        })
+        .catch(error => {
+            console.error('Error loading ingredients:', error);
+            document.getElementById('ingredientsListModal').innerHTML = 
+                '<div class="alert alert-danger">Error loading ingredients. Please try again.</div>';
+        });
+}
+
+// Display ingredients in modal
+function displayIngredientsInModal(ingredients, searchTerm = '') {
+    const container = document.getElementById('ingredientsListModal');
+    const noResults = document.getElementById('noIngredientsFoundModal');
+    
+    if (!ingredients || ingredients.length === 0) {
+        container.innerHTML = '';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    noResults.style.display = 'none';
+    
+    // Filter ingredients if search term provided
+    const filtered = searchTerm ? 
+        ingredients.filter(ing => 
+            ing.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (ing.category_name && ing.category_name.toLowerCase().includes(searchTerm.toLowerCase()))
+        ) : ingredients;
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    // Group by category
+    const grouped = {};
+    filtered.forEach(ing => {
+        const catName = ing.category_name || 'Uncategorized';
+        if (!grouped[catName]) {
+            grouped[catName] = [];
+        }
+        grouped[catName].push(ing);
+    });
+    
+    let html = '';
+    for (const [categoryName, categoryIngredients] of Object.entries(grouped)) {
+        html += `
+            <div class="mb-3">
+                <h6 class="text-muted small fw-bold mb-2">
+                    <i class="bi bi-folder me-1"></i>${categoryName}
+                </h6>
+                <div class="row g-2">
+                    ${categoryIngredients.map(ing => `
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card border shadow-sm ingredient-card-modal" 
+                                 style="cursor: pointer; transition: all 0.2s;"
+                                 onclick="selectIngredient(${ing.id}, ${ing.category_id}, '${ing.name.replace(/'/g, "\\'")}')"
+                                 onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)'"
+                                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                                <div class="card-body p-2">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-basket me-2 text-success"></i>
+                                        <h6 class="card-title mb-0 fw-bold" style="font-size: 0.85rem;">${ing.name}</h6>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+// Select ingredient from modal
+function selectIngredient(ingredientId, categoryId, ingredientName) {
+    if (!currentIngredientRowId) {
+        alert('Error: No ingredient row context found');
+        return;
+    }
+    
+    const row = document.getElementById(currentIngredientRowId);
+    if (!row) {
+        alert('Error: Ingredient row not found');
+        return;
+    }
+    
+    const categorySelect = row.querySelector('.ingredient-category-select');
+    const ingredientSelect = row.querySelector('.ingredient-select');
+    
+    // Set category first
+    if (categorySelect) {
+        categorySelect.value = categoryId;
+        categorySelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Wait a bit for ingredients to load, then select the ingredient
+    setTimeout(() => {
+        if (ingredientSelect) {
+            ingredientSelect.value = ingredientId;
+            ingredientSelect.dispatchEvent(new Event('change'));
+        }
+    }, 300);
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('addIngredientModal'));
+    modal.hide();
+}
+
+// Handle modal show events
+document.getElementById('addCategoryModal').addEventListener('shown.bs.modal', function(e) {
+    // Determine context - check data attribute or if opened from ingredient row
+    const trigger = e.relatedTarget;
+    if (trigger && (trigger.getAttribute('data-context') === 'ingredient' || trigger.closest('.ingredient-row-item'))) {
+        categoryModalContext = 'ingredient';
+        const rowId = trigger.getAttribute('data-row-id');
+        if (rowId) {
+            currentIngredientRowId = rowId;
+        }
+    } else {
+        categoryModalContext = 'dish';
+        currentIngredientRowId = null;
+    }
+    
+    loadCategoriesForModal();
+    // Show save button only on Add New tab
+    document.getElementById('saveCategoryBtn').style.display = 'none';
+    // Switch to browse tab
+    const browseTab = document.getElementById('browse-categories-tab');
+    if (browseTab) {
+        browseTab.click();
+    }
+});
+
+document.getElementById('addIngredientModal').addEventListener('shown.bs.modal', function() {
+    loadIngredientsForModal();
+    // Show save button only on Add New tab
+    document.getElementById('saveIngredientBtn').style.display = 'none';
+});
+
+// Handle tab changes to show/hide save button
+document.getElementById('add-category-tab').addEventListener('shown.bs.tab', function() {
+    document.getElementById('saveCategoryBtn').style.display = 'block';
+});
+
+document.getElementById('browse-categories-tab').addEventListener('shown.bs.tab', function() {
+    document.getElementById('saveCategoryBtn').style.display = 'none';
+});
+
+document.getElementById('add-ingredient-tab').addEventListener('shown.bs.tab', function() {
+    document.getElementById('saveIngredientBtn').style.display = 'block';
+});
+
+document.getElementById('browse-ingredients-tab').addEventListener('shown.bs.tab', function() {
+    document.getElementById('saveIngredientBtn').style.display = 'none';
+});
+
+// Search functionality for categories modal
+document.getElementById('searchCategoriesModal').addEventListener('input', function() {
+    const searchTerm = this.value.trim();
+    displayCategoriesInModal(allCategoriesData, searchTerm);
+});
+
+// Search functionality for ingredients modal
+document.getElementById('searchIngredientsModal').addEventListener('input', function() {
+    const searchTerm = this.value.trim();
+    displayIngredientsInModal(allIngredientsData, searchTerm);
+});
+
+// Function to save category
+window.saveCategory = function() {
+    const name = document.getElementById('newCategoryName').value.trim();
+    const description = document.getElementById('newCategoryDescription').value.trim();
+    const errorDiv = document.getElementById('addCategoryError');
+    const successDiv = document.getElementById('addCategorySuccess');
+    
+    // Hide previous messages
+    errorDiv.style.display = 'none';
+    successDiv.style.display = 'none';
+    
+    if (!name) {
+        errorDiv.textContent = 'Category name is required';
+        errorDiv.style.display = 'block';
+        return;
+    }
+    
+    // Disable submit button
+    const submitBtn = event.target;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+    
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    
+    fetch(basePath + 'api/add_category.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            name: name,
+            description: description
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            successDiv.textContent = 'Category added successfully!';
+            successDiv.style.display = 'block';
+            
+            // Add to all category selects
+            const category = data.category;
+            const categorySelects = document.querySelectorAll('#category_id, .ingredient-category-select, #newIngredientCategory');
+            
+            categorySelects.forEach(select => {
+                const option = document.createElement('option');
+                option.value = category.id;
+                option.textContent = category.name;
+                option.setAttribute('data-search', category.name.toLowerCase());
+                select.appendChild(option);
+            });
+            
+            // Add to modal categories list
+            allCategoriesData.push(category);
+            displayCategoriesInModal(allCategoriesData);
+            
+            // Switch to browse tab to show the new category
+            const browseTab = document.getElementById('browse-categories-tab');
+            if (browseTab) {
+                browseTab.click();
+            }
+            
+            // Update ingredients data
+            reloadIngredientsAndWait();
+            
+            // Reset form but don't close modal - let user see the new category
+            document.getElementById('addCategoryForm').reset();
+            errorDiv.style.display = 'none';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            
+            // Auto-select the newly added category after a short delay
+            setTimeout(() => {
+                selectCategory(category.id, category.name);
+            }, 500);
+        } else {
+            errorDiv.textContent = data.error || 'Failed to add category';
+            errorDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+        }
+    })
+    .catch(error => {
+        errorDiv.textContent = 'Error: ' + error.message;
+        errorDiv.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+    });
+};
+
+// Function to save ingredient
+window.saveIngredient = function() {
+    const name = document.getElementById('newIngredientName').value.trim();
+    const categoryId = document.getElementById('newIngredientCategory').value;
+    const errorDiv = document.getElementById('addIngredientError');
+    const successDiv = document.getElementById('addIngredientSuccess');
+    
+    // Hide previous messages
+    errorDiv.style.display = 'none';
+    successDiv.style.display = 'none';
+    
+    if (!name || !categoryId) {
+        errorDiv.textContent = 'Ingredient name and category are required';
+        errorDiv.style.display = 'block';
+        return;
+    }
+    
+    // Disable submit button
+    const submitBtn = event.target;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+    
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    
+    fetch(basePath + 'api/add_ingredient.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            name: name,
+            category_id: categoryId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            successDiv.textContent = 'Ingredient added successfully!';
+            successDiv.style.display = 'block';
+            
+            // Add to modal ingredients list
+            allIngredientsData.push(data.ingredient);
+            displayIngredientsInModal(allIngredientsData);
+            
+            // Switch to browse tab to show the new ingredient
+            const browseTab = document.getElementById('browse-ingredients-tab');
+            if (browseTab) {
+                browseTab.click();
+            }
+            
+            // Reload ingredients to get the new one
+            reloadIngredientsAndWait(() => {
+                // If we have a current row, update it
+                if (currentIngredientRowId) {
+                    const row = document.getElementById(currentIngredientRowId);
+                    if (row) {
+                        const categorySelect = row.querySelector('.ingredient-category-select');
+                        const ingredientSelect = row.querySelector('.ingredient-select');
+                        
+                        // Set category if not already set
+                        if (categorySelect && !categorySelect.value) {
+                            categorySelect.value = data.ingredient.category_id;
+                            loadIngredientsForRow(currentIngredientRowId, data.ingredient.category_id);
+                        }
+                        
+                        // Wait a bit for ingredients to load, then select the new ingredient
+                        setTimeout(() => {
+                            if (ingredientSelect) {
+                                ingredientSelect.value = data.ingredient.id;
+                                ingredientSelect.dispatchEvent(new Event('change'));
+                            }
+                        }, 300);
+                    }
+                }
+            });
+            
+            // Reset form but don't close modal - let user see the new ingredient
+            document.getElementById('addIngredientForm').reset();
+            errorDiv.style.display = 'none';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Ingredient';
+            
+            // Auto-select the newly added ingredient after a short delay
+            setTimeout(() => {
+                selectIngredient(data.ingredient.id, data.ingredient.category_id, data.ingredient.name);
+            }, 500);
+        } else {
+            errorDiv.textContent = data.error || 'Failed to add ingredient';
+            errorDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Ingredient';
+        }
+    })
+    .catch(error => {
+        errorDiv.textContent = 'Error: ' + error.message;
+        errorDiv.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Ingredient';
+    });
+};
+
+// Handle category modal close - refresh category dropdown in ingredient modal
+document.getElementById('addCategoryModal').addEventListener('hidden.bs.modal', function() {
+    // Refresh category dropdown in ingredient modal
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    
+    fetch(basePath + 'api/get_ingredients.php')
+        .then(response => response.json())
+        .then(data => {
+            ingredientsByCategory = data;
+            // Update category dropdown in ingredient modal
+            const categorySelect = document.getElementById('newIngredientCategory');
+            const currentValue = categorySelect.value;
+            categorySelect.innerHTML = '<option value="">-- Select Category --</option>';
+            
+            for (const [catId, ingredients] of Object.entries(data)) {
+                if (ingredients.length > 0) {
+                    const catName = ingredients[0].category_name || `Category ${catId}`;
+                    const option = document.createElement('option');
+                    option.value = catId;
+                    option.textContent = catName;
+                    categorySelect.appendChild(option);
+                }
+            }
+            
+            // Restore previous selection if it still exists
+            if (currentValue) {
+                categorySelect.value = currentValue;
+            }
+        });
+});
+
+// Helper function to reload ingredients and wait for completion
+function reloadIngredientsAndWait(callback) {
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    fetch(basePath + 'api/get_ingredients.php')
+        .then(response => response.json())
+        .then(data => {
+            ingredientsByCategory = data;
+            console.log('Ingredients reloaded:', Object.keys(data).length, 'categories');
+            // Refresh all category dropdowns
+            refreshCategoryDropdowns();
+            // Also refresh any existing ingredient rows
+            document.querySelectorAll('.ingredient-category-select').forEach(select => {
+                if (select.value) {
+                    const row = select.closest('.ingredient-row-item');
+                    if (row) {
+                        const rowId = row.id;
+                        loadIngredientsForRow(rowId, select.value);
+                    }
+                }
+            });
+            if (callback) callback(data);
+        })
+        .catch(error => {
+            console.error('Error reloading ingredients:', error);
+            if (callback) callback(null);
+        });
+}
+
+// Print Dishes Page Function
+function printDishesPage() {
+    // Note: For colors to print correctly, users may need to enable 
+    // "Background graphics" in their browser's print settings
+    // Trigger print dialog - CSS will handle showing the banner and contact info
+    window.print();
 }
 </script>
 

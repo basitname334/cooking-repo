@@ -150,6 +150,21 @@ i.bi.text-info {
     text-decoration: none;
 }
 
+/* Force nav link text to always be visible - highest priority */
+.nav-link-modern span,
+.navbar-nav .nav-link-modern span,
+.nav-item .nav-link-modern span,
+.navbar-collapse .nav-link-modern span,
+.collapse .nav-link-modern span {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    font-size: inherit !important;
+}
+
 .nav-link-modern i {
     font-size: 1rem;
     color: var(--gray-900) !important;
@@ -780,6 +795,17 @@ i.bi.text-info {
     .quick-link .icon {
         font-size: 1.5rem;
     }
+    
+    /* Ensure nav link text is visible on tablets */
+    .nav-link-modern span {
+        display: inline-block !important;
+        font-size: 0.95rem;
+    }
+    
+    .nav-link-modern {
+        padding: 0.875rem 1.25rem !important;
+        font-size: 0.95rem;
+    }
 }
 
 @media (max-width: 576px) {
@@ -787,8 +813,20 @@ i.bi.text-info {
         padding: var(--spacing-sm);
     }
     
+    /* Keep nav link text visible on mobile */
     .nav-link-modern span {
-        display: none;
+        display: inline-block !important;
+        font-size: 0.9rem;
+    }
+    
+    .nav-link-modern {
+        padding: 0.75rem 1rem !important;
+        font-size: 0.9rem;
+    }
+    
+    .nav-link-modern i {
+        font-size: 1rem;
+        min-width: 22px;
     }
     
     .quick-link {

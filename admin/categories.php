@@ -251,7 +251,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="row mb-4">
     <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-2">
+        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-3">
             <div>
                 <h2 class="mb-1">
                     <i class="bi bi-folder2-open-fill me-2 text-primary"></i>
@@ -259,13 +259,29 @@ include __DIR__ . '/../includes/header.php';
                 </h2>
                 <p class="text-muted mb-0"><?php echo count($categories); ?> <?php echo count($categories) == 1 ? 'category' : 'categories'; ?></p>
             </div>
-            <div class="dropdown">
-                <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-chevron-down fs-5"></i>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2"></i>Delete All</a></li>
-                </ul>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Search Box -->
+                <div style="max-width: 300px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control border-start-0" id="searchCategories" 
+                               placeholder="Search categories..." 
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchCategories" style="display: none;">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-chevron-down fs-5"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2"></i>Delete All</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -334,12 +350,14 @@ include __DIR__ . '/../includes/header.php';
         <p class="text-muted">No categories found. Add your first category above!</p>
     </div>
 <?php else: ?>
-    <div class="row g-3">
+    <div class="row g-3" id="categoriesList">
         <?php foreach ($categories as $category): ?>
             <?php 
             $ingredients_count = isset($category['ingredients_count']) ? intval($category['ingredients_count']) : 0;
             ?>
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-6 col-lg-4 category-item" 
+                 data-name="<?php echo strtolower(htmlspecialchars($category['name'])); ?>"
+                 data-description="<?php echo strtolower(htmlspecialchars($category['description'] ?? '')); ?>">
                 <div class="card h-100 border-0 shadow-sm category-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $category['id']; ?>'">
                     <div class="card-body d-flex align-items-center">
                         <div class="flex-grow-1">
@@ -368,6 +386,73 @@ include __DIR__ . '/../includes/header.php';
             </div>
         <?php endforeach; ?>
     </div>
+    <div id="noResultsCategories" class="text-center py-5" style="display: none;">
+        <i class="bi bi-search display-4 text-muted d-block mb-3"></i>
+        <h5 class="text-muted mb-2">No categories found</h5>
+        <p class="text-muted">Try adjusting your search terms</p>
+    </div>
 <?php endif; ?>
+
+<script>
+// Search functionality for categories
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchCategories');
+    const clearSearchBtn = document.getElementById('clearSearchCategories');
+    const categoriesList = document.getElementById('categoriesList');
+    const noResults = document.getElementById('noResultsCategories');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            const categoryItems = document.querySelectorAll('.category-item');
+            let visibleCount = 0;
+            
+            if (searchTerm === '') {
+                // Show all categories
+                categoryItems.forEach(item => {
+                    item.style.display = '';
+                    visibleCount++;
+                });
+                clearSearchBtn.style.display = 'none';
+                if (noResults) noResults.style.display = 'none';
+                if (categoriesList) categoriesList.style.display = '';
+            } else {
+                // Filter categories
+                categoryItems.forEach(item => {
+                    const categoryName = item.getAttribute('data-name') || '';
+                    const categoryDescription = item.getAttribute('data-description') || '';
+                    
+                    if (categoryName.includes(searchTerm) || categoryDescription.includes(searchTerm)) {
+                        item.style.display = '';
+                        visibleCount++;
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+                
+                clearSearchBtn.style.display = searchTerm ? 'block' : 'none';
+                
+                // Show/hide no results message
+                if (visibleCount === 0) {
+                    if (noResults) noResults.style.display = 'block';
+                    if (categoriesList) categoriesList.style.display = 'none';
+                } else {
+                    if (noResults) noResults.style.display = 'none';
+                    if (categoriesList) categoriesList.style.display = '';
+                }
+            }
+        });
+        
+        // Clear search
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+                searchInput.focus();
+            });
+        }
+    }
+});
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

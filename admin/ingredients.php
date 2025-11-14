@@ -214,7 +214,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="row mb-4">
     <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-2">
+        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-3">
             <div>
                 <h2 class="mb-1">
                     <i class="bi bi-basket-fill me-2 text-primary"></i>
@@ -222,13 +222,29 @@ include __DIR__ . '/../includes/header.php';
                 </h2>
                 <p class="text-muted mb-0"><?php echo count($ingredients); ?> <?php echo count($ingredients) == 1 ? 'ingredient' : 'ingredients'; ?></p>
             </div>
-            <div class="dropdown">
-                <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-chevron-down fs-5"></i>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2"></i>Delete All</a></li>
-                </ul>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Search Box -->
+                <div style="max-width: 300px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control border-start-0" id="searchIngredients" 
+                               placeholder="Search ingredients..." 
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchIngredients" style="display: none;">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-chevron-down fs-5"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2"></i>Delete All</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -314,9 +330,11 @@ include __DIR__ . '/../includes/header.php';
         </div>
     <?php else: ?>
         <div class="col-12">
-            <div class="row g-3">
+            <div class="row g-3" id="ingredientsList">
                 <?php foreach ($ingredients as $ingredient): ?>
-                    <div class="col-md-6 col-lg-4">
+                    <div class="col-md-6 col-lg-4 ingredient-item" 
+                         data-name="<?php echo strtolower(htmlspecialchars($ingredient['name'])); ?>"
+                         data-category="<?php echo strtolower(htmlspecialchars($ingredient['category_name'] ?? '')); ?>">
                         <div class="card h-100 border-0 shadow-sm ingredient-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $ingredient['id']; ?>'">
                             <div class="card-body d-flex align-items-center">
                                 <div class="flex-grow-1">
@@ -347,8 +365,75 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 <?php endforeach; ?>
             </div>
+            <div id="noResultsIngredients" class="text-center py-5" style="display: none;">
+                <i class="bi bi-search display-4 text-muted d-block mb-3"></i>
+                <h5 class="text-muted mb-2">No ingredients found</h5>
+                <p class="text-muted">Try adjusting your search terms</p>
+            </div>
         </div>
     <?php endif; ?>
 </div>
+
+<script>
+// Search functionality for ingredients
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchIngredients');
+    const clearSearchBtn = document.getElementById('clearSearchIngredients');
+    const ingredientsList = document.getElementById('ingredientsList');
+    const noResults = document.getElementById('noResultsIngredients');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            const ingredientItems = document.querySelectorAll('.ingredient-item');
+            let visibleCount = 0;
+            
+            if (searchTerm === '') {
+                // Show all ingredients
+                ingredientItems.forEach(item => {
+                    item.style.display = '';
+                    visibleCount++;
+                });
+                clearSearchBtn.style.display = 'none';
+                if (noResults) noResults.style.display = 'none';
+                if (ingredientsList) ingredientsList.style.display = '';
+            } else {
+                // Filter ingredients
+                ingredientItems.forEach(item => {
+                    const ingredientName = item.getAttribute('data-name') || '';
+                    const ingredientCategory = item.getAttribute('data-category') || '';
+                    
+                    if (ingredientName.includes(searchTerm) || ingredientCategory.includes(searchTerm)) {
+                        item.style.display = '';
+                        visibleCount++;
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+                
+                clearSearchBtn.style.display = searchTerm ? 'block' : 'none';
+                
+                // Show/hide no results message
+                if (visibleCount === 0) {
+                    if (noResults) noResults.style.display = 'block';
+                    if (ingredientsList) ingredientsList.style.display = 'none';
+                } else {
+                    if (noResults) noResults.style.display = 'none';
+                    if (ingredientsList) ingredientsList.style.display = '';
+                }
+            }
+        });
+        
+        // Clear search
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+                searchInput.focus();
+            });
+        }
+    }
+});
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

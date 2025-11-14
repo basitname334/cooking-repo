@@ -104,6 +104,18 @@ body {
     text-decoration: none;
 }
 
+/* Force nav link text to always be visible */
+.nav-link-modern span,
+.navbar-nav .nav-link-modern span,
+.nav-item .nav-link-modern span {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
 .nav-link-modern:hover {
     background: rgba(124, 58, 237, 0.1) !important;
     color: #5f5f5f !important;
@@ -190,7 +202,8 @@ body {
 
 @media (max-width: 768px) {
     .navbar {
-        padding: 0.5rem 0;
+        padding: 0.75rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
     
     .navbar .container-fluid {
@@ -198,27 +211,67 @@ body {
     }
     
     .navbar-brand {
-        font-size: 0.9rem;
-        padding: 0.25rem 0.5rem;
+        font-size: 1rem;
+        padding: 0.5rem;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .navbar-brand:hover {
+        background-color: rgba(124, 58, 237, 0.1);
     }
     
     .navbar-logo {
-        height: 28px;
-        margin-right: 0.5rem;
+        height: 32px;
+        margin-right: 0.75rem;
     }
     
     .nav-link-modern {
-        padding: 0.75rem 1rem !important;
+        padding: 0.875rem 1.25rem !important;
         width: 100%;
         justify-content: flex-start;
-        margin: 0.25rem 0;
+        margin: 0.375rem 0;
+        border-radius: 10px;
+        font-size: 0.95rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        background-color: transparent;
+    }
+    
+    .nav-link-modern:hover {
+        background-color: rgba(124, 58, 237, 0.12) !important;
+        transform: translateX(4px);
+        box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15);
+    }
+    
+    .nav-link-modern.active {
+        background-color: rgba(124, 58, 237, 0.18) !important;
+        color: #7c3aed !important;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(124, 58, 237, 0.2);
+    }
+    
+    .nav-link-modern i {
+        font-size: 1.1rem;
+        min-width: 24px;
+        text-align: center;
+    }
+    
+    .nav-link-modern span {
+        display: inline-block !important;
+        margin-left: 0.75rem;
+        font-size: 0.95rem;
     }
     
     .navbar-collapse {
         margin-top: 1rem;
         padding-top: 1rem;
-        border-top: 1px solid rgba(255,255,255,0.1);
+        border-top: 2px solid rgba(0,0,0,0.08);
         width: 100%;
+        background-color: #fafafa;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-top: 1rem;
     }
     
     .navbar-nav {
@@ -230,13 +283,42 @@ body {
         position: static !important;
         transform: none !important;
         margin-top: 0.5rem !important;
-        box-shadow: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         border: 1px solid rgba(0,0,0,0.1);
+        border-radius: 10px;
+        padding: 0.5rem 0;
+    }
+    
+    .dropdown-item {
+        padding: 0.75rem 1.25rem;
+        border-radius: 8px;
+        margin: 0.25rem 0.5rem;
+    }
+    
+    .dropdown-item:hover {
+        background-color: rgba(124, 58, 237, 0.1);
+        transform: translateX(4px);
     }
     
     .container-fluid {
         padding-left: 1rem;
         padding-right: 1rem;
+    }
+    
+    .navbar-toggler {
+        border: 2px solid rgba(124, 58, 237, 0.2);
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .navbar-toggler:hover {
+        border-color: rgba(124, 58, 237, 0.4);
+        background-color: rgba(124, 58, 237, 0.05);
+    }
+    
+    .navbar-toggler:focus {
+        box-shadow: 0 0 0 0.25rem rgba(124, 58, 237, 0.15);
     }
 }
 
@@ -245,13 +327,30 @@ body {
         display: none;
     }
     
+    /* Keep text visible on mobile - removed the display: none */
     .nav-link-modern span {
-        display: none;
+        display: inline-block !important;
+        font-size: 0.9rem;
+    }
+    
+    .nav-link-modern {
+        padding: 0.75rem 1rem !important;
+        font-size: 0.9rem;
+    }
+    
+    .nav-link-modern i {
+        font-size: 1rem;
+        min-width: 22px;
     }
     
     .container-fluid {
         padding-left: 0.75rem;
         padding-right: 0.75rem;
+    }
+    
+    .navbar-collapse {
+        padding: 0.75rem;
+        margin-top: 0.75rem;
     }
 }
 

@@ -1003,7 +1003,9 @@ try {
         'total_amount' => $urduTranslations['total_amount'] ?? 'کل رقم',
         'notes' => $urduTranslations['notes'] ?? 'نوٹس',
         'thank_you' => $urduTranslations['thank_you'] ?? 'آپ کے آرڈر کا شکریہ!',
-        'status' => $urduTranslations['status'] ?? 'حالت'
+        'status' => $urduTranslations['status'] ?? 'حالت',
+        'number_of_persons' => $urduTranslations['number_of_persons'] ?? 'افراد کی تعداد',
+        'persons' => $urduTranslations['persons'] ?? 'افراد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     
     // Restore original language
@@ -1032,7 +1034,9 @@ try {
         'total_amount' => 'کل رقم',
         'notes' => 'نوٹس',
         'thank_you' => 'آپ کے آرڈر کا شکریہ!',
-        'status' => 'حالت'
+        'status' => 'حالت',
+        'number_of_persons' => 'افراد کی تعداد',
+        'persons' => 'افراد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 }
 ?>;
@@ -1088,6 +1092,10 @@ function printIngredients(orderNumberOrId) {
     
     // Get the base path for the image from PHP
     const logoPath = '<?php echo htmlspecialchars($logoPath, ENT_QUOTES); ?>';
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    const cakeImagePath = basePath + 'images/cake.png';
     
     // Collect all ingredients from all dishes in the order, grouped by category
     let ingredientsByCategory = {};
@@ -1137,51 +1145,82 @@ function printIngredients(orderNumberOrId) {
     const categoryKeys = Object.keys(ingredientsByCategory);
     if (categoryKeys.length === 0) {
         ingredientsHtml += '<table class="ingredients-table" style="width: 100%; border-collapse: collapse; margin-top: 12px; direction: rtl; font-size: 11px;">';
-        ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.ingredient_label + '</th><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: left; font-size: 11px;">' + translations.quantity_label + '</th><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.unit_label + '</th></tr></thead>';
+        ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.ingredient_label + '</th><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
         ingredientsHtml += '<tbody>';
-        ingredientsHtml += '<tr><td colspan="3" style="padding: 5px 8px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 11px; line-height: 1.3;">' + translations.no_ingredients_found + '</td></tr>';
+        ingredientsHtml += '<tr><td colspan="2" style="padding: 5px 8px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 11px; line-height: 1.3;">' + translations.no_ingredients_found + '</td></tr>';
         ingredientsHtml += '</tbody></table>';
     } else {
-        // Sort categories by name
-        categoryKeys.sort((a, b) => {
-            const nameA = ingredientsByCategory[a].category_name || '';
-            const nameB = ingredientsByCategory[b].category_name || '';
-            return nameA.localeCompare(nameB);
-        });
-        
-        // Display ingredients grouped by category
+        // Organize categories and their ingredients
+        const allCategories = [];
         categoryKeys.forEach(function(categoryId) {
             const category = ingredientsByCategory[categoryId];
-            const categoryIngredients = Object.values(category.ingredients);
-            
-            // Category header (compact for print)
-            ingredientsHtml += '<div class="category-section" style="margin-top: 12px; margin-bottom: 6px; page-break-inside: avoid;">';
-            ingredientsHtml += '<h3 class="category-header" style="font-size: 13px; font-weight: bold; color: #1e293b; padding: 5px 8px; background-color: #f1f5f9; border-right: 3px solid #8b5cf6; border-radius: 3px; font-family: ' + fontFamily + '; text-align: right; margin: 0;">';
-            ingredientsHtml += category.category_name || 'بغیر زمرہ';
+            allCategories.push({
+                id: categoryId,
+                name: category.category_name || 'بغیر زمرہ',
+                ingredients: Object.values(category.ingredients)
+            });
+        });
+        
+        // Sort categories by name
+        allCategories.sort((a, b) => {
+            return (a.name || '').localeCompare(b.name || '');
+        });
+        
+        // Display each category with its ingredients in a simple, clear format
+        allCategories.forEach(function(category) {
+            // Category header - larger and more prominent
+            ingredientsHtml += '<div class="category-section" style="margin-top: 20px; margin-bottom: 12px; page-break-inside: avoid;">';
+            ingredientsHtml += '<h3 class="category-header" style="font-size: 16px; font-weight: bold; color: #ffffff; padding: 10px 15px; background-color: #8b5cf6; border-radius: 6px; font-family: ' + fontFamily + '; text-align: right; margin: 0 0 12px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
+            ingredientsHtml += '📋 ' + category.name;
             ingredientsHtml += '</h3>';
             ingredientsHtml += '</div>';
             
-            // Ingredients table for this category (compact)
-            ingredientsHtml += '<table class="ingredients-table" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; direction: rtl; font-size: 11px;">';
-            ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.ingredient_label + '</th><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: left; font-size: 11px;">' + translations.quantity_label + '</th><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.unit_label + '</th></tr></thead>';
-            ingredientsHtml += '<tbody>';
-            
             // Sort ingredients within category by name
-            categoryIngredients.sort((a, b) => {
+            const sortedIngredients = [...category.ingredients].sort((a, b) => {
                 const nameA = a.ingredient_name || '';
                 const nameB = b.ingredient_name || '';
                 return nameA.localeCompare(nameB);
             });
             
-            categoryIngredients.forEach(ing => {
-                ingredientsHtml += '<tr style="page-break-inside: avoid;">';
-                ingredientsHtml += '<td style="padding: 5px 8px; border: 1px solid #ddd; text-align: right; font-family: ' + fontFamily + '; font-size: 11px; line-height: 1.3;">' + (ing.ingredient_name || 'N/A') + '</td>';
-                ingredientsHtml += '<td style="padding: 5px 8px; border: 1px solid #ddd; text-align: left; font-size: 11px; line-height: 1.3;">' + (parseFloat(ing.quantity) || 0).toFixed(2) + '</td>';
-                ingredientsHtml += '<td style="padding: 5px 8px; border: 1px solid #ddd; text-align: right; font-family: ' + fontFamily + '; font-size: 11px; line-height: 1.3;">' + (ing.unit || '') + '</td>';
-                ingredientsHtml += '</tr>';
-            });
-            
-            ingredientsHtml += '</tbody></table>';
+            if (sortedIngredients.length > 0) {
+                // Use 6-column layout to save space
+                ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 15px; page-break-inside: avoid;">';
+                
+                sortedIngredients.forEach(function(ing) {
+                    let quantity = parseFloat(ing.quantity) || 0;
+                    let unit = ing.unit || '';
+                    
+                    // Convert large gram values to kg for better readability
+                    if (unit.toLowerCase() === 'g' && quantity >= 1000) {
+                        quantity = (quantity / 1000).toFixed(2);
+                        unit = 'kg';
+                    } else {
+                        // Format quantity based on unit type
+                        const unitLower = unit.toLowerCase();
+                        // For countable items (pieces, piece, serving, servings, etc.), show as whole number
+                        if (unitLower === 'piece' || unitLower === 'pieces' || 
+                            unitLower === 'serving' || unitLower === 'servings' ||
+                            unitLower === 'portion' || unitLower === 'portions' ||
+                            unitLower === 'item' || unitLower === 'items') {
+                            quantity = Math.round(quantity).toString();
+                        } else {
+                            // For weight/volume units, show 2 decimal places
+                            quantity = quantity.toFixed(2);
+                        }
+                    }
+                    
+                    const quantityUnit = quantity + (unit ? ' ' + unit : '');
+                    const ingredientName = ing.ingredient_name || 'N/A';
+                    
+                    // Compact format for 6-column layout: Ingredient Name - Quantity
+                    ingredientsHtml += '<div style="padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; background-color: #ffffff; page-break-inside: avoid; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">';
+                    ingredientsHtml += '<div style="font-size: 11px; font-weight: bold; color: #1e293b; margin-bottom: 3px; font-family: ' + fontFamily + '; line-height: 1.4;">' + ingredientName + '</div>';
+                    ingredientsHtml += '<div style="font-size: 10px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + translations.quantity_label + ': <span style="color: #1e293b;">' + quantityUnit + '</span></div>';
+                    ingredientsHtml += '</div>';
+                });
+                
+                ingredientsHtml += '</div>';
+            }
         });
     }
     
@@ -1198,30 +1237,68 @@ function printIngredients(orderNumberOrId) {
                 @media print {
                     @page {
                         size: A4;
-                        margin: 0.5cm 0.8cm;
+                        margin: 0.4cm 0.6cm;
                     }
-                    body { margin: 0; padding: 0; position: relative; font-size: 10px; }
+                    * {
+                        page-break-inside: avoid !important;
+                    }
+                    body { 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        position: relative; 
+                        font-size: 11px !important;
+                        page-break-inside: avoid !important;
+                    }
                     .no-print { display: none !important; }
                     .print-banner { 
-                        page-break-after: avoid;
+                        page-break-after: avoid !important;
+                        page-break-inside: avoid !important;
                         display: block !important;
                         visibility: visible !important;
-                        padding: 4px 8px !important;
+                        padding: 5px 8px !important;
                         margin-bottom: 8px !important;
+                        min-height: 110px !important;
+                    }
+                    .fillable-section {
+                        page-break-after: avoid !important;
+                        page-break-inside: avoid !important;
+                        margin: 10px 0 !important;
+                        padding: 8px !important;
                     }
                     .content-wrapper {
                         padding: 8px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .category-section {
+                        margin-top: 15px !important;
+                        margin-bottom: 10px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .category-header {
+                        font-size: 14px !important;
+                        padding: 8px 12px !important;
+                        margin: 0 !important;
+                    }
+                    [style*="grid-template-columns"] {
+                        display: grid !important;
+                        grid-template-columns: repeat(6, 1fr) !important;
+                        gap: 5px !important;
+                    }
+                    [style*="grid-template-columns"] > div {
+                        page-break-inside: avoid !important;
                     }
                     .header {
-                        margin-bottom: 10px !important;
+                        margin-bottom: 8px !important;
+                        page-break-after: avoid !important;
                     }
                     .header h1 {
                         font-size: 14px !important;
-                        margin-bottom: 8px !important;
+                        margin-bottom: 5px !important;
                     }
                     .category-section {
                         margin-top: 8px !important;
                         margin-bottom: 4px !important;
+                        page-break-inside: avoid !important;
                     }
                     .category-header {
                         font-size: 11px !important;
@@ -1229,18 +1306,26 @@ function printIngredients(orderNumberOrId) {
                         margin: 0 !important;
                     }
                     .ingredients-table {
-                        font-size: 9px !important;
-                        margin-bottom: 8px !important;
+                        font-size: 10px !important;
+                        margin-bottom: 6px !important;
+                        page-break-inside: avoid !important;
                     }
                     .ingredients-table th,
                     .ingredients-table td {
-                        padding: 3px 5px !important;
-                        font-size: 9px !important;
-                        line-height: 1.2 !important;
+                        padding: 4px 6px !important;
+                        font-size: 10px !important;
+                        line-height: 1.3 !important;
+                    }
+                    .ingredients-table thead {
+                        display: table-header-group;
+                    }
+                    .ingredients-table tbody {
+                        display: table-row-group;
                     }
                     .footer {
-                        margin-top: 10px !important;
+                        margin-top: 8px !important;
                         font-size: 9px !important;
+                        page-break-inside: avoid !important;
                     }
                     .banner-logo {
                         width: 40px !important;
@@ -1280,146 +1365,191 @@ function printIngredients(orderNumberOrId) {
                         display: inline !important;
                     }
                 }
-                body { font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif; padding: 0; margin: 0; position: relative; min-height: 100vh; direction: rtl; background: #fff; }
+                body { 
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif; 
+                    padding: 0; 
+                    margin: 0; 
+                    position: relative; 
+                    direction: rtl; 
+                    background: #fff;
+                }
                 
-                /* Banner Header - Compact Version */
+                /* Banner Header - Matching Image Design */
                 .print-banner {
-                    background: linear-gradient(135deg, #8B4513 0%, #A0522D 50%, #CD853F 100%);
-                    color: white;
-                    padding: 6px 12px;
-                    margin-bottom: 10px;
-                    border-bottom: 2px solid #DAA520;
-                    position: relative;
-                    overflow: hidden;
-                    display: block !important;
-                    visibility: visible !important;
-                    width: 100%;
-                    box-sizing: border-box;
-                }
-                .banner-content {
                     display: flex !important;
-                    align-items: flex-start;
-                    justify-content: space-between;
-                    max-width: 100%;
-                    gap: 10px;
                     width: 100%;
+                    margin-bottom: 15px;
+                    border: 3px solid #000;
+                    overflow: visible;
+                    box-sizing: border-box;
+                    min-height: 150px;
+                    background: white;
+                }
+                .banner-left {
+                    width: 25%;
+                    background: white;
+                    padding: 15px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    align-items: center;
+                    box-sizing: border-box;
+                    border-right: 2px solid #000;
+                }
+                .banner-left-name {
+                    font-size: 18px;
+                    font-weight: 900;
+                    color: #000;
+                    margin-bottom: 8px;
+                    text-align: center;
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+                    line-height: 1.4;
+                }
+                .banner-left-phone {
+                    font-size: 12px;
+                    color: #000;
+                    margin: 2px 0;
+                    text-align: center;
+                    direction: ltr;
+                    font-weight: bold;
+                    font-family: Arial, sans-serif;
+                }
+                .banner-right {
+                    width: 75%;
+                    background: white;
+                    padding: 15px 20px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    position: relative;
                     box-sizing: border-box;
                 }
-                .banner-logo {
-                    width: 50px;
-                    height: 50px;
+                .banner-right-service {
+                    color: #666;
+                    font-size: 16px;
+                    font-weight: 700;
+                    margin: 5px 0;
+                    text-align: center;
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+                    line-height: 1.4;
+                    text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+                }
+                .banner-right-service.yellow {
+                    color: #FFD700;
+                    font-size: 18px;
+                    font-weight: 900;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+                }
+                .banner-address-bar {
+                    background: white;
+                    padding: 10px 15px;
+                    border: 2px solid #ccc;
+                    border-radius: 8px;
+                    margin-top: 12px;
+                    width: calc(100% - 110px);
+                    text-align: center;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }
+                .banner-address-text {
+                    color: #666;
+                    font-size: 11px;
+                    font-weight: 600;
+                    line-height: 1.5;
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+                }
+                .banner-dessert-graphic {
+                    position: absolute;
+                    right: 20px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 80px;
+                    height: 80px;
+                    background: white;
                     border-radius: 50%;
-                    border: 2px solid #DAA520;
-                    background: #DAA520;
-                    padding: 2px;
-                    flex-shrink: 0;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    border: 2px solid #ccc;
+                    z-index: 10;
+                    overflow: hidden;
                 }
-                .banner-logo img {
-                    width: 100%;
-                    height: 100%;
+                .banner-dessert-graphic img {
+                    width: 70px;
+                    height: 70px;
                     object-fit: contain;
                     border-radius: 50%;
                 }
-                .banner-text-center {
-                    flex: 1;
-                    text-align: center;
-                    padding: 0 8px;
+                .fillable-section {
+                    margin: 15px 0;
+                    padding: 10px;
+                    border: 2px dashed #ccc;
+                    border-radius: 5px;
+                }
+                .fillable-field {
                     display: flex;
-                    flex-direction: column;
                     align-items: center;
-                    justify-content: center;
-                }
-                .banner-text-center h1 {
-                    margin: 0;
-                    font-size: 12px;
-                    font-weight: bold;
-                    color: white;
-                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-                    margin-bottom: 2px;
-                    line-height: 1.2;
-                    text-align: center;
-                }
-                .banner-text-center h2 {
-                    margin: 0;
-                    font-size: 10px;
-                    font-weight: bold;
-                    color: #DAA520;
-                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-                    margin-bottom: 1px;
-                    line-height: 1.1;
-                    text-align: center;
-                }
-                .banner-text-center h3 {
-                    margin: 0;
-                    font-size: 10px;
-                    font-weight: bold;
-                    color: #FFD700;
-                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-                    margin-bottom: 3px;
-                    line-height: 1.1;
-                    text-align: center;
-                }
-                .banner-contact {
-                    background: #DAA520;
-                    padding: 3px 8px;
-                    margin-top: 4px;
-                    border-radius: 3px;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    flex-wrap: wrap;
-                }
-                .contact-center {
-                    background: #228B22;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    color: white;
-                    font-size: 7px;
-                    text-align: center;
-                    width: 100%;
-                    line-height: 1.2;
-                }
-                .contact-center strong {
-                    display: block;
-                    margin-bottom: 1px;
-                    font-size: 8px;
-                }
-                .banner-order-info {
-                    background: rgba(255, 255, 255, 0.15);
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    min-width: 150px;
-                    flex-shrink: 0;
-                    text-align: right;
+                    margin-bottom: 12px;
                     direction: rtl;
                 }
-                .banner-order-info p {
-                    margin: 1px 0;
-                    font-size: 8px;
-                    color: white;
-                    line-height: 1.2;
-                }
-                .banner-order-info strong {
-                    color: #FFD700;
+                .fillable-label {
                     font-weight: bold;
+                    font-size: 14px;
+                    color: #333;
+                    min-width: 80px;
+                    margin-left: 15px;
+                }
+                .fillable-space {
+                    flex: 1;
+                    border-bottom: 2px solid #000;
+                    height: 25px;
+                    margin: 0 10px;
                 }
                 
                 .content-wrapper {
                     padding: 12px;
                 }
+                .category-section {
+                    margin-top: 20px;
+                    margin-bottom: 12px;
+                }
+                .category-header {
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #ffffff;
+                    padding: 10px 15px;
+                    background-color: #8b5cf6;
+                    border-radius: 6px;
+                    margin: 0 0 12px 0;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
                 .header { text-align: center; margin-bottom: 15px; position: relative; z-index: 1; }
-                .header h1 { margin: 0; color: #1e293b; font-size: 16px; }
-                .header p { margin: 3px 0; color: #64748b; font-size: 11px; }
+                .header h1 { margin: 0; color: #1e293b; font-size: 18px; font-weight: bold; }
+                .header p { margin: 4px 0; color: #64748b; font-size: 12px; }
+                .ingredients-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 10px;
+                    font-size: 12px;
+                }
+                .ingredients-table th,
+                .ingredients-table td {
+                    padding: 6px 10px;
+                    border: 1px solid #e2e8f0;
+                    font-size: 12px;
+                    line-height: 1.5;
+                }
+                .ingredients-table th {
+                    background-color: #f8fafc;
+                    font-weight: bold;
+                }
                 .info-section { margin-bottom: 12px; position: relative; z-index: 1; background: #f8f9fa; padding: 10px; border-radius: 5px; }
                 .info-section p { margin: 3px 0; font-size: 11px; }
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; position: relative; z-index: 1; }
                 th, td { padding: 6px 8px; border: 1px solid #e2e8f0; font-size: 11px; }
                 th { background-color: #f8fafc; font-weight: bold; }
-                .footer { margin-top: 15px; text-align: center; color: #64748b; font-size: 10px; position: relative; z-index: 1; }
+                .footer { margin-top: 15px; text-align: center; color: #64748b; font-size: 12px; position: relative; z-index: 1; }
                 .print-btn { margin: 15px 0; text-align: center; }
                 button { padding: 8px 16px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 12px; }
                 button:hover { background: #7c3aed; }
@@ -1428,26 +1558,43 @@ function printIngredients(orderNumberOrId) {
         <body>
             <!-- Print Banner -->
             <div class="print-banner">
-                <div class="banner-content">
-                    <div class="banner-logo">
-                        <img src="${logoPath}" alt="Logo" onerror="this.style.display='none';">
+                <div class="banner-left">
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
+                        <div class="banner-left-name" style="margin-top: 0;">حسن کک</div>
+                        <div class="banner-left-phone">0308-6977778</div>
+                        <div class="banner-left-phone">0312-6396398</div>
                     </div>
-                    <div class="banner-text-center">
-                        <h1>ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</h1>
-                        <h3>حسن کک - Hassan Cook</h3>
-                        <div class="banner-contact">
-                            <div class="contact-center">
-                                <strong>چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ</strong>
-                                چاہ کہنے والا زود برف کارخانه<br>
-                                <span style="font-size: 9px; margin-top: 2px; display: block; font-weight: bold; letter-spacing: 0.5px; white-space: nowrap;">سلیم: <span dir="ltr" style="display: inline;">+92 3040077884</span> | زونگ: <span dir="ltr" style="display: inline;">+92 3078677779</span> | <span dir="ltr" style="display: inline;">+92 3086977778</span> | حسن کک: <span dir="ltr" style="display: inline;">+92 3126396398</span></span>
-                            </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
+                        <div class="banner-left-name" style="margin-top: 15px;">سلیم</div>
+                        <div class="banner-left-phone">0308-6977778</div>
+                        <div class="banner-left-phone">0312-6396398</div>
+                    </div>
+                </div>
+                <div class="banner-right">
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
+                        <div class="banner-right-service" style="margin-top: 0;">ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</div>
+                        <div class="banner-right-service yellow">سلیم فروٹ ٹریفل اسپیشلسٹ</div>
+                        <div class="banner-address-bar">
+                            <div class="banner-address-text">چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ چاہ گہنے والا نزد برف کارخانہ</div>
                         </div>
                     </div>
-                    <div class="banner-order-info">
-                        <p><strong>${translations.order_id}:</strong> ${order.order_number || '#' + order.id}</p>
-                        <p><strong>افراد کی تعداد:</strong> ${totalPersons}</p>
-                        <p><strong>${translations.order_date}:</strong> ${new Date(order.order_date).toLocaleDateString('ur-PK')} ${new Date(order.order_date).toLocaleTimeString('ur-PK')}</p>
-                    </div>
+                    <div class="banner-dessert-graphic"><img src="${cakeImagePath}" alt="Cake" onerror="this.style.display='none'; this.parentElement.innerHTML='🎂';"></div>
+                </div>
+            </div>
+            
+            <!-- Fillable Fields Section -->
+            <div class="fillable-section">
+                <div class="fillable-field">
+                    <span class="fillable-label">تاریخ:</span>
+                    <div class="fillable-space"></div>
+                </div>
+                <div class="fillable-field">
+                    <span class="fillable-label">وقت:</span>
+                    <div class="fillable-space"></div>
+                </div>
+                <div class="fillable-field">
+                    <span class="fillable-label">${translations.number_of_persons}:</span>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${totalPersons > 0 ? totalPersons : ''}</div>
                 </div>
             </div>
             
@@ -1486,6 +1633,10 @@ function printOrder(orderNumberOrId) {
     
     // Get the base path for the image from PHP
     const logoPath = '<?php echo htmlspecialchars($logoPath, ENT_QUOTES); ?>';
+    const basePath = window.location.pathname.includes('/admin/') || 
+                     window.location.pathname.includes('/user/') || 
+                     window.location.pathname.includes('/auth/') ? '../' : '';
+    const cakeImagePath = basePath + 'images/cake.png';
     
     // Get status translation
     const statusTranslations = <?php echo json_encode([
@@ -1503,6 +1654,13 @@ function printOrder(orderNumberOrId) {
     const fontFamily = langDir === 'rtl' ? 'Arial, "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif' : 'Arial, sans-serif';
     const orderStatus = statusTranslations[order.status] || order.status;
     
+    // Calculate total persons for the order
+    let totalPersons = 0;
+    order.dishes.forEach(function(dish) {
+        const persons = parseInt(dish.number_of_persons) || 1;
+        totalPersons = Math.max(totalPersons, persons);
+    });
+    
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
         <!DOCTYPE html>
@@ -1512,59 +1670,241 @@ function printOrder(orderNumberOrId) {
             <meta charset="UTF-8">
             <style>
                 @media print {
-                    body { margin: 0; padding: 20px; position: relative; }
-                    .no-print { display: none; }
-                }
-                body { font-family: ${fontFamily}; padding: 20px; max-width: 600px; margin: 0 auto; position: relative; min-height: 100vh; direction: ${langDir}; }
-                body::before {
-                    content: '';
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%) rotate(-45deg);
-                    width: 500px;
-                    height: 500px;
-                    background-image: url('${logoPath}');
-                    background-size: contain;
-                    background-repeat: no-repeat;
-                    background-position: center;
-                    opacity: 0.08;
-                    z-index: -1;
-                    pointer-events: none;
-                }
-                @media print {
-                    body::before {
-                        opacity: 0.15;
+                    @page {
+                        size: A4;
+                        margin: 0.5cm;
                     }
+                    body { margin: 0; padding: 10px; position: relative; font-size: 12px !important; }
+                    .no-print { display: none; }
+                    .print-banner { min-height: 100px !important; margin-bottom: 10px !important; }
+                    .banner-left-name { font-size: 16px !important; margin-bottom: 4px !important; }
+                    .banner-left-phone { font-size: 11px !important; }
+                    .banner-right-service { font-size: 13px !important; }
+                    .banner-right-service.yellow { font-size: 14px !important; }
+                    .banner-address-bar { padding: 6px 10px !important; margin-top: 6px !important; }
+                    .banner-address-text { font-size: 10px !important; }
+                    .fillable-section { margin: 10px 0 !important; padding: 8px !important; }
+                    .fillable-field { margin-bottom: 8px !important; }
+                    .fillable-label { font-size: 13px !important; }
+                    .fillable-space { height: 22px !important; }
+                    .header { margin-bottom: 10px !important; padding-bottom: 8px !important; }
+                    .header h1 { font-size: 18px !important; }
+                    .header p { font-size: 12px !important; margin: 3px 0 !important; }
+                    .order-info { margin: 10px 0 !important; }
+                    .order-info p { margin: 5px 0 !important; font-size: 11px !important; }
+                    .order-details { padding: 12px !important; margin: 10px 0 !important; }
+                    .order-details h3 { font-size: 14px !important; margin-top: 0 !important; }
+                    .detail-row { margin: 6px 0 !important; padding: 5px 0 !important; font-size: 11px !important; }
+                    .total-section { margin-top: 12px !important; padding-top: 12px !important; }
+                    .total-row { font-size: 16px !important; margin: 8px 0 !important; }
+                    .notes { margin-top: 10px !important; padding: 8px !important; font-size: 11px !important; }
+                    .footer { margin-top: 12px !important; padding-top: 10px !important; font-size: 11px !important; }
                 }
-                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px; position: relative; z-index: 1; }
-                .header h1 { margin: 0; color: #1e293b; }
-                .header p { margin: 5px 0; color: #64748b; }
-                .order-info { margin: 20px 0; position: relative; z-index: 1; }
-                .order-info p { margin: 8px 0; }
-                .order-details { background: #f8fafc; padding: 15px; border-radius: 5px; margin: 20px 0; position: relative; z-index: 1; }
-                .order-details h3 { margin-top: 0; }
-                .detail-row { display: flex; justify-content: space-between; margin: 10px 0; padding: 8px 0; border-bottom: 1px solid #e2e8f0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; }
+                body { font-family: ${fontFamily}; padding: 12px; max-width: 600px; margin: 0 auto; position: relative; direction: ${langDir}; font-size: 12px; }
+                
+                /* Banner Header - Visible and readable */
+                .print-banner {
+                    display: flex !important;
+                    width: 100%;
+                    margin-bottom: 12px;
+                    border: 2px solid #000;
+                    overflow: visible;
+                    box-sizing: border-box;
+                    min-height: 110px;
+                    background: white;
+                }
+                .banner-left {
+                    width: 25%;
+                    background: white;
+                    padding: 10px 8px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    align-items: center;
+                    box-sizing: border-box;
+                    border-right: 2px solid #000;
+                }
+                .banner-left-name {
+                    font-size: 18px;
+                    font-weight: 900;
+                    color: #000;
+                    margin-bottom: 6px;
+                    text-align: center;
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+                    line-height: 1.4;
+                }
+                .banner-left-phone {
+                    font-size: 12px;
+                    color: #000;
+                    margin: 2px 0;
+                    text-align: center;
+                    direction: ltr;
+                    font-weight: bold;
+                    font-family: Arial, sans-serif;
+                }
+                .banner-right {
+                    width: 75%;
+                    background: white;
+                    padding: 10px 15px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    position: relative;
+                    box-sizing: border-box;
+                }
+                .banner-right-service {
+                    color: #666;
+                    font-size: 14px;
+                    font-weight: 700;
+                    margin: 3px 0;
+                    text-align: center;
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+                    line-height: 1.4;
+                    text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+                }
+                .banner-right-service.yellow {
+                    color: #FFD700;
+                    font-size: 16px;
+                    font-weight: 900;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+                }
+                .banner-address-bar {
+                    background: white;
+                    padding: 8px 12px;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                    margin-top: 8px;
+                    width: calc(100% - 70px);
+                    text-align: center;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }
+                .banner-address-text {
+                    color: #666;
+                    font-size: 11px;
+                    font-weight: 600;
+                    line-height: 1.4;
+                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+                }
+                .banner-dessert-graphic {
+                    position: absolute;
+                    right: 15px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 60px;
+                    height: 60px;
+                    background: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    border: 2px solid #ccc;
+                    z-index: 10;
+                    overflow: hidden;
+                }
+                .banner-dessert-graphic img {
+                    width: 55px;
+                    height: 55px;
+                    object-fit: contain;
+                    border-radius: 50%;
+                }
+                .fillable-section {
+                    margin: 12px 0;
+                    padding: 10px;
+                    border: 2px dashed #ccc;
+                    border-radius: 5px;
+                }
+                .fillable-field {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 10px;
+                    direction: rtl;
+                }
+                .fillable-label {
+                    font-weight: bold;
+                    font-size: 14px;
+                    color: #333;
+                    min-width: 80px;
+                    margin-left: 15px;
+                }
+                .fillable-space {
+                    flex: 1;
+                    border-bottom: 2px solid #000;
+                    height: 24px;
+                    margin: 0 10px;
+                }
+                
+                .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; position: relative; z-index: 1; }
+                .header h1 { margin: 0; color: #1e293b; font-size: 20px; }
+                .header p { margin: 4px 0; color: #64748b; font-size: 14px; }
+                .order-info { margin: 12px 0; position: relative; z-index: 1; }
+                .order-info p { margin: 6px 0; font-size: 12px; }
+                .order-details { background: #f8fafc; padding: 15px; border-radius: 5px; margin: 12px 0; position: relative; z-index: 1; }
+                .order-details h3 { margin-top: 0; font-size: 16px; }
+                .detail-row { display: flex; justify-content: space-between; margin: 8px 0; padding: 6px 0; border-bottom: 1px solid #e2e8f0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; font-size: 12px; }
                 .detail-row:last-child { border-bottom: none; }
                 .detail-label { font-weight: bold; }
                 ${langDir === 'rtl' ? '.notes { border-left: none; border-right: 4px solid #f59e0b; }' : ''}
-                .total-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #1e293b; position: relative; z-index: 1; }
+                .total-section { margin-top: 15px; padding-top: 15px; border-top: 2px solid #1e293b; position: relative; z-index: 1; }
                 .total-row { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; margin: 10px 0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; }
-                .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: bold; margin-top: 10px; }
+                .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-weight: bold; margin-top: 8px; font-size: 11px; }
                 .status-pending { background: #f59e0b; color: #fff; }
                 .status-confirmed { background: #f97316; color: #fff; }
                 .status-preparing { background: #64748b; color: #fff; }
                 .status-ready { background: #10b981; color: #fff; }
                 .status-delivered { background: #10b981; color: #fff; }
                 .status-cancelled { background: #ef4444; color: #fff; }
-                .footer { margin-top: 30px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; position: relative; z-index: 1; }
+                .footer { margin-top: 15px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 12px; position: relative; z-index: 1; }
                 .print-btn { margin: 20px 0; text-align: center; }
-                button { padding: 10px 20px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 5px; }
+                button { padding: 10px 20px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 5px; font-size: 13px; }
                 button:hover { background: #7c3aed; }
-                .notes { margin-top: 15px; padding: 10px; background: #fef3c7; border-left: 4px solid #f59e0b; }
+                .notes { margin-top: 12px; padding: 10px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 12px; }
             </style>
         </head>
         <body>
+            <!-- Print Banner -->
+            <div class="print-banner">
+                <div class="banner-left">
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
+                        <div class="banner-left-name" style="margin-top: 0;">حسن کک</div>
+                        <div class="banner-left-phone">0308-6977778</div>
+                        <div class="banner-left-phone">0312-6396398</div>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
+                        <div class="banner-left-name" style="margin-top: 15px;">سلیم</div>
+                        <div class="banner-left-phone">0308-6977778</div>
+                        <div class="banner-left-phone">0312-6396398</div>
+                    </div>
+                </div>
+                <div class="banner-right">
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
+                        <div class="banner-right-service" style="margin-top: 0;">ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</div>
+                        <div class="banner-right-service yellow">سلیم فروٹ ٹریفل اسپیشلسٹ</div>
+                        <div class="banner-address-bar">
+                            <div class="banner-address-text">چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ چاہ گہنے والا نزد برف کارخانہ</div>
+                        </div>
+                    </div>
+                    <div class="banner-dessert-graphic"><img src="${cakeImagePath}" alt="Cake" onerror="this.style.display='none'; this.parentElement.innerHTML='🎂';"></div>
+                </div>
+            </div>
+            
+            <!-- Fillable Fields Section -->
+            <div class="fillable-section">
+                <div class="fillable-field">
+                    <span class="fillable-label">تاریخ:</span>
+                    <div class="fillable-space"></div>
+                </div>
+                <div class="fillable-field">
+                    <span class="fillable-label">وقت:</span>
+                    <div class="fillable-space"></div>
+                </div>
+                <div class="fillable-field">
+                    <span class="fillable-label">${translations.number_of_persons}:</span>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${totalPersons > 0 ? totalPersons : ''}</div>
+                </div>
+            </div>
+            
             <div class="header">
                 <h1>${translations.brand_name}</h1>
                 <p>${translations.order_receipt}</p>
@@ -1584,16 +1924,19 @@ function printOrder(orderNumberOrId) {
                     <span class="detail-label">${translations.email}:</span>
                     <span>${order.customer_email || 'N/A'}</span>
                 </div>
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
-                    <strong style="display: block; margin-bottom: 10px;">${translations.dish}:</strong>
-                    ${order.dishes.map(dish => `
-                        <div class="detail-row" style="margin-left: 20px;">
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                    <strong style="display: block; margin-bottom: 8px; font-size: 14px;">${translations.dish}:</strong>
+                    ${order.dishes.map(dish => {
+                        const persons = parseInt(dish.number_of_persons) || 1;
+                        return `
+                        <div class="detail-row" style="margin-left: 15px;">
                             <div style="flex: 1;">
                                 <span class="detail-label">${dish.dish_name || 'N/A'}</span>
-                                <span style="margin-left: 10px; color: #64748b;">(${translations.quantity}: ${dish.quantity}${dish.total_amount > 0 ? ' - Rs ' + parseFloat(dish.total_amount).toFixed(2) : ''})</span>
+                                <span style="margin-left: 12px; color: #64748b; font-size: 11px;">(${translations.quantity}: ${dish.quantity} - ${translations.persons}: ${persons}${dish.total_amount > 0 ? ' - Rs ' + parseFloat(dish.total_amount).toFixed(2) : ''})</span>
                             </div>
                         </div>
-                    `).join('')}
+                    `;
+                    }).join('')}
                 </div>
                 ${order.notes ? `<div class="notes"><strong>${translations.notes}:</strong> ${order.notes}</div>` : ''}
             </div>
