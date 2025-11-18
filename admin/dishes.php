@@ -17,7 +17,7 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    $category_id = null; // Category removed - set to null
+    $category_id = !empty($_POST['category_id']) ? intval($_POST['category_id']) : null;
     $dish_id = $_POST['dish_id'] ?? null;
     $ingredients = $_POST['ingredients'] ?? [];
     $quantities = $_POST['quantities'] ?? [];
@@ -58,6 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($name)) {
         $error = 'Dish name is required.';
+    } elseif (empty($category_id)) {
+        $error = 'Category is required. Please select a category for the dish.';
     } else {
         // Check if number_of_persons column exists, if not add it
         $check_column = $conn->query("SHOW COLUMNS FROM dishes LIKE 'number_of_persons'");
@@ -415,6 +417,23 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="text" class="form-control" id="name" name="name" required 
                                        placeholder="e.g., Fried Rice, Chicken Curry"
                                        value="<?php echo htmlspecialchars($edit_dish['name'] ?? ''); ?>">
+                            </div>
+                            
+                            <!-- Category -->
+                            <div class="mb-3">
+                                <label for="category_id" class="form-label fw-semibold">
+                                    <i class="bi bi-folder me-1 text-primary"></i>
+                                    Category <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select" id="category_id" name="category_id" required>
+                                    <option value="">-- Select Category --</option>
+                                    <?php foreach ($categories as $category): ?>
+                                        <option value="<?php echo $category['id']; ?>" 
+                                                <?php echo (isset($edit_dish['category_id']) && $edit_dish['category_id'] == $category['id']) ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($category['name']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
                             
                             <!-- Description -->
