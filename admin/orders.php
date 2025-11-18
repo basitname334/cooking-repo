@@ -3170,11 +3170,11 @@ function printIngredients(orderNumberOrId) {
             <div class="fillable-section">
                 <div class="fillable-field">
                     <span class="fillable-label">تاریخ:</span>
-                    <div class="fillable-space"></div>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatDateForPrint(order.order_date) : formatDateForPrint(new Date().toISOString())}</div>
                 </div>
                 <div class="fillable-field">
                     <span class="fillable-label">وقت:</span>
-                    <div class="fillable-space"></div>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatTimeForPrint(order.order_date) : formatTimeForPrint(new Date().toISOString())}</div>
                 </div>
                 <div class="fillable-field">
                     <span class="fillable-label">${translations.number_of_persons}:</span>
@@ -3461,11 +3461,11 @@ function printOrder(orderNumberOrId) {
             <div class="fillable-section">
                 <div class="fillable-field">
                     <span class="fillable-label">تاریخ:</span>
-                    <div class="fillable-space"></div>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatDateForPrint(order.order_date) : formatDateForPrint(new Date().toISOString())}</div>
                 </div>
                 <div class="fillable-field">
                     <span class="fillable-label">وقت:</span>
-                    <div class="fillable-space"></div>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatTimeForPrint(order.order_date) : formatTimeForPrint(new Date().toISOString())}</div>
                 </div>
                 <div class="fillable-field">
                     <span class="fillable-label">${translations.number_of_persons}:</span>
@@ -3479,7 +3479,7 @@ function printOrder(orderNumberOrId) {
             </div>
             <div class="order-info">
                 <p><strong>${translations.order_id}:</strong> ${order.order_number || '#' + order.id}</p>
-                <p><strong>${translations.order_date}:</strong> ${new Date(order.order_date).toLocaleString()}</p>
+                <p><strong>${translations.order_date}:</strong> ${order.order_date ? formatDateTimeForPrint(order.order_date) : new Date().toLocaleString()}</p>
                 <p><strong>${translations.status}:</strong> <span class="status-badge status-${order.status}">${orderStatus}</span></p>
             </div>
             <div class="order-details">
@@ -3527,6 +3527,37 @@ function printOrder(orderNumberOrId) {
     `);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 250);
+}
+
+// Helper functions to format date and time for print
+function formatDateForPrint(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
+function formatTimeForPrint(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function formatDateTimeForPrint(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-GB', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
 }
 
 // Dish Selection Modal Functions
