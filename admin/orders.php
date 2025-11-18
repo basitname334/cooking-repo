@@ -642,8 +642,7 @@ if ($result && $result->num_rows > 0) {
                 'customer_name' => $customer_name,
                 'customer_email' => $customer_email,
                 'customer_cell' => $order['customer_cell'] ?? '',
-                'order_date' => !empty($order['order_date']) ? $order['order_date'] : 
-                               (!empty($order['created_at']) ? $order['created_at'] : date('Y-m-d H:i:s')),
+                'order_date' => !empty($order['order_date']) ? $order['order_date'] : date('Y-m-d H:i:s'),
                 'delivery_date' => $order['delivery_date'] ?? '',
                 'delivery_time' => $order['delivery_time'] ?? '',
                 'shift' => $order['shift'] ?? '',
@@ -662,11 +661,9 @@ if ($result && $result->num_rows > 0) {
     // Convert to indexed array and sort by date (newest first)
     $grouped_orders = array_values($grouped_orders);
     usort($grouped_orders, function($a, $b) {
-        // Get order date, fallback to created_at, then to current time
-        $date_a = !empty($a['order_date']) ? strtotime($a['order_date']) : 
-                 (!empty($a['created_at']) ? strtotime($a['created_at']) : time());
-        $date_b = !empty($b['order_date']) ? strtotime($b['order_date']) : 
-                 (!empty($b['created_at']) ? strtotime($b['created_at']) : time());
+        // Get order date, fallback to current time
+        $date_a = !empty($a['order_date']) ? strtotime($a['order_date']) : time();
+        $date_b = !empty($b['order_date']) ? strtotime($b['order_date']) : time();
         return $date_b - $date_a; // Descending order (newest first)
     });
     
