@@ -162,7 +162,7 @@ include __DIR__ . '/../includes/header.php';
                 
                 <div class="text-center mt-4">
                     <p class="mb-0" style="color: #64748b; font-size: 1rem;">Already have an account? 
-                        <a href="login.php" class="fw-bold" style="color: #10b981; text-decoration: none; transition: all 0.3s;">Login here</a>
+                        <a href="login.php" class="fw-bold" style="color: #10b981; text-decoration: none;">Login here</a>
                     </p>
                 </div>
             </div>

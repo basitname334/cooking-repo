@@ -120,11 +120,9 @@ include __DIR__ . '/../includes/header.php';
     backdrop-filter: blur(10px);
     border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 16px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .customer-card:hover {
-    transform: translateY(-4px);
     box-shadow: 0 12px 35px rgba(99, 102, 241, 0.2);
     border-color: rgba(99, 102, 241, 0.3);
 }

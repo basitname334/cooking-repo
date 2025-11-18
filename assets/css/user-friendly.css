@@ -38,8 +38,7 @@
     --spacing-lg: 1.5rem;
     --spacing-xl: 2rem;
     
-    /* Transitions */
-    --transition: all 0.2s ease;
+    /* Transitions - Disabled */
 }
 
 /* Reset & Base Styles */
@@ -49,7 +48,6 @@
 
 html {
     overflow-x: hidden;
-    scroll-behavior: smooth;
 }
 
 body {
@@ -121,7 +119,6 @@ i.bi.text-info {
     align-items: center;
     gap: var(--spacing-sm);
     text-decoration: none;
-    transition: var(--transition);
     padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: var(--radius-md);
 }
@@ -143,7 +140,6 @@ i.bi.text-info {
     font-size: 0.9375rem;
     padding: var(--spacing-sm) var(--spacing-md) !important;
     border-radius: var(--radius-md);
-    transition: var(--transition);
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -168,7 +164,6 @@ i.bi.text-info {
 .nav-link-modern i {
     font-size: 1rem;
     color: var(--gray-900) !important;
-    transition: var(--transition);
 }
 
 .nav-link-modern:hover {
@@ -214,7 +209,6 @@ i.bi.text-info {
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--radius-md);
     color: var(--gray-700);
-    transition: var(--transition);
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -222,7 +216,6 @@ i.bi.text-info {
 
 .dropdown-item i {
     color: var(--gray-900) !important;
-    transition: var(--transition);
 }
 
 .dropdown-item:hover {
@@ -256,7 +249,6 @@ i.bi.text-info {
     border: 1px solid var(--gray-200);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-xs);
-    transition: var(--transition);
     overflow: hidden;
 }
 
@@ -298,7 +290,6 @@ i.bi.text-info {
     border-radius: var(--radius-md);
     border: 1px solid transparent;
     cursor: pointer;
-    transition: var(--transition);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -327,7 +318,6 @@ i.bi.text-info {
     border-color: #0284c7;
     color: var(--white);
     box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3);
-    transform: translateY(-1px);
 }
 
 .btn-success {
@@ -342,7 +332,6 @@ i.bi.text-info {
     border-color: #059669;
     color: var(--white);
     box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
-    transform: translateY(-1px);
 }
 
 .btn-danger {
@@ -357,7 +346,6 @@ i.bi.text-info {
     border-color: #dc2626;
     color: var(--white);
     box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
-    transform: translateY(-1px);
 }
 
 .btn-warning {
@@ -372,7 +360,6 @@ i.bi.text-info {
     border-color: #d97706;
     color: var(--white);
     box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
-    transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -387,7 +374,6 @@ i.bi.text-info {
     border-color: #4b5563;
     color: var(--white);
     box-shadow: 0 4px 8px rgba(107, 114, 128, 0.3);
-    transform: translateY(-1px);
 }
 
 .btn-sm {
@@ -417,7 +403,6 @@ i.bi.text-info {
     font-size: 0.9375rem;
     color: var(--gray-900);
     background: var(--white);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .form-control:focus,
@@ -425,7 +410,6 @@ i.bi.text-info {
     border-color: #6366f1;
     outline: none;
     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(99, 102, 241, 0.15);
-    transform: translateY(-1px);
     background: var(--white);
 }
 
@@ -540,7 +524,6 @@ i.bi.text-info {
     padding: var(--spacing-lg);
     text-align: center;
     box-shadow: var(--shadow-xs);
-    transition: var(--transition);
 }
 
 .stat-box:hover {
@@ -579,7 +562,6 @@ i.bi.text-info {
     text-decoration: none;
     color: var(--gray-900);
     box-shadow: var(--shadow-xs);
-    transition: var(--transition);
 }
 
 .quick-link:hover {
@@ -587,7 +569,6 @@ i.bi.text-info {
     border-color: var(--gray-300);
     color: var(--gray-900);
     text-decoration: none;
-    transform: translateY(-2px);
 }
 
 .quick-link .icon {
@@ -716,14 +697,12 @@ i.bi.text-info {
     background: var(--white);
     border: 1px solid var(--gray-200);
     border-radius: var(--radius-lg);
-    transition: var(--transition);
     cursor: pointer;
 }
 
 .dish-card:hover {
     box-shadow: var(--shadow-md);
     border-color: var(--gray-300);
-    transform: translateY(-2px);
 }
 
 /* Ingredient Rows */
@@ -885,91 +864,21 @@ body[dir="rtl"] .ms-2 {
     background: var(--gray-400);
 }
 
-/* Modern Animations */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-@keyframes scaleIn {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-/* Animate cards on load */
-.card {
-    animation: fadeInUp 0.6s ease-out;
-}
-
-.card:nth-child(2) {
-    animation-delay: 0.1s;
-}
-
-.card:nth-child(3) {
-    animation-delay: 0.2s;
-}
+/* Modern Animations - Disabled */
 
 /* Modern Input Focus Effects */
 .input-group:focus-within {
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2) !important;
 }
 
-/* Enhanced Button Animations */
-.btn {
-    position: relative;
-    overflow: hidden;
-}
-
-.btn::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
-}
-
-.btn:hover::after {
-    width: 300px;
-    height: 300px;
-}
+/* Enhanced Button Animations - Disabled */
 
 /* Modern Table Enhancements */
 .table tbody tr {
-    transition: all 0.3s ease;
 }
 
 .table tbody tr:hover {
     background: linear-gradient(90deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
-    transform: scale(1.01);
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
 }
 
@@ -987,7 +896,6 @@ body[dir="rtl"] .ms-2 {
 .modal-content {
     border: none;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    animation: scaleIn 0.3s ease-out;
 }
 
 .modal-header {

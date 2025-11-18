@@ -263,7 +263,6 @@ include __DIR__ . '/../includes/header.php';
     backdrop-filter: blur(10px);
     border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 16px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -277,7 +276,6 @@ include __DIR__ . '/../includes/header.php';
     height: 3px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     opacity: 0;
-    transition: opacity 0.4s;
 }
 
 .category-card:hover::before {
@@ -285,7 +283,6 @@ include __DIR__ . '/../includes/header.php';
 }
 
 .category-card:hover {
-    transform: translateY(-6px) scale(1.02);
     box-shadow: 0 12px 35px rgba(99, 102, 241, 0.25);
     border-color: rgba(99, 102, 241, 0.3);
 }

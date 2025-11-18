@@ -241,6 +241,10 @@ if ($result && $result->num_rows > 0) {
     unset($dish);
 }
 
+// Pagination settings
+$items_per_page = 12; // Number of orders per page
+$current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+
 // Get all orders grouped by order_number
 $orders = [];
 $result = $conn->query("SELECT o.*, u.name as customer_name, u.email as customer_email, d.name as dish_name, d.id as dish_id, d.number_of_persons
@@ -324,8 +328,19 @@ if ($result && $result->num_rows > 0) {
     usort($grouped_orders, function($a, $b) {
         return strtotime($b['order_date']) - strtotime($a['order_date']);
     });
+    
+    // Pagination calculations
+    $total_orders = count($grouped_orders);
+    $total_pages = ceil($total_orders / $items_per_page);
+    $offset = ($current_page - 1) * $items_per_page;
+    
+    // Get paginated orders
+    $paginated_orders = array_slice($grouped_orders, $offset, $items_per_page);
 } else {
     $grouped_orders = [];
+    $paginated_orders = [];
+    $total_orders = 0;
+    $total_pages = 0;
 }
 
 $conn->close();
@@ -342,8 +357,8 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <?php
-// Calculate statistics from grouped orders
-$total_orders = count($grouped_orders);
+// Calculate statistics from all grouped orders (not just paginated)
+$total_orders_count = count($grouped_orders);
 $pending_orders = count(array_filter($grouped_orders, fn($o) => $o['status'] == 'pending'));
 $delivered_orders = count(array_filter($grouped_orders, fn($o) => $o['status'] == 'delivered'));
 $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
@@ -363,7 +378,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     backdrop-filter: blur(10px);
     border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 16px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -377,7 +391,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     height: 3px;
     background: var(--stat-gradient);
     opacity: 0;
-    transition: opacity 0.4s;
 }
 
 .order-stat-card:hover::before {
@@ -385,7 +398,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 }
 
 .order-stat-card:hover {
-    transform: translateY(-6px) scale(1.02);
     box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
     border-color: rgba(99, 102, 241, 0.3);
 }
@@ -399,14 +411,69 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 16px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 12px;
+    font-size: 0.875rem;
 }
 
 .order-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 35px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.15);
     border-color: rgba(99, 102, 241, 0.3);
+}
+
+.order-card .card-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.order-card .card-body {
+    padding: 1rem;
+}
+
+.order-card .card-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.order-card h6 {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.order-card .badge {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
+}
+
+.order-card .btn-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.order-card .form-select-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Responsive adjustments for order cards */
+@media (max-width: 991.98px) {
+    .order-card {
+        font-size: 0.8rem;
+    }
+    
+    .order-card .card-body {
+        padding: 0.75rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .order-card .card-header,
+    .order-card .card-footer {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .order-card .card-body {
+        padding: 0.5rem;
+    }
 }
 </style>
 
@@ -509,11 +576,20 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 <!-- Create Order Section -->
 <div class="row mb-4">
     <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-cart-plus-fill me-2"></i>
+                <?php e('create_order'); ?>
+            </h5>
+            <a href="create_order.php" class="btn btn-primary rounded-pill px-4">
+                <i class="bi bi-plus-circle me-2"></i>New 3-Step Order
+            </a>
+        </div>
         <div class="card shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
             <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-cart-plus-fill me-2"></i>
-                    <?php e('create_order'); ?>
+                    <?php e('create_order'); ?> (Quick Form)
                 </h5>
             </div>
             <div class="card-body p-4">
@@ -677,86 +753,85 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             return $icons[$status] ?? 'question-circle';
                         }
                         ?>
-                        <?php foreach ($grouped_orders as $grouped_order): ?>
-                                <div class="col-lg-6 col-xl-4 order-item" 
-                                 data-id="<?php echo $grouped_order['id']; ?>"
+                        <?php foreach ($paginated_orders as $grouped_order): ?>
+                                <div class="col-lg-4 col-md-6 col-xl-3 order-item" 
+                                 data-id="<?php echo $grouped_order['id']; ?>" 
                                  data-order-number="<?php echo htmlspecialchars($grouped_order['order_number']); ?>"
                                  data-customer="<?php echo strtolower(htmlspecialchars($grouped_order['customer_name'])); ?>"
                                  data-status="<?php echo $grouped_order['status']; ?>">
-                                <div class="card border-0 shadow-lg h-100 order-card" style="border-radius: 16px;">
-                                    <div class="card-header bg-white border-bottom">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div>
-                                                <h6 class="mb-0 fw-bold text-primary">
+                                <div class="card border-0 shadow-sm h-100 order-card">
+                                    <div class="card-header bg-white">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <h6 class="mb-1 fw-bold text-primary">
                                                     <i class="bi bi-hash me-1"></i><?php echo htmlspecialchars($grouped_order['order_number']); ?>
                                                 </h6>
-                                                <small class="text-muted">
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">
                                                     <i class="bi bi-calendar3 me-1"></i>
-                                                    <?php echo date('M d, Y H:i', strtotime($grouped_order['order_date'])); ?>
+                                                    <?php echo date('M d, Y', strtotime($grouped_order['order_date'])); ?>
                                                 </small>
                                             </div>
-                                            <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?>">
-                                                <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?> me-1"></i>
-                                                <?php echo ucfirst($grouped_order['status']); ?>
+                                            <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-2">
+                                                <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="card-body p-3">
-                                        <div class="mb-3">
-                                            <div class="d-flex align-items-center mb-2">
-                                                <div class="bg-primary bg-opacity-10 rounded p-2 me-2">
-                                                    <i class="bi bi-person-fill text-primary"></i>
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="bg-primary bg-opacity-10 rounded p-1 me-2" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+                                                    <i class="bi bi-person-fill text-primary" style="font-size: 0.75rem;"></i>
                                                 </div>
-                                                <div class="flex-grow-1">
-                                                    <div class="fw-semibold"><?php echo htmlspecialchars($grouped_order['customer_name']); ?></div>
-                                                    <small class="text-muted"><?php echo htmlspecialchars($grouped_order['customer_email']); ?></small>
+                                                <div class="flex-grow-1" style="min-width: 0;">
+                                                    <div class="fw-semibold" style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><?php echo htmlspecialchars($grouped_order['customer_name']); ?></div>
+                                                    <small class="text-muted d-block" style="font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><?php echo htmlspecialchars($grouped_order['customer_email']); ?></small>
                                                 </div>
                                             </div>
                                         </div>
                                         
-                                        <div class="mb-3 pb-3 border-bottom">
-                                            <div class="fw-semibold mb-2">
-                                                <i class="bi bi-egg-fried text-success me-1"></i>Dishes (<?php echo count($grouped_order['dishes']); ?>):
+                                        <div class="mb-2 pb-2 border-bottom">
+                                            <div class="fw-semibold mb-1" style="font-size: 0.75rem;">
+                                                <i class="bi bi-egg-fried text-success me-1"></i>Dishes (<?php echo count($grouped_order['dishes']); ?>)
                                             </div>
-                                            <?php foreach ($grouped_order['dishes'] as $dish): ?>
-                                                <div class="d-flex justify-content-between align-items-center mb-1 ps-3">
-                                                    <div>
-                                                        <small class="fw-semibold"><?php echo htmlspecialchars($dish['dish_name']); ?></small>
-                                                        <small class="text-muted d-block">
-                                                            <i class="bi bi-123 me-1"></i>Qty: <?php echo number_format($dish['quantity'], 2); ?>
+                                            <div style="max-height: 80px; overflow-y: auto;">
+                                                <?php foreach (array_slice($grouped_order['dishes'], 0, 3) as $dish): ?>
+                                                    <div class="mb-1">
+                                                        <small class="fw-semibold d-block" style="font-size: 0.75rem;"><?php echo htmlspecialchars($dish['dish_name']); ?></small>
+                                                        <small class="text-muted" style="font-size: 0.7rem;">
+                                                            Qty: <?php echo number_format($dish['quantity'], 2); ?>
                                                             <?php if ($dish['total_amount'] > 0): ?>
                                                                 - Rs <?php echo number_format($dish['total_amount'], 2); ?>
                                                             <?php endif; ?>
                                                         </small>
                                                     </div>
-                                                </div>
-                                            <?php endforeach; ?>
+                                                <?php endforeach; ?>
+                                                <?php if (count($grouped_order['dishes']) > 3): ?>
+                                                    <small class="text-muted" style="font-size: 0.7rem;">+<?php echo count($grouped_order['dishes']) - 3; ?> more</small>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                         
-                                        <div class="mb-3">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <span class="text-muted small">Total Amount</span>
-                                                <span class="h5 mb-0 fw-bold text-success">Rs <?php echo number_format($grouped_order['total_amount'], 2); ?></span>
+                                        <div class="mb-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="text-muted" style="font-size: 0.75rem;">Total</span>
+                                                <span class="fw-bold text-success" style="font-size: 0.95rem;">Rs <?php echo number_format($grouped_order['total_amount'], 2); ?></span>
                                             </div>
                                         </div>
                                         
                                         <?php if (!empty($grouped_order['notes'])): ?>
-                                            <div class="mb-3">
-                                                <small class="text-muted">
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block" style="font-size: 0.7rem; max-height: 40px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
                                                     <i class="bi bi-card-text me-1"></i>
-                                                    <strong>Notes:</strong> <?php echo htmlspecialchars($grouped_order['notes']); ?>
+                                                    <?php echo htmlspecialchars($grouped_order['notes']); ?>
                                                 </small>
                                             </div>
                                         <?php endif; ?>
                                         
-                                        <div class="mb-3">
-                                            <label class="form-label small fw-semibold mb-2">
-                                                <i class="bi bi-arrow-repeat me-1"></i>Update Status
-                                            </label>
-                                            <form method="POST" action="" class="mb-2">
+                                        <div class="mb-0">
+                                            <form method="POST" action="">
                                                 <input type="hidden" name="order_id" value="<?php echo $grouped_order['id']; ?>">
                                                 <input type="hidden" name="order_number" value="<?php echo htmlspecialchars($grouped_order['order_number']); ?>">
-                                                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="font-size: 0.7rem;">
                                                     <option value="pending" <?php echo $grouped_order['status'] == 'pending' ? 'selected' : ''; ?>>Pending</option>
                                                     <option value="confirmed" <?php echo $grouped_order['status'] == 'confirmed' ? 'selected' : ''; ?>>Confirmed</option>
                                                     <option value="preparing" <?php echo $grouped_order['status'] == 'preparing' ? 'selected' : ''; ?>>Preparing</option>
@@ -768,21 +843,30 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             </form>
                                         </div>
                                     </div>
-                                    <div class="card-footer bg-white border-top">
-                                        <div class="d-flex gap-2">
+                                    <div class="card-footer bg-white">
+                                        <div class="d-flex gap-1 flex-wrap">
+                                            <a href="order_preview.php?order_number=<?php echo urlencode($grouped_order['order_number']); ?>" 
+                                               class="btn btn-sm btn-success flex-fill" 
+                                               title="View Order Preview"
+                                               style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
                                             <button type="button" class="btn btn-sm btn-info flex-fill" 
                                                     title="<?php e('print_ingredients'); ?>" 
-                                                    onclick="printIngredients('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')">
-                                                <i class="bi bi-printer me-1"></i> Ingredients
+                                                    onclick="printIngredients('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-printer"></i>
                                             </button>
                                             <button type="button" class="btn btn-sm btn-primary flex-fill" 
                                                     title="<?php e('print_order'); ?>" 
-                                                    onclick="printOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')">
-                                                <i class="bi bi-printer-fill me-1"></i> Receipt
+                                                    onclick="printOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-printer-fill"></i>
                                             </button>
                                             <a href="?delete=<?php echo $grouped_order['id']; ?>" class="btn btn-sm btn-danger" 
                                                title="<?php e('delete'); ?>" 
-                                               onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');">
+                                               onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');"
+                                               style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-trash"></i>
                                             </a>
                                         </div>
@@ -796,6 +880,63 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         <h5 class="text-muted mb-2">No orders found</h5>
                         <p class="text-muted">Try adjusting your search terms</p>
                     </div>
+                    
+                    <!-- Pagination Controls -->
+                    <?php if ($total_pages > 1): ?>
+                        <nav aria-label="Orders pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                <!-- Previous Button -->
+                                <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?>" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+                                
+                                <!-- Page Numbers -->
+                                <?php
+                                $start_page = max(1, $current_page - 2);
+                                $end_page = min($total_pages, $current_page + 2);
+                                
+                                if ($start_page > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1">1</a>
+                                    </li>
+                                    <?php if ($start_page > 2): ?>
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                                
+                                <?php for ($i = $start_page; $i <= $end_page; $i++): ?>
+                                    <li class="page-item <?php echo $i == $current_page ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    </li>
+                                <?php endfor; ?>
+                                
+                                <?php if ($end_page < $total_pages): ?>
+                                    <?php if ($end_page < $total_pages - 1): ?>
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    <?php endif; ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
+                                    </li>
+                                <?php endif; ?>
+                                
+                                <!-- Next Button -->
+                                <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?>" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </nav>
+                        <div class="text-center mt-2 text-muted">
+                            <small>Showing <?php echo count($paginated_orders); ?> of <?php echo $total_orders; ?> orders (Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>)</small>
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>

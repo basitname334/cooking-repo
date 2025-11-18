@@ -232,13 +232,31 @@ if ($result && $result->num_rows > 0) {
     $categories = $result->fetch_all(MYSQLI_ASSOC);
 }
 
-// Get all dishes with category names and ingredient counts with error handling
+// Pagination settings
+$items_per_page = 12; // Number of dishes per page
+$current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+
+// Get total count of dishes
+$total_dishes = 0;
+$count_result = $conn->query("SELECT COUNT(*) as total FROM dishes");
+if ($count_result && $count_result->num_rows > 0) {
+    $total_dishes = $count_result->fetch_assoc()['total'] ?? 0;
+}
+
+// Calculate pagination
+$total_pages = ceil($total_dishes / $items_per_page);
+$offset = ($current_page - 1) * $items_per_page;
+
+// Get paginated dishes with category names and ingredient counts with error handling
 $dishes = [];
+$items_per_page_int = intval($items_per_page);
+$offset_int = intval($offset);
 $result = $conn->query("SELECT d.*, c.name as category_name,
     (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
-    ORDER BY c.name, d.name");
+    ORDER BY c.name, d.name
+    LIMIT $items_per_page_int OFFSET $offset_int");
 if ($result && $result->num_rows > 0) {
     $dishes = $result->fetch_all(MYSQLI_ASSOC);
 }
@@ -265,7 +283,6 @@ include __DIR__ . '/../includes/header.php';
     backdrop-filter: blur(10px);
     border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 16px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -279,7 +296,6 @@ include __DIR__ . '/../includes/header.php';
     height: 3px;
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     opacity: 0;
-    transition: opacity 0.4s;
 }
 
 .dish-card:hover::before {
@@ -287,7 +303,6 @@ include __DIR__ . '/../includes/header.php';
 }
 
 .dish-card:hover {
-    transform: translateY(-8px) scale(1.02);
     box-shadow: 0 12px 35px rgba(6, 182, 212, 0.25);
     border-color: rgba(6, 182, 212, 0.3);
 }
@@ -315,7 +330,7 @@ include __DIR__ . '/../includes/header.php';
             </h1>
             <p class="lead mb-0" style="color: #64748b;">
                 <i class="bi bi-info-circle me-2"></i>
-                <?php echo count($dishes); ?> <?php echo count($dishes) == 1 ? 'dish' : 'dishes'; ?> in your menu
+                <?php echo $total_dishes; ?> <?php echo $total_dishes == 1 ? 'dish' : 'dishes'; ?> in your menu
             </p>
         </div>
         <div>
@@ -676,6 +691,63 @@ include __DIR__ . '/../includes/header.php';
                         <h5 class="text-muted mb-2">No dishes found</h5>
                         <p class="text-muted">Try adjusting your search terms</p>
                     </div>
+                    
+                    <!-- Pagination Controls -->
+                    <?php if ($total_pages > 1): ?>
+                        <nav aria-label="Dishes pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                <!-- Previous Button -->
+                                <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?><?php echo isset($_GET['edit']) ? '&edit=' . intval($_GET['edit']) : ''; ?>" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+                                
+                                <!-- Page Numbers -->
+                                <?php
+                                $start_page = max(1, $current_page - 2);
+                                $end_page = min($total_pages, $current_page + 2);
+                                
+                                if ($start_page > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1<?php echo isset($_GET['edit']) ? '&edit=' . intval($_GET['edit']) : ''; ?>">1</a>
+                                    </li>
+                                    <?php if ($start_page > 2): ?>
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                                
+                                <?php for ($i = $start_page; $i <= $end_page; $i++): ?>
+                                    <li class="page-item <?php echo $i == $current_page ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $i; ?><?php echo isset($_GET['edit']) ? '&edit=' . intval($_GET['edit']) : ''; ?>"><?php echo $i; ?></a>
+                                    </li>
+                                <?php endfor; ?>
+                                
+                                <?php if ($end_page < $total_pages): ?>
+                                    <?php if ($end_page < $total_pages - 1): ?>
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    <?php endif; ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=<?php echo $total_pages; ?><?php echo isset($_GET['edit']) ? '&edit=' . intval($_GET['edit']) : ''; ?>"><?php echo $total_pages; ?></a>
+                                    </li>
+                                <?php endif; ?>
+                                
+                                <!-- Next Button -->
+                                <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
+                                    <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?><?php echo isset($_GET['edit']) ? '&edit=' . intval($_GET['edit']) : ''; ?>" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </nav>
+                        <div class="text-center mt-2 text-muted">
+                            <small>Showing <?php echo count($dishes); ?> of <?php echo $total_dishes; ?> dishes (Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>)</small>
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -2344,10 +2416,8 @@ function displayCategoriesInModal(categories, searchTerm = '') {
         filtered.map(cat => `
             <div class="col-md-6 col-lg-4">
                 <div class="card h-100 border shadow-sm category-card-modal" 
-                     style="cursor: pointer; transition: all 0.2s;"
-                     onclick="selectCategory(${cat.id}, '${cat.name.replace(/'/g, "\\'")}')"
-                     onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)'"
-                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                     style="cursor: pointer;"
+                     onclick="selectCategory(${cat.id}, '${cat.name.replace(/'/g, "\\'")}')">
                     <div class="card-body p-3">
                         <div class="d-flex align-items-center">
                             <i class="bi bi-folder2 me-2 text-primary fs-5"></i>
@@ -2456,10 +2526,8 @@ function displayIngredientsInModal(ingredients, searchTerm = '') {
                     ${categoryIngredients.map(ing => `
                         <div class="col-md-6 col-lg-4">
                             <div class="card border shadow-sm ingredient-card-modal" 
-                                 style="cursor: pointer; transition: all 0.2s;"
-                                 onclick="selectIngredient(${ing.id}, ${ing.category_id}, '${ing.name.replace(/'/g, "\\'")}')"
-                                 onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)'"
-                                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                                 style="cursor: pointer;"
+                                 onclick="selectIngredient(${ing.id}, ${ing.category_id}, '${ing.name.replace(/'/g, "\\'")}')">
                                 <div class="card-body p-2">
                                     <div class="d-flex align-items-center">
                                         <i class="bi bi-basket me-2 text-success"></i>

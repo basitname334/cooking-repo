@@ -13,9 +13,9 @@ include __DIR__ . '/includes/header.php';
 <div class="row mb-5">
     <div class="col-12">
         <div class="hero-section" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%); border-radius: 24px; padding: 4rem 2rem; position: relative; overflow: hidden;">
-            <!-- Animated Background Elements -->
-            <div class="hero-bg-decoration" style="position: absolute; top: -50%; right: -10%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%); border-radius: 50%; animation: float 6s ease-in-out infinite;"></div>
-            <div class="hero-bg-decoration" style="position: absolute; bottom: -30%; left: -5%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%); border-radius: 50%; animation: float 8s ease-in-out infinite reverse;"></div>
+            <!-- Background Elements -->
+            <div class="hero-bg-decoration" style="position: absolute; top: -50%; right: -10%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%); border-radius: 50%;"></div>
+            <div class="hero-bg-decoration" style="position: absolute; bottom: -30%; left: -5%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%); border-radius: 50%;"></div>
             
             <div class="row align-items-center position-relative" style="z-index: 1;">
                 <div class="col-lg-7 mb-4 mb-lg-0">
@@ -51,7 +51,7 @@ include __DIR__ . '/includes/header.php';
                 </div>
                 <div class="col-lg-5 text-center">
                     <div style="position: relative; display: inline-block;">
-                        <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%); border-radius: 50%; padding: 3rem; display: inline-block; box-shadow: 0 20px 60px rgba(99, 102, 241, 0.3); animation: pulse 3s ease-in-out infinite;">
+                        <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%); border-radius: 50%; padding: 3rem; display: inline-block; box-shadow: 0 20px 60px rgba(99, 102, 241, 0.3);">
                             <i class="bi bi-egg-fried" style="font-size: 8rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"></i>
                         </div>
                     </div>
@@ -62,14 +62,6 @@ include __DIR__ . '/includes/header.php';
 </div>
 
 <style>
-@keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(5deg); }
-}
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-}
 .hero-section {
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.5);

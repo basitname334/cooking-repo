@@ -16,13 +16,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Add fade-in animation to cards
-    const cards = document.querySelectorAll('.card');
-    cards.forEach(function(card, index) {
-        setTimeout(function() {
-            card.classList.add('fade-in');
-        }, index * 100);
-    });
     
     // Form validation
     const forms = document.querySelectorAll('form');

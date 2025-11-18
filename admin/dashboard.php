@@ -91,7 +91,6 @@ include __DIR__ . '/../includes/header.php';
     height: 400px;
     background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
     border-radius: 50%;
-    animation: float 8s ease-in-out infinite;
 }
 
 .stat-box {
@@ -102,7 +101,6 @@ include __DIR__ . '/../includes/header.php';
     text-align: center;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border: 1px solid rgba(226, 232, 240, 0.8);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     height: 100%;
@@ -117,7 +115,6 @@ include __DIR__ . '/../includes/header.php';
     height: 4px;
     background: var(--gradient);
     opacity: 0;
-    transition: opacity 0.4s;
 }
 
 .stat-box:hover::before {
@@ -125,7 +122,6 @@ include __DIR__ . '/../includes/header.php';
 }
 
 .stat-box:hover {
-    transform: translateY(-8px) scale(1.02);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(99, 102, 241, 0.1);
 }
 
@@ -155,11 +151,9 @@ include __DIR__ . '/../includes/header.php';
     justify-content: center;
     background: var(--gradient);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-    transition: all 0.4s;
 }
 
 .stat-box:hover .icon-wrapper {
-    transform: scale(1.1) rotate(5deg);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
 }
 
@@ -205,7 +199,6 @@ include __DIR__ . '/../includes/header.php';
     text-decoration: none;
     color: #1e293b;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid rgba(226, 232, 240, 0.8);
     position: relative;
     overflow: hidden;
@@ -220,7 +213,6 @@ include __DIR__ . '/../includes/header.php';
     width: 100%;
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
-    transition: left 0.5s;
 }
 
 .quick-link:hover::before {
@@ -228,7 +220,6 @@ include __DIR__ . '/../includes/header.php';
 }
 
 .quick-link:hover {
-    transform: translateY(-8px) scale(1.05);
     box-shadow: 0 12px 35px rgba(99, 102, 241, 0.25);
     border-color: rgba(99, 102, 241, 0.3);
     color: #1e293b;
@@ -244,7 +235,6 @@ include __DIR__ . '/../includes/header.php';
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-    transition: all 0.4s;
     font-size: 1.75rem;
     color: #6366f1;
 }
@@ -252,7 +242,6 @@ include __DIR__ . '/../includes/header.php';
 .quick-link:hover .icon {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    transform: scale(1.15) rotate(5deg);
     box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
 }
 
@@ -294,10 +283,6 @@ include __DIR__ . '/../includes/header.php';
     padding: 2rem;
 }
 
-@keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(5deg); }
-}
 </style>
 
 <!-- Modern Dashboard Header -->
@@ -409,6 +394,13 @@ include __DIR__ . '/../includes/header.php';
             <div class="icon"><i class="bi bi-cart-check"></i></div>
             <div class="text">Orders</div>
             <small><?php echo $orders_count; ?> total</small>
+        </a>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+        <a href="create_order.php" class="quick-link">
+            <div class="icon"><i class="bi bi-cart-plus"></i></div>
+            <div class="text">Create Order</div>
+            <small>New order</small>
         </a>
     </div>
     <div class="col-lg-2 col-md-4 col-sm-6">

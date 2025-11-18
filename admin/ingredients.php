@@ -226,7 +226,6 @@ include __DIR__ . '/../includes/header.php';
     backdrop-filter: blur(10px);
     border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 16px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -240,7 +239,6 @@ include __DIR__ . '/../includes/header.php';
     height: 3px;
     background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
     opacity: 0;
-    transition: opacity 0.4s;
 }
 
 .ingredient-card:hover::before {
@@ -248,7 +246,6 @@ include __DIR__ . '/../includes/header.php';
 }
 
 .ingredient-card:hover {
-    transform: translateY(-6px) scale(1.02);
     box-shadow: 0 12px 35px rgba(16, 185, 129, 0.25);
     border-color: rgba(16, 185, 129, 0.3);
 }

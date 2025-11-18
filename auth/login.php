@@ -144,7 +144,7 @@ include __DIR__ . '/../includes/header.php';
                 
                 <div class="text-center mt-4">
                     <p class="mb-3" style="color: #64748b; font-size: 1rem;"><?php e('dont_have_account'); ?> 
-                        <a href="register.php" class="fw-bold" style="color: #6366f1; text-decoration: none; transition: all 0.3s;">
+                        <a href="register.php" class="fw-bold" style="color: #6366f1; text-decoration: none;">
                             <?php e('register_here'); ?>
                         </a>
                     </p>

@@ -41,7 +41,6 @@ include __DIR__ . '/../includes/header.php';
     height: 400px;
     background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
     border-radius: 50%;
-    animation: float 8s ease-in-out infinite;
 }
 
 .user-stat-card {
@@ -52,7 +51,6 @@ include __DIR__ . '/../includes/header.php';
     text-align: center;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border: 1px solid rgba(226, 232, 240, 0.8);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     height: 100%;
@@ -67,7 +65,6 @@ include __DIR__ . '/../includes/header.php';
     height: 4px;
     background: var(--card-gradient);
     opacity: 0;
-    transition: opacity 0.4s;
 }
 
 .user-stat-card:hover::before {
@@ -75,7 +72,6 @@ include __DIR__ . '/../includes/header.php';
 }
 
 .user-stat-card:hover {
-    transform: translateY(-8px) scale(1.02);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(99, 102, 241, 0.1);
 }
 
@@ -93,11 +89,9 @@ include __DIR__ . '/../includes/header.php';
     justify-content: center;
     background: var(--card-gradient);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-    transition: all 0.4s;
 }
 
 .user-stat-card:hover .icon-wrapper {
-    transform: scale(1.1) rotate(5deg);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
 }
 
@@ -126,10 +120,6 @@ include __DIR__ . '/../includes/header.php';
     letter-spacing: 0.5px;
 }
 
-@keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(5deg); }
-}
 </style>
 
 <!-- Modern User Dashboard Header -->
