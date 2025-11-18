@@ -2894,7 +2894,7 @@ function printIngredients(orderNumberOrId) {
                      window.location.pathname.includes('/auth/') ? '../' : '';
     const cakeImagePath = basePath + 'images/cake.png';
     // Use relative path - base tag in print window will handle it
-    const bannerImagePath = 'images/' + encodeURIComponent('ینگ کوکنگ وچائنیز فوڈ اسپیشلسٹ.png');
+    const bannerImagePath = 'images/newimage.png';
     
     // Collect all ingredients from all dishes in the order, grouped by category
     let ingredientsByCategory = {};
@@ -3328,7 +3328,7 @@ function printOrder(orderNumberOrId) {
                      window.location.pathname.includes('/auth/') ? '../' : '';
     const cakeImagePath = basePath + 'images/cake.png';
     // Use relative path - base tag in print window will handle it
-    const bannerImagePath = 'images/' + encodeURIComponent('ینگ کوکنگ وچائنیز فوڈ اسپیشلسٹ.png');
+    const bannerImagePath = 'images/newimage.png';
     
     // Get status translation
     const statusTranslations = <?php echo json_encode([
