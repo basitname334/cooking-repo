@@ -343,27 +343,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Print Banner (Hidden on screen, shown when printing) -->
 <div class="print-banner no-print-screen">
-    <div class="banner-left">
-        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
-            <div class="banner-left-name" style="margin-top: 0;">حسن کک</div>
-            <div class="banner-left-phone">0308-6977778</div>
-            <div class="banner-left-phone">0312-6396398</div>
-        </div>
-        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
-            <div class="banner-left-name" style="margin-top: 15px;">سلیم</div>
-            <div class="banner-left-phone">0308-6977778</div>
-            <div class="banner-left-phone">0312-6396398</div>
-        </div>
-    </div>
-    <div class="banner-right">
-        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
-            <div class="banner-right-service" style="margin-top: 0;">ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</div>
-            <div class="banner-right-service yellow">سلیم فروٹ ٹریفل اسپیشلسٹ</div>
-            <div class="banner-address-bar">
-                <div class="banner-address-text">چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ چاہ گہنے والا نزد برف کارخانہ</div>
-            </div>
-        </div>
-    </div>
+    <img src="../images/<?php echo urlencode('ینگ کوکنگ وچائنیز فوڈ اسپیشلسٹ.png'); ?>" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block;">
 </div>
 
 <!-- Contact Information (Shown below banner when printing) -->
@@ -898,91 +878,14 @@ include __DIR__ . '/../includes/header.php';
 .print-banner {
     width: 100%;
     margin-bottom: 20px;
-    border: 3px solid #000;
     overflow: visible;
     box-sizing: border-box;
-    min-height: 150px;
 }
 
-.banner-left {
-    width: 25%;
-    background-color: #FFEB3B; /* Yellow background */
-    background: #FFEB3B; /* Yellow background */
-    padding: 15px 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    box-sizing: border-box;
-    border-right: 2px solid #000;
-}
-
-.banner-left-name {
-    font-size: 18px;
-    font-weight: 900;
-    color: #000;
-    margin-bottom: 8px;
-    text-align: center;
-    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
-    line-height: 1.4;
-}
-
-.banner-left-phone {
-    font-size: 12px;
-    color: #000;
-    margin: 2px 0;
-    text-align: center;
-    direction: ltr;
-    font-weight: bold;
-    font-family: Arial, sans-serif;
-}
-
-.banner-right {
-    width: 75%;
-    background-color: #DC143C; /* Red background */
-    background: #DC143C; /* Red background */
-    padding: 15px 20px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-    box-sizing: border-box;
-}
-
-.banner-right-service {
-    color: #FFFFFF;
-    font-size: 16px;
-    font-weight: 700;
-    margin: 5px 0;
-    text-align: center;
-    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
-    line-height: 1.4;
-}
-
-.banner-right-service.yellow {
-    color: #FFD700;
-    font-size: 18px;
-    font-weight: 900;
-}
-
-.banner-address-bar {
-    background-color: #2E7D32; /* Dark green background */
-    background: #2E7D32; /* Dark green background */
-    padding: 10px 15px;
-    border: 2px solid #1B5E20;
-    border-radius: 8px;
-    margin-top: 12px;
-    width: calc(100% - 110px);
-    text-align: center;
-}
-
-.banner-address-text {
-    color: #FFFFFF;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.5;
-    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
+.print-banner-image {
+    width: 100%;
+    height: auto;
+    display: block;
 }
 
 .banner-contact-info.no-print-screen {
@@ -1117,103 +1020,28 @@ include __DIR__ . '/../includes/header.php';
     
     /* Print Banner Styles */
     .print-banner {
-        display: flex !important;
+        display: block !important;
         width: 100% !important;
         margin-bottom: 20px !important;
-        border: 3px solid #000 !important;
         overflow: visible !important;
         box-sizing: border-box !important;
-        min-height: 150px !important;
         page-break-inside: avoid !important;
         page-break-after: avoid !important;
         visibility: visible !important;
     }
     
+    .print-banner-image {
+        width: 100% !important;
+        height: auto !important;
+        display: block !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
     .banner-contact-info {
         display: block !important;
         visibility: visible !important;
-    }
-    
-    .banner-left {
-        width: 25% !important;
-        background-color: #FFEB3B !important; /* Yellow background */
-        background: #FFEB3B !important; /* Yellow background */
-        padding: 15px 12px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        box-sizing: border-box !important;
-        border-right: 2px solid #000 !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
-    }
-    
-    .banner-left-name {
-        font-size: 18px !important;
-        font-weight: 900 !important;
-        color: #000 !important;
-        margin-bottom: 8px !important;
-        text-align: center !important;
-        font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif !important;
-        line-height: 1.4 !important;
-    }
-    
-    .banner-left-phone {
-        font-size: 12px !important;
-        color: #000 !important;
-        margin: 2px 0 !important;
-        text-align: center !important;
-        direction: ltr !important;
-        font-weight: bold !important;
-        font-family: Arial, sans-serif !important;
-    }
-    
-    .banner-right {
-        width: 75% !important;
-        background-color: #DC143C !important; /* Red background */
-        background: #DC143C !important; /* Red background */
-        padding: 15px 20px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: center !important;
-        align-items: center !important;
-        position: relative !important;
-        box-sizing: border-box !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
-    }
-    
-    .banner-right-service {
-        color: #FFFFFF !important;
-        font-size: 16px !important;
-        font-weight: 700 !important;
-        margin: 5px 0 !important;
-        text-align: center !important;
-        font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif !important;
-        line-height: 1.4 !important;
-    }
-    
-    .banner-right-service.yellow {
-        color: #FFD700 !important;
-        font-size: 18px !important;
-        font-weight: 900 !important;
-    }
-    
-    .banner-address-bar {
-        background-color: #2E7D32 !important; /* Dark green background */
-        background: #2E7D32 !important; /* Dark green background */
-        padding: 10px 15px !important;
-        border: 2px solid #1B5E20 !important;
-        border-radius: 8px !important;
-        margin-top: 12px !important;
-        width: calc(100% - 110px) !important;
-        text-align: center !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
     }
     
     .persons-info-section {

@@ -475,6 +475,158 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
         padding: 0.5rem;
     }
 }
+
+/* 3-Step Order Wizard Styles */
+.order-wizard-progress {
+    margin-bottom: 2rem;
+}
+
+.progress-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    position: relative;
+}
+
+.step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    z-index: 2;
+}
+
+.step-number {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.25rem;
+    transition: all 0.3s ease;
+    border: 3px solid #e2e8f0;
+}
+
+.step-item.active .step-number {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #667eea;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    transform: scale(1.1);
+}
+
+.step-item.completed .step-number {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    color: white;
+    border-color: #10b981;
+}
+
+.step-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64748b;
+    text-align: center;
+    transition: color 0.3s ease;
+}
+
+.step-item.active .step-label {
+    color: #667eea;
+    font-weight: 700;
+}
+
+.step-item.completed .step-label {
+    color: #10b981;
+}
+
+.step-line {
+    flex: 1;
+    height: 3px;
+    background: #e2e8f0;
+    position: relative;
+    margin: 0 0.5rem;
+    transition: background 0.3s ease;
+}
+
+.step-line.completed {
+    background: linear-gradient(90deg, #10b981 0%, #38f9d7 100%);
+}
+
+.order-step {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.step-header {
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 1rem;
+}
+
+.step-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.step-actions .btn {
+    min-width: 150px;
+}
+
+.order-review-card {
+    animation: slideIn 0.4s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (max-width: 768px) {
+    .progress-steps {
+        gap: 0.5rem;
+    }
+    
+    .step-number {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .step-label {
+        font-size: 0.75rem;
+    }
+    
+    .step-actions {
+        flex-direction: column;
+    }
+    
+    .step-actions .btn {
+        width: 100%;
+    }
+}
 </style>
 
 <!-- Modern Page Header -->
@@ -573,7 +725,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     </div>
 <?php endif; ?>
 
-<!-- Create Order Section -->
+<!-- Create Order Section - 3-Step Wizard -->
 <div class="row mb-4">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -581,111 +733,197 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                 <i class="bi bi-cart-plus-fill me-2"></i>
                 <?php e('create_order'); ?>
             </h5>
-            <a href="create_order.php" class="btn btn-primary rounded-pill px-4">
-                <i class="bi bi-plus-circle me-2"></i>New 3-Step Order
-            </a>
         </div>
         <div class="card shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
             <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-cart-plus-fill me-2"></i>
-                    <?php e('create_order'); ?> (Quick Form)
+                    <?php e('create_order'); ?> - 3-Step Process
                 </h5>
             </div>
             <div class="card-body p-4">
+                <!-- Progress Steps Indicator -->
+                <div class="order-wizard-progress mb-4">
+                    <div class="progress-steps">
+                        <div class="step-item active" data-step="1">
+                            <div class="step-number">1</div>
+                            <div class="step-label">Customer</div>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step-item" data-step="2">
+                            <div class="step-number">2</div>
+                            <div class="step-label">Dishes</div>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step-item" data-step="3">
+                            <div class="step-number">3</div>
+                            <div class="step-label">Review</div>
+                        </div>
+                    </div>
+                </div>
+
                 <form method="POST" action="" id="orderForm">
                     <input type="hidden" name="create_order" value="1">
                     
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-12">
-                            <label for="customer_id" class="form-label fw-semibold">
-                                <i class="bi bi-person-fill me-1 text-primary"></i>
-                                <?php e('customer'); ?> <span class="text-danger">*</span>
-                            </label>
-                            <select class="form-select" id="customer_id" name="customer_id" required>
-                                <option value=""><?php e('select_customer'); ?></option>
-                                <?php foreach ($customers as $customer): ?>
-                                    <option value="<?php echo $customer['id']; ?>">
-                                        <?php echo htmlspecialchars($customer['name']); ?> (<?php echo htmlspecialchars($customer['email']); ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                    <!-- Step 1: Select Customer -->
+                    <div class="order-step" id="step1" data-step="1">
+                        <div class="step-header mb-4">
+                            <h4 class="fw-bold">
+                                <i class="bi bi-person-fill me-2 text-primary"></i>
+                                Step 1: Select Customer
+                            </h4>
+                            <p class="text-muted">Choose the customer for this order</p>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label for="customer_id" class="form-label fw-semibold">
+                                    <i class="bi bi-person-fill me-1 text-primary"></i>
+                                    <?php e('customer'); ?> <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select form-select-lg" id="customer_id" name="customer_id" required>
+                                    <option value=""><?php e('select_customer'); ?></option>
+                                    <?php foreach ($customers as $customer): ?>
+                                        <option value="<?php echo $customer['id']; ?>">
+                                            <?php echo htmlspecialchars($customer['name']); ?> (<?php echo htmlspecialchars($customer['email']); ?>)
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="step-actions mt-4">
+                            <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(2)">
+                                Next: Add Dishes <i class="bi bi-arrow-right ms-2"></i>
+                            </button>
                         </div>
                     </div>
                     
-                    <!-- Dishes Section -->
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <label class="form-label fw-semibold mb-0">
-                                <i class="bi bi-egg-fried me-1 text-primary"></i>
-                                <?php e('dish'); ?> <span class="text-danger">*</span>
-                            </label>
-                            <button type="button" class="btn btn-sm btn-primary" id="addDishBtn">
-                                <i class="bi bi-plus-circle me-1"></i> Add Dish
-                            </button>
+                    <!-- Step 2: Add Dishes -->
+                    <div class="order-step" id="step2" data-step="2" style="display: none;">
+                        <div class="step-header mb-4">
+                            <h4 class="fw-bold">
+                                <i class="bi bi-egg-fried me-2 text-primary"></i>
+                                Step 2: Add Dishes
+                            </h4>
+                            <p class="text-muted">Add dishes to the order. You can add multiple dishes.</p>
                         </div>
-                        <div id="dishesContainer">
-                            <!-- First dish row -->
-                            <div class="dish-row mb-3 p-3 border rounded" data-row="0">
-                                <div class="row g-3">
-                                    <div class="col-md-3">
-                                        <label class="form-label fw-semibold small">
-                                            <?php e('dish'); ?> <span class="text-danger">*</span>
-                                        </label>
-                                        <select class="form-select dish-select" name="dishes[0][dish_id]" required>
-                                            <option value=""><?php e('select_dish'); ?></option>
-                                            <?php foreach ($dishes as $dish): ?>
-                                                <option value="<?php echo $dish['id']; ?>">
-                                                    <?php echo htmlspecialchars($dish['name']); ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label fw-semibold small">
-                                            <?php e('quantity'); ?> <span class="text-danger">*</span>
-                                        </label>
-                                        <input type="number" class="form-control dish-quantity" name="dishes[0][quantity]" 
-                                               placeholder="1" step="0.01" min="0.01" value="1" required>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label fw-semibold small">
-                                            <?php e('unit_price'); ?> (Rs)
-                                        </label>
-                                        <input type="number" class="form-control dish-unit-price" name="dishes[0][unit_price]" 
-                                               placeholder="0.00" step="0.01" min="0">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label fw-semibold small">
-                                            <?php e('total_amount'); ?> (Rs)
-                                        </label>
-                                        <input type="number" class="form-control dish-total-amount" name="dishes[0][total_amount]" 
-                                               placeholder="0.00" step="0.01" min="0">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label fw-semibold small d-block">&nbsp;</label>
-                                        <button type="button" class="btn btn-sm btn-danger remove-dish-btn" style="display: none;">
-                                            <i class="bi bi-trash"></i> Remove
-                                        </button>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label class="form-label fw-semibold mb-0">
+                                    <i class="bi bi-egg-fried me-1 text-primary"></i>
+                                    <?php e('dish'); ?> <span class="text-danger">*</span>
+                                </label>
+                                <button type="button" class="btn btn-sm btn-primary" id="addDishBtn">
+                                    <i class="bi bi-plus-circle me-1"></i> Add Dish
+                                </button>
+                            </div>
+                            <div id="dishesContainer">
+                                <!-- First dish row -->
+                                <div class="dish-row mb-3 p-3 border rounded" data-row="0">
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold small">
+                                                <?php e('dish'); ?> <span class="text-danger">*</span>
+                                            </label>
+                                            <select class="form-select dish-select" name="dishes[0][dish_id]" required>
+                                                <option value=""><?php e('select_dish'); ?></option>
+                                                <?php foreach ($dishes as $dish): ?>
+                                                    <option value="<?php echo $dish['id']; ?>">
+                                                        <?php echo htmlspecialchars($dish['name']); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold small">
+                                                <?php e('quantity'); ?> <span class="text-danger">*</span>
+                                            </label>
+                                            <input type="number" class="form-control dish-quantity" name="dishes[0][quantity]" 
+                                                   placeholder="1" step="0.01" min="0.01" value="1" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold small">
+                                                <?php e('unit_price'); ?> (Rs)
+                                            </label>
+                                            <input type="number" class="form-control dish-unit-price" name="dishes[0][unit_price]" 
+                                                   placeholder="0.00" step="0.01" min="0">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold small">
+                                                <?php e('total_amount'); ?> (Rs)
+                                            </label>
+                                            <input type="number" class="form-control dish-total-amount" name="dishes[0][total_amount]" 
+                                                   placeholder="0.00" step="0.01" min="0">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold small d-block">&nbsp;</label>
+                                            <button type="button" class="btn btn-sm btn-danger remove-dish-btn" style="display: none;">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                        <div class="step-actions mt-4">
+                            <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(1)">
+                                <i class="bi bi-arrow-left me-2"></i> Previous
+                            </button>
+                            <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(3)">
+                                Next: Review <i class="bi bi-arrow-right ms-2"></i>
+                            </button>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="notes" class="form-label fw-semibold">
-                            <i class="bi bi-card-text me-1 text-primary"></i>
-                            <?php e('notes'); ?>
-                        </label>
-                        <textarea class="form-control" id="notes" name="notes" rows="2" 
-                                  placeholder="<?php e('optional_notes'); ?>"></textarea>
-                    </div>
-                    
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-success btn-lg">
-                            <i class="bi bi-check-lg me-2"></i> <?php e('create_order'); ?>
-                        </button>
+                    <!-- Step 3: Review & Confirm -->
+                    <div class="order-step" id="step3" data-step="3" style="display: none;">
+                        <div class="step-header mb-4">
+                            <h4 class="fw-bold">
+                                <i class="bi bi-check-circle me-2 text-success"></i>
+                                Step 3: Review & Confirm
+                            </h4>
+                            <p class="text-muted">Review your order details before submitting</p>
+                        </div>
+                        
+                        <div class="order-review-card p-4 mb-4" style="background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
+                            <h5 class="fw-bold mb-3">
+                                <i class="bi bi-person-fill me-2 text-primary"></i>Customer Information
+                            </h5>
+                            <div id="reviewCustomer" class="mb-4">
+                                <p class="text-muted mb-0">Select a customer in Step 1</p>
+                            </div>
+                            
+                            <h5 class="fw-bold mb-3">
+                                <i class="bi bi-egg-fried me-2 text-primary"></i>Order Items
+                            </h5>
+                            <div id="reviewDishes" class="mb-4">
+                                <p class="text-muted mb-0">Add dishes in Step 2</p>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="notes" class="form-label fw-semibold">
+                                    <i class="bi bi-card-text me-1 text-primary"></i>
+                                    <?php e('notes'); ?> (Optional)
+                                </label>
+                                <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                          placeholder="<?php e('optional_notes'); ?>"></textarea>
+                            </div>
+                            
+                            <div class="order-total-section p-3 mt-4" style="background: white; border-radius: 8px; border: 2px solid #667eea;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0 fw-bold">Total Amount:</h5>
+                                    <h4 class="mb-0 fw-bold text-primary" id="reviewTotal">Rs 0.00</h4>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="step-actions mt-4">
+                            <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(2)">
+                                <i class="bi bi-arrow-left me-2"></i> Previous
+                            </button>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-check-lg me-2"></i> <?php e('create_order'); ?>
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -944,6 +1182,233 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 </div>
 
 <script>
+// 3-Step Order Wizard Functions
+let currentStep = 1;
+const totalSteps = 3;
+
+// Get customer data for review
+const customersData = <?php echo json_encode($customers); ?>;
+const dishesData = <?php echo json_encode($dishes); ?>;
+
+// Step navigation functions
+function nextStep(step) {
+    if (validateCurrentStep()) {
+        if (step <= totalSteps) {
+            // Hide current step
+            document.getElementById('step' + currentStep).style.display = 'none';
+            
+            // Update progress indicator
+            updateProgressIndicator(currentStep, step);
+            
+            // Show next step
+            currentStep = step;
+            document.getElementById('step' + currentStep).style.display = 'block';
+            
+            // If moving to step 3, update review
+            if (step === 3) {
+                updateReview();
+            }
+        }
+    }
+}
+
+function previousStep(step) {
+    if (step >= 1) {
+        // Hide current step
+        document.getElementById('step' + currentStep).style.display = 'none';
+        
+        // Update progress indicator
+        updateProgressIndicator(currentStep, step);
+        
+        // Show previous step
+        currentStep = step;
+        document.getElementById('step' + currentStep).style.display = 'block';
+    }
+}
+
+function validateCurrentStep() {
+    if (currentStep === 1) {
+        // Validate customer selection
+        const customerSelect = document.getElementById('customer_id');
+        if (!customerSelect.value) {
+            alert('Please select a customer');
+            customerSelect.focus();
+            return false;
+        }
+        return true;
+    } else if (currentStep === 2) {
+        // Validate at least one dish is added
+        const dishRows = document.querySelectorAll('.dish-row');
+        let hasValidDish = false;
+        
+        dishRows.forEach(function(row) {
+            const dishSelect = row.querySelector('.dish-select');
+            const quantityInput = row.querySelector('.dish-quantity');
+            
+            if (dishSelect.value && quantityInput.value && parseFloat(quantityInput.value) > 0) {
+                hasValidDish = true;
+            }
+        });
+        
+        if (!hasValidDish) {
+            alert('Please add at least one dish with quantity');
+            return false;
+        }
+        return true;
+    }
+    return true;
+}
+
+function updateProgressIndicator(fromStep, toStep) {
+    // Update step items and lines
+    const progressSteps = document.querySelector('.progress-steps');
+    if (!progressSteps) return;
+    
+    const stepItems = progressSteps.querySelectorAll('.step-item');
+    const stepLines = progressSteps.querySelectorAll('.step-line');
+    
+    stepItems.forEach(function(stepItem, index) {
+        const stepNum = index + 1;
+        
+        if (stepNum < toStep) {
+            // Completed steps
+            stepItem.classList.remove('active');
+            stepItem.classList.add('completed');
+            // Mark previous line as completed
+            if (index > 0 && stepLines[index - 1]) {
+                stepLines[index - 1].classList.add('completed');
+            }
+        } else if (stepNum === toStep) {
+            // Active step
+            stepItem.classList.remove('completed');
+            stepItem.classList.add('active');
+        } else {
+            // Future steps
+            stepItem.classList.remove('active', 'completed');
+        }
+    });
+    
+    // Update step lines
+    stepLines.forEach(function(stepLine, index) {
+        if (index + 1 < toStep) {
+            stepLine.classList.add('completed');
+        } else {
+            stepLine.classList.remove('completed');
+        }
+    });
+}
+
+function updateReview() {
+    // Update customer information
+    const customerSelect = document.getElementById('customer_id');
+    const customerId = customerSelect ? customerSelect.value : '';
+    const reviewCustomer = document.getElementById('reviewCustomer');
+    
+    if (customerId && customersData) {
+        const customer = customersData.find(c => c.id == customerId);
+        if (customer) {
+            reviewCustomer.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div>
+                        <strong>${escapeHtml(customer.name)}</strong><br>
+                        <small class="text-muted">${escapeHtml(customer.email)}</small>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        reviewCustomer.innerHTML = '<p class="text-muted mb-0">No customer selected</p>';
+    }
+    
+    // Update dishes information
+    const dishRows = document.querySelectorAll('.dish-row');
+    const reviewDishes = document.getElementById('reviewDishes');
+    let dishesHTML = '';
+    let totalAmount = 0;
+    
+    if (dishRows && dishesData) {
+        dishRows.forEach(function(row) {
+            const dishSelect = row.querySelector('.dish-select');
+            const quantityInput = row.querySelector('.dish-quantity');
+            const unitPriceInput = row.querySelector('.dish-unit-price');
+            const totalAmountInput = row.querySelector('.dish-total-amount');
+            
+            if (dishSelect && dishSelect.value && quantityInput && quantityInput.value) {
+                const dishId = dishSelect.value;
+                const dish = dishesData.find(d => d.id == dishId);
+                const quantity = parseFloat(quantityInput.value) || 0;
+                const unitPrice = parseFloat(unitPriceInput.value) || 0;
+                const total = parseFloat(totalAmountInput.value) || (quantity * unitPrice);
+                
+                if (dish && quantity > 0) {
+                    dishesHTML += `
+                        <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: white; border-radius: 6px;">
+                            <div>
+                                <strong>${escapeHtml(dish.name)}</strong><br>
+                                <small class="text-muted">Quantity: ${quantity} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
+                            </div>
+                            <div class="text-end">
+                                <strong class="text-primary">Rs ${total.toFixed(2)}</strong>
+                            </div>
+                        </div>
+                    `;
+                    totalAmount += total;
+                }
+            }
+        });
+    }
+    
+    if (dishesHTML) {
+        reviewDishes.innerHTML = dishesHTML;
+    } else {
+        reviewDishes.innerHTML = '<p class="text-muted mb-0">No dishes added</p>';
+    }
+    
+    // Update total amount
+    const reviewTotal = document.getElementById('reviewTotal');
+    if (reviewTotal) {
+        reviewTotal.textContent = 'Rs ' + totalAmount.toFixed(2);
+    }
+}
+
+// Escape HTML function (will be defined in the dishes management section)
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+// Listen for changes to update review in real-time
+document.addEventListener('DOMContentLoaded', function() {
+    const customerSelect = document.getElementById('customer_id');
+    if (customerSelect) {
+        customerSelect.addEventListener('change', function() {
+            if (currentStep === 3) {
+                updateReview();
+            }
+        });
+    }
+    
+    // Listen for dish changes
+    const dishesContainer = document.getElementById('dishesContainer');
+    if (dishesContainer) {
+        dishesContainer.addEventListener('input', function(e) {
+            if (currentStep === 3 && (e.target.classList.contains('dish-select') || 
+                e.target.classList.contains('dish-quantity') || 
+                e.target.classList.contains('dish-unit-price') || 
+                e.target.classList.contains('dish-total-amount'))) {
+                updateReview();
+            }
+        });
+    }
+});
+
 // Multiple dishes management
 document.addEventListener('DOMContentLoaded', function() {
     const dishesContainer = document.getElementById('dishesContainer');
@@ -999,6 +1464,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     totalAmountInput.value = '';
                 }
             }
+            
+            // Update review if on step 3
+            if (currentStep === 3) {
+                updateReview();
+            }
         }
         
         quantityInput.addEventListener('input', calculateTotal);
@@ -1013,12 +1483,19 @@ document.addEventListener('DOMContentLoaded', function() {
             if (Math.abs(currentValue - lastCalculatedTotal) > 0.01) {
                 isManualTotalEdit = true;
             }
+            
+            // Update review if on step 3
+            if (currentStep === 3) {
+                updateReview();
+            }
         });
         
         totalAmountInput.addEventListener('blur', function() {
             if (!this.value || this.value === '') {
                 isManualTotalEdit = false;
                 calculateTotal();
+            } else if (currentStep === 3) {
+                updateReview();
             }
         });
     }
@@ -1078,6 +1555,11 @@ document.addEventListener('DOMContentLoaded', function() {
         setupRowListeners(newRow);
         updateRemoveButtons();
         dishRowCount++;
+        
+        // Update review if on step 3
+        if (currentStep === 3) {
+            updateReview();
+        }
     });
     
     // Remove dish row
@@ -1087,6 +1569,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (document.querySelectorAll('.dish-row').length > 1) {
                 row.remove();
                 updateRemoveButtons();
+                
+                // Update review if on step 3
+                if (currentStep === 3) {
+                    updateReview();
+                }
             }
         }
     });
@@ -1295,6 +1782,8 @@ function printIngredients(orderNumberOrId) {
                      window.location.pathname.includes('/user/') || 
                      window.location.pathname.includes('/auth/') ? '../' : '';
     const cakeImagePath = basePath + 'images/cake.png';
+    // Use relative path - base tag in print window will handle it
+    const bannerImagePath = 'images/' + encodeURIComponent('ینگ کوکنگ وچائنیز فوڈ اسپیشلسٹ.png');
     
     // Collect all ingredients from all dishes in the order, grouped by category
     let ingredientsByCategory = {};
@@ -1426,10 +1915,13 @@ function printIngredients(orderNumberOrId) {
     ingredientsHtml += '</div>';
     
     const printWindow = window.open('', '_blank');
+    // Get base URL for images
+    const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/admin/') + 1);
     printWindow.document.write(`
         <!DOCTYPE html>
         <html dir="rtl" lang="ur">
         <head>
+            <base href="${baseUrl}">
             <title>${translations.ingredients_list} - ${translations.order_id} ${order.order_number || '#' + order.id}</title>
             <meta charset="UTF-8">
             <style>
@@ -1573,112 +2065,21 @@ function printIngredients(orderNumberOrId) {
                     background: #fff;
                 }
                 
-                /* Banner Header - Matching Image Design */
+                /* Banner Header - Using Colorful Image */
                 .print-banner {
-                    display: flex !important;
+                    display: block !important;
                     width: 100%;
                     margin-bottom: 15px;
-                    border: 3px solid #000;
                     overflow: visible;
                     box-sizing: border-box;
-                    min-height: 150px;
-                    background: white;
                 }
-                .banner-left {
-                    width: 25%;
-                    background: white;
-                    padding: 15px 12px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: space-between;
-                    align-items: center;
-                    box-sizing: border-box;
-                    border-right: 2px solid #000;
-                }
-                .banner-left-name {
-                    font-size: 18px;
-                    font-weight: 900;
-                    color: #000;
-                    margin-bottom: 8px;
-                    text-align: center;
-                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
-                    line-height: 1.4;
-                }
-                .banner-left-phone {
-                    font-size: 12px;
-                    color: #000;
-                    margin: 2px 0;
-                    text-align: center;
-                    direction: ltr;
-                    font-weight: bold;
-                    font-family: Arial, sans-serif;
-                }
-                .banner-right {
-                    width: 75%;
-                    background: white;
-                    padding: 15px 20px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    position: relative;
-                    box-sizing: border-box;
-                }
-                .banner-right-service {
-                    color: #666;
-                    font-size: 16px;
-                    font-weight: 700;
-                    margin: 5px 0;
-                    text-align: center;
-                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
-                    line-height: 1.4;
-                    text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
-                }
-                .banner-right-service.yellow {
-                    color: #FFD700;
-                    font-size: 18px;
-                    font-weight: 900;
-                    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
-                }
-                .banner-address-bar {
-                    background: white;
-                    padding: 10px 15px;
-                    border: 2px solid #ccc;
-                    border-radius: 8px;
-                    margin-top: 12px;
-                    width: calc(100% - 110px);
-                    text-align: center;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                }
-                .banner-address-text {
-                    color: #666;
-                    font-size: 11px;
-                    font-weight: 600;
-                    line-height: 1.5;
-                    font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
-                }
-                .banner-dessert-graphic {
-                    position: absolute;
-                    right: 20px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    width: 80px;
-                    height: 80px;
-                    background: white;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                    border: 2px solid #ccc;
-                    z-index: 10;
-                    overflow: hidden;
-                }
-                .banner-dessert-graphic img {
-                    width: 70px;
-                    height: 70px;
-                    object-fit: contain;
-                    border-radius: 50%;
+                .print-banner-image {
+                    width: 100% !important;
+                    height: auto !important;
+                    display: block !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 .fillable-section {
                     margin: 15px 0;
@@ -1757,28 +2158,7 @@ function printIngredients(orderNumberOrId) {
         <body>
             <!-- Print Banner -->
             <div class="print-banner">
-                <div class="banner-left">
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
-                        <div class="banner-left-name" style="margin-top: 0;">حسن کک</div>
-                        <div class="banner-left-phone">0308-6977778</div>
-                        <div class="banner-left-phone">0312-6396398</div>
-                    </div>
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
-                        <div class="banner-left-name" style="margin-top: 15px;">سلیم</div>
-                        <div class="banner-left-phone">0308-6977778</div>
-                        <div class="banner-left-phone">0312-6396398</div>
-                    </div>
-                </div>
-                <div class="banner-right">
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
-                        <div class="banner-right-service" style="margin-top: 0;">ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</div>
-                        <div class="banner-right-service yellow">سلیم فروٹ ٹریفل اسپیشلسٹ</div>
-                        <div class="banner-address-bar">
-                            <div class="banner-address-text">چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ چاہ گہنے والا نزد برف کارخانہ</div>
-                        </div>
-                    </div>
-                    <div class="banner-dessert-graphic"><img src="${cakeImagePath}" alt="Cake" onerror="this.style.display='none'; this.parentElement.innerHTML='🎂';"></div>
-                </div>
+                <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
             </div>
             
             <!-- Fillable Fields Section -->
@@ -1836,6 +2216,8 @@ function printOrder(orderNumberOrId) {
                      window.location.pathname.includes('/user/') || 
                      window.location.pathname.includes('/auth/') ? '../' : '';
     const cakeImagePath = basePath + 'images/cake.png';
+    // Use relative path - base tag in print window will handle it
+    const bannerImagePath = 'images/' + encodeURIComponent('ینگ کوکنگ وچائنیز فوڈ اسپیشلسٹ.png');
     
     // Get status translation
     const statusTranslations = <?php echo json_encode([
@@ -1861,10 +2243,13 @@ function printOrder(orderNumberOrId) {
     });
     
     const printWindow = window.open('', '_blank');
+    // Get base URL for images
+    const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/admin/') + 1);
     printWindow.document.write(`
         <!DOCTYPE html>
         <html dir="${langDir}">
         <head>
+            <base href="${baseUrl}">
             <title>${translations.order_receipt} - ${translations.order_id} ${order.order_number || '#' + order.id}</title>
             <meta charset="UTF-8">
             <style>
@@ -2064,28 +2449,7 @@ function printOrder(orderNumberOrId) {
         <body>
             <!-- Print Banner -->
             <div class="print-banner">
-                <div class="banner-left">
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
-                        <div class="banner-left-name" style="margin-top: 0;">حسن کک</div>
-                        <div class="banner-left-phone">0308-6977778</div>
-                        <div class="banner-left-phone">0312-6396398</div>
-                    </div>
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;">
-                        <div class="banner-left-name" style="margin-top: 15px;">سلیم</div>
-                        <div class="banner-left-phone">0308-6977778</div>
-                        <div class="banner-left-phone">0312-6396398</div>
-                    </div>
-                </div>
-                <div class="banner-right">
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
-                        <div class="banner-right-service" style="margin-top: 0;">ینگ کوکنگ و چائنیز فوڈ اسپیشلسٹ</div>
-                        <div class="banner-right-service yellow">سلیم فروٹ ٹریفل اسپیشلسٹ</div>
-                        <div class="banner-address-bar">
-                            <div class="banner-address-text">چوک شاہ عباس سورج کنڈ روڈ سوئی گیس روڈ چاہ گہنے والا نزد برف کارخانہ</div>
-                        </div>
-                    </div>
-                    <div class="banner-dessert-graphic"><img src="${cakeImagePath}" alt="Cake" onerror="this.style.display='none'; this.parentElement.innerHTML='🎂';"></div>
-                </div>
+                <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
             </div>
             
             <!-- Fillable Fields Section -->

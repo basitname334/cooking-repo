@@ -361,7 +361,12 @@ include __DIR__ . '/../includes/header.php';
         <div class="step-content" id="step2">
             <div class="card shadow-lg border-0">
                 <div class="card-body p-4">
-                    <h5 class="fw-bold mb-4"><i class="bi bi-egg-fried me-2"></i>Select Dishes</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="fw-bold mb-0"><i class="bi bi-egg-fried me-2"></i>Select Dishes</h5>
+                        <div id="selectedDishesCount" class="badge bg-primary" style="display: none; font-size: 1rem; padding: 0.5rem 1rem;">
+                            <span id="selectedCount">0</span> dish(es) selected
+                        </div>
+                    </div>
                     <div class="row g-3" id="dishesContainer">
                         <?php foreach ($dishes as $dish): 
                             $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
@@ -468,16 +473,35 @@ include __DIR__ . '/../includes/header.php';
 let currentStep = 1;
 let selectedDishes = {};
 
+// Initialize - update inputs on page load if needed
+document.addEventListener('DOMContentLoaded', function() {
+    updateSelectedDishesInputs();
+});
+
 function goToStep(step) {
     // Validate current step before proceeding
     if (step > currentStep) {
         if (currentStep === 1 && !validateStep1()) {
             return;
         }
-        if (currentStep === 2 && Object.keys(selectedDishes).length === 0) {
-            alert('Please select at least one dish.');
-            return;
+        if (currentStep === 2) {
+            // Update inputs before validation
+            updateSelectedDishesInputs();
+            
+            // Check if any dishes are selected
+            const selectedCount = Object.keys(selectedDishes).length;
+            console.log('Checking dishes before step 3. Selected count:', selectedCount, selectedDishes);
+            
+            if (selectedCount === 0) {
+                alert('Please select at least one dish by clicking on a dish card and confirming the quantity in the modal before proceeding to the next step.');
+                return;
+            }
         }
+    }
+    
+    // Update hidden inputs when navigating to step 3
+    if (step === 3) {
+        updateSelectedDishesInputs();
     }
     
     // Update step indicators
@@ -521,54 +545,139 @@ function validateStep1() {
 
 // Dish selection
 let currentDishId = null;
-const dishQuantityModal = new bootstrap.Modal(document.getElementById('dishQuantityModal'));
+let dishQuantityModal = null;
 
-document.querySelectorAll('.dish-card').forEach(card => {
-    card.addEventListener('click', function() {
-        const dishId = this.dataset.dishId;
-        const dishName = this.querySelector('.card-title').textContent;
-        const dishImage = this.querySelector('.dish-image, .dish-placeholder');
-        
-        currentDishId = dishId;
-        document.getElementById('modalDishName').textContent = dishName;
-        document.getElementById('modalDishQuantity').value = selectedDishes[dishId] || 1;
-        
-        // Set image
-        const modalImageDiv = document.getElementById('modalDishImage');
-        if (dishImage.tagName === 'IMG') {
-            modalImageDiv.innerHTML = `<img src="${dishImage.src}" class="modal-dish-image" alt="${dishName}">`;
-        } else {
-            modalImageDiv.innerHTML = `<div class="dish-placeholder modal-dish-image"><i class="bi bi-egg-fried"></i></div>`;
-        }
-        
-        dishQuantityModal.show();
-    });
-});
-
-function confirmDishSelection() {
-    const quantity = parseInt(document.getElementById('modalDishQuantity').value);
-    if (quantity > 0 && currentDishId) {
-        selectedDishes[currentDishId] = quantity;
-        updateDishCards();
-        updateSelectedDishesInputs();
-        dishQuantityModal.hide();
+// Initialize dish selection when DOM is ready
+function initializeDishSelection() {
+    // Initialize modal
+    const modalElement = document.getElementById('dishQuantityModal');
+    if (modalElement && !dishQuantityModal) {
+        dishQuantityModal = new bootstrap.Modal(modalElement);
+    }
+    
+    // Use event delegation for better reliability
+    const dishesContainer = document.getElementById('dishesContainer');
+    if (dishesContainer) {
+        dishesContainer.addEventListener('click', function(e) {
+            // Find the closest dish card
+            const card = e.target.closest('.dish-card');
+            if (!card) return;
+            
+            // Don't open modal if clicking on the badge (for removal)
+            if (e.target.closest('.quantity-badge')) {
+                return;
+            }
+            
+            const dishId = String(card.dataset.dishId);
+            const dishName = card.querySelector('.card-title')?.textContent || 'Unknown Dish';
+            const dishImage = card.querySelector('.dish-image, .dish-placeholder');
+            
+            if (!dishId) {
+                console.error('Dish ID not found');
+                return;
+            }
+            
+            console.log('Dish card clicked:', dishId, dishName);
+            
+            currentDishId = dishId;
+            const modalDishName = document.getElementById('modalDishName');
+            const modalDishQuantity = document.getElementById('modalDishQuantity');
+            
+            if (modalDishName) modalDishName.textContent = dishName;
+            if (modalDishQuantity) modalDishQuantity.value = selectedDishes[dishId] || 1;
+            
+            // Set image
+            const modalImageDiv = document.getElementById('modalDishImage');
+            if (modalImageDiv) {
+                if (dishImage && dishImage.tagName === 'IMG') {
+                    modalImageDiv.innerHTML = `<img src="${dishImage.src}" class="modal-dish-image" alt="${dishName}">`;
+                } else {
+                    modalImageDiv.innerHTML = `<div class="dish-placeholder modal-dish-image"><i class="bi bi-egg-fried"></i></div>`;
+                }
+            }
+            
+            if (dishQuantityModal) {
+                dishQuantityModal.show();
+            } else {
+                console.error('Modal not initialized');
+            }
+        });
     }
 }
 
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeDishSelection);
+} else {
+    initializeDishSelection();
+}
+
+function confirmDishSelection() {
+    const quantityInput = document.getElementById('modalDishQuantity');
+    const quantity = parseInt(quantityInput.value);
+    
+    console.log('confirmDishSelection called:', { quantity, currentDishId, selectedDishes });
+    
+    if (!currentDishId) {
+        alert('Error: No dish selected. Please click on a dish card first.');
+        console.error('No currentDishId set');
+        return;
+    }
+    
+    if (isNaN(quantity) || quantity <= 0) {
+        alert('Please enter a valid quantity (greater than 0).');
+        quantityInput.focus();
+        return;
+    }
+    
+    // Ensure dish ID is stored as string for consistency
+    const dishId = String(currentDishId);
+    selectedDishes[dishId] = quantity;
+    
+    console.log('Dish added to selectedDishes:', dishId, quantity);
+    console.log('Total selected dishes:', Object.keys(selectedDishes).length, selectedDishes);
+    
+    updateDishCards();
+    updateSelectedDishesInputs();
+    
+    if (dishQuantityModal) {
+        dishQuantityModal.hide();
+    }
+    
+    // Show success message
+    const dishName = document.getElementById('modalDishName').textContent;
+    console.log(`Successfully added ${quantity} of ${dishName} to order`);
+}
+
 function updateDishCards() {
+    let selectedCount = 0;
+    
     document.querySelectorAll('.dish-card').forEach(card => {
-        const dishId = card.dataset.dishId;
+        const dishId = String(card.dataset.dishId); // Convert to string for consistency
         const badge = card.querySelector('.quantity-badge');
         
         if (selectedDishes[dishId]) {
             card.classList.add('selected');
             badge.textContent = selectedDishes[dishId];
             badge.style.display = 'flex';
+            selectedCount++;
         } else {
             card.classList.remove('selected');
             badge.style.display = 'none';
         }
     });
+    
+    // Update the selected dishes count display
+    const countDisplay = document.getElementById('selectedDishesCount');
+    const countText = document.getElementById('selectedCount');
+    if (countDisplay && countText) {
+        if (selectedCount > 0) {
+            countText.textContent = selectedCount;
+            countDisplay.style.display = 'block';
+        } else {
+            countDisplay.style.display = 'none';
+        }
+    }
 }
 
 function updateSelectedDishesInputs() {
@@ -586,15 +695,67 @@ function updateSelectedDishesInputs() {
 
 // Remove dish on badge click
 document.addEventListener('click', function(e) {
-    if (e.target.closest('.quantity-badge')) {
+    const badge = e.target.closest('.quantity-badge');
+    if (badge && badge.style.display !== 'none') {
+        e.preventDefault();
         e.stopPropagation();
-        const card = e.target.closest('.dish-card');
-        const dishId = card.dataset.dishId;
-        delete selectedDishes[dishId];
-        updateDishCards();
-        updateSelectedDishesInputs();
+        
+        const card = badge.closest('.dish-card');
+        if (card) {
+            const dishId = String(card.dataset.dishId);
+            const dishName = card.querySelector('.card-title')?.textContent || 'Unknown';
+            
+            if (confirm(`Remove ${dishName} from the order?`)) {
+                delete selectedDishes[dishId];
+                updateDishCards();
+                updateSelectedDishesInputs();
+                console.log('Dish removed. Remaining:', Object.keys(selectedDishes).length, selectedDishes);
+            }
+        }
     }
 });
+
+// Form submission handler - ensure dishes are selected and inputs are updated
+document.getElementById('orderForm').addEventListener('submit', function(e) {
+    // Update hidden inputs before submission
+    updateSelectedDishesInputs();
+    
+    // Validate that at least one dish is selected
+    const selectedCount = Object.keys(selectedDishes).length;
+    console.log('Form submit - Selected dishes count:', selectedCount, selectedDishes);
+    
+    // Also check if hidden inputs exist
+    const hiddenInputs = document.querySelectorAll('#selectedDishesInputs input[type="hidden"]');
+    console.log('Form submit - Hidden inputs count:', hiddenInputs.length);
+    
+    if (selectedCount === 0 && hiddenInputs.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one dish in Step 2 before creating the order.');
+        goToStep(2);
+        return false;
+    }
+    
+    // Validate Step 1 fields
+    if (!validateStep1()) {
+        e.preventDefault();
+        goToStep(1);
+        return false;
+    }
+    
+    // Validate Step 3 fields (compulsory items)
+    const step3Required = document.querySelectorAll('#step3 [required]');
+    for (let field of step3Required) {
+        if (!field.value.trim() && field.value !== '0') {
+            e.preventDefault();
+            field.focus();
+            alert('Please fill all required fields in Step 3.');
+            return false;
+        }
+    }
+    
+    return true;
+});
+
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

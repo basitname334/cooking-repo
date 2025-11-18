@@ -221,33 +221,13 @@ include __DIR__ . '/../includes/header.php';
     border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
-.ingredient-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 16px;
-    position: relative;
-    overflow: hidden;
+#ingredientsTable tbody tr {
+    transition: all 0.2s ease;
 }
 
-.ingredient-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-    opacity: 0;
-}
-
-.ingredient-card:hover::before {
-    opacity: 1;
-}
-
-.ingredient-card:hover {
-    box-shadow: 0 12px 35px rgba(16, 185, 129, 0.25);
-    border-color: rgba(16, 185, 129, 0.3);
+#ingredientsTable tbody tr:hover {
+    background-color: rgba(16, 185, 129, 0.05) !important;
+    transform: translateX(2px);
 }
 
 .search-modern {
@@ -388,66 +368,85 @@ include __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
-<!-- Ingredients List -->
-<div class="row">
-    <?php if (empty($ingredients)): ?>
-        <div class="col-12">
-            <div class="text-center py-5">
-                <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
-                <p class="text-muted">No ingredients found. Add your first ingredient above!</p>
-            </div>
-        </div>
-    <?php else: ?>
-        <div class="col-12">
-            <div class="row g-3" id="ingredientsList">
-                <?php foreach ($ingredients as $ingredient): ?>
-                    <div class="col-md-6 col-lg-4 ingredient-item" 
-                         data-name="<?php echo strtolower(htmlspecialchars($ingredient['name'])); ?>"
-                         data-category="<?php echo strtolower(htmlspecialchars($ingredient['category_name'] ?? '')); ?>">
-                        <div class="card h-100 border-0 shadow-lg ingredient-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $ingredient['id']; ?>'">
-                            <div class="card-body p-4">
-                                <div class="d-flex align-items-start justify-content-between mb-3">
-                                    <div class="d-flex align-items-center">
-                                        <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
-                                            <i class="bi bi-basket text-white fs-5"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="card-title mb-1 fw-bold" style="color: #1e293b; font-size: 1.1rem;">
-                                                <?php echo htmlspecialchars($ingredient['name']); ?>
-                                            </h6>
-                                            <span class="badge rounded-pill px-3 py-1" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 600;">
-                                                <?php echo htmlspecialchars($ingredient['category_name']); ?>
-                                            </span>
-                                        </div>
+<!-- Ingredients Table -->
+<?php if (empty($ingredients)): ?>
+    <div class="text-center py-5">
+        <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
+        <p class="text-muted">No ingredients found. Add your first ingredient above!</p>
+    </div>
+<?php else: ?>
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="ingredientsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px; padding: 0.75rem 1rem;">
+                                <i class="bi bi-basket text-success"></i>
+                            </th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b;">Ingredient Name</th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b;">Category</th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b; text-align: center; width: 150px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ingredientsList">
+                        <?php 
+                        $current_category = '';
+                        foreach ($ingredients as $ingredient): 
+                            // Group by category for better organization
+                            if ($current_category !== $ingredient['category_name']) {
+                                $current_category = $ingredient['category_name'];
+                            }
+                        ?>
+                            <tr class="ingredient-item" 
+                                data-name="<?php echo strtolower(htmlspecialchars($ingredient['name'])); ?>"
+                                data-category="<?php echo strtolower(htmlspecialchars($ingredient['category_name'] ?? '')); ?>"
+                                style="cursor: pointer;"
+                                onclick="window.location.href='?edit=<?php echo $ingredient['id']; ?>'">
+                                <td style="padding: 0.75rem 1rem;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);">
+                                        <i class="bi bi-basket text-white" style="font-size: 0.9rem;"></i>
                                     </div>
-                                </div>
-                                <div class="d-flex gap-2 justify-content-end">
-                                    <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" 
-                                            onclick="event.stopPropagation(); window.location.href='?edit=<?php echo $ingredient['id']; ?>'"
-                                            title="Edit Ingredient"
-                                            style="font-weight: 600;">
-                                        <i class="bi bi-pencil me-1"></i>Edit
-                                    </button>
-                                    <button class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm" 
-                                            onclick="event.stopPropagation(); if(confirm('Delete this ingredient?')) window.location.href='?delete=<?php echo $ingredient['id']; ?>'"
-                                            title="Delete"
-                                            style="font-weight: 600;">
-                                        <i class="bi bi-trash me-1"></i>Delete
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-            <div id="noResultsIngredients" class="text-center py-5" style="display: none;">
-                <i class="bi bi-search display-4 text-muted d-block mb-3"></i>
-                <h5 class="text-muted mb-2">No ingredients found</h5>
-                <p class="text-muted">Try adjusting your search terms</p>
+                                </td>
+                                <td style="padding: 0.75rem 1rem;">
+                                    <div class="fw-semibold" style="color: #1e293b; font-size: 0.95rem;">
+                                        <?php echo htmlspecialchars($ingredient['name']); ?>
+                                    </div>
+                                </td>
+                                <td style="padding: 0.75rem 1rem;">
+                                    <span class="badge rounded-pill px-3 py-1" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 600; font-size: 0.85rem;">
+                                        <?php echo htmlspecialchars($ingredient['category_name'] ?? 'Uncategorized'); ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 0.75rem 1rem; text-align: center;">
+                                    <div class="d-flex gap-1 justify-content-center" onclick="event.stopPropagation();">
+                                        <button class="btn btn-sm btn-primary px-2 py-1" 
+                                                onclick="event.stopPropagation(); window.location.href='?edit=<?php echo $ingredient['id']; ?>'"
+                                                title="Edit Ingredient"
+                                                style="font-size: 0.8rem; border-radius: 6px;">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger px-2 py-1" 
+                                                onclick="event.stopPropagation(); if(confirm('Delete this ingredient?')) window.location.href='?delete=<?php echo $ingredient['id']; ?>'"
+                                                title="Delete"
+                                                style="font-size: 0.8rem; border-radius: 6px;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
-    <?php endif; ?>
-</div>
+    </div>
+    <div id="noResultsIngredients" class="text-center py-5" style="display: none;">
+        <i class="bi bi-search display-4 text-muted d-block mb-3"></i>
+        <h5 class="text-muted mb-2">No ingredients found</h5>
+        <p class="text-muted">Try adjusting your search terms</p>
+    </div>
+<?php endif; ?>
 
 <script>
 // Search functionality for ingredients
@@ -472,6 +471,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 clearSearchBtn.style.display = 'none';
                 if (noResults) noResults.style.display = 'none';
                 if (ingredientsList) ingredientsList.style.display = '';
+                document.getElementById('ingredientsTable').style.display = '';
             } else {
                 // Filter ingredients
                 ingredientItems.forEach(item => {
@@ -491,10 +491,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Show/hide no results message
                 if (visibleCount === 0) {
                     if (noResults) noResults.style.display = 'block';
-                    if (ingredientsList) ingredientsList.style.display = 'none';
+                    document.getElementById('ingredientsTable').style.display = 'none';
                 } else {
                     if (noResults) noResults.style.display = 'none';
-                    if (ingredientsList) ingredientsList.style.display = '';
+                    document.getElementById('ingredientsTable').style.display = '';
                 }
             }
         });

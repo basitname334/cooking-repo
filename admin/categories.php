@@ -258,33 +258,13 @@ include __DIR__ . '/../includes/header.php';
     border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
-.category-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 16px;
-    position: relative;
-    overflow: hidden;
+#categoriesTable tbody tr {
+    transition: all 0.2s ease;
 }
 
-.category-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    opacity: 0;
-}
-
-.category-card:hover::before {
-    opacity: 1;
-}
-
-.category-card:hover {
-    box-shadow: 0 12px 35px rgba(99, 102, 241, 0.25);
-    border-color: rgba(99, 102, 241, 0.3);
+#categoriesTable tbody tr:hover {
+    background-color: rgba(99, 102, 241, 0.05) !important;
+    transform: translateX(2px);
 }
 
 .search-modern {
@@ -411,63 +391,90 @@ include __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
-<!-- Categories Grid -->
+<!-- Categories Table -->
 <?php if (empty($categories)): ?>
     <div class="text-center py-5">
         <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
         <p class="text-muted">No categories found. Add your first category above!</p>
     </div>
 <?php else: ?>
-    <div class="row g-3" id="categoriesList">
-        <?php foreach ($categories as $category): ?>
-            <?php 
-            $ingredients_count = isset($category['ingredients_count']) ? intval($category['ingredients_count']) : 0;
-            ?>
-            <div class="col-md-6 col-lg-4 category-item" 
-                 data-name="<?php echo strtolower(htmlspecialchars($category['name'])); ?>"
-                 data-description="<?php echo strtolower(htmlspecialchars($category['description'] ?? '')); ?>">
-                <div class="card h-100 border-0 shadow-lg category-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $category['id']; ?>'">
-                    <div class="card-body p-4">
-                        <div class="d-flex align-items-start justify-content-between mb-3">
-                            <div class="d-flex align-items-center">
-                                <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);">
-                                    <i class="bi bi-folder2 text-white fs-5"></i>
-                                </div>
-                                <div>
-                                    <h6 class="card-title mb-1 fw-bold" style="color: #1e293b; font-size: 1.1rem;">
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="categoriesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px; padding: 0.75rem 1rem;">
+                                <i class="bi bi-folder2 text-primary"></i>
+                            </th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b;">Category Name</th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b; text-align: center; width: 120px;">
+                                <i class="bi bi-basket me-1"></i>Ingredients
+                            </th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b; text-align: center; width: 120px;">
+                                <i class="bi bi-egg-fried me-1"></i>Dishes
+                            </th>
+                            <th style="padding: 0.75rem 1rem; font-weight: 600; color: #1e293b; text-align: center; width: 150px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoriesList">
+                        <?php foreach ($categories as $category): ?>
+                            <?php 
+                            $ingredients_count = isset($category['ingredients_count']) ? intval($category['ingredients_count']) : 0;
+                            $dishes_count = isset($category['dishes_count']) ? intval($category['dishes_count']) : 0;
+                            ?>
+                            <tr class="category-item" 
+                                data-name="<?php echo strtolower(htmlspecialchars($category['name'])); ?>"
+                                data-description="<?php echo strtolower(htmlspecialchars($category['description'] ?? '')); ?>"
+                                style="cursor: pointer;"
+                                onclick="window.location.href='?edit=<?php echo $category['id']; ?>'">
+                                <td style="padding: 0.75rem 1rem;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);">
+                                        <i class="bi bi-folder2 text-white" style="font-size: 0.9rem;"></i>
+                                    </div>
+                                </td>
+                                <td style="padding: 0.75rem 1rem;">
+                                    <div class="fw-semibold" style="color: #1e293b; font-size: 0.95rem;">
                                         <?php echo htmlspecialchars($category['name']); ?>
-                                    </h6>
-                                    <p class="text-muted small mb-0">
-                                        <i class="bi bi-basket me-1"></i>
-                                        <?php echo $ingredients_count; ?> <?php echo $ingredients_count == 1 ? 'ingredient' : 'ingredients'; ?>
-                                        <?php if (isset($category['dishes_count']) && $category['dishes_count'] > 0): ?>
-                                            <span class="ms-2">
-                                                <i class="bi bi-egg-fried me-1"></i>
-                                                <?php echo $category['dishes_count']; ?> <?php echo $category['dishes_count'] == 1 ? 'dish' : 'dishes'; ?>
-                                            </span>
-                                        <?php endif; ?>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2 justify-content-end">
-                            <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" 
-                                    onclick="event.stopPropagation(); window.location.href='?edit=<?php echo $category['id']; ?>'"
-                                    title="Edit Category"
-                                    style="font-weight: 600;">
-                                <i class="bi bi-pencil me-1"></i>Edit
-                            </button>
-                            <button class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm" 
-                                    onclick="event.stopPropagation(); if(confirm('Delete this category?')) window.location.href='?delete=<?php echo $category['id']; ?>'"
-                                    title="Delete"
-                                    style="font-weight: 600;">
-                                <i class="bi bi-trash me-1"></i>Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                                    </div>
+                                    <?php if ($category['description']): ?>
+                                        <small class="text-muted" style="font-size: 0.8rem;">
+                                            <?php echo htmlspecialchars(substr($category['description'], 0, 60)); ?><?php echo strlen($category['description']) > 60 ? '...' : ''; ?>
+                                        </small>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="padding: 0.75rem 1rem; text-align: center;">
+                                    <span class="badge bg-success-subtle text-success px-3 py-1" style="font-weight: 600; font-size: 0.85rem;">
+                                        <?php echo $ingredients_count; ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 0.75rem 1rem; text-align: center;">
+                                    <span class="badge bg-info-subtle text-info px-3 py-1" style="font-weight: 600; font-size: 0.85rem;">
+                                        <?php echo $dishes_count; ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 0.75rem 1rem; text-align: center;">
+                                    <div class="d-flex gap-1 justify-content-center" onclick="event.stopPropagation();">
+                                        <button class="btn btn-sm btn-primary px-2 py-1" 
+                                                onclick="event.stopPropagation(); window.location.href='?edit=<?php echo $category['id']; ?>'"
+                                                title="Edit Category"
+                                                style="font-size: 0.8rem; border-radius: 6px;">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger px-2 py-1" 
+                                                onclick="event.stopPropagation(); if(confirm('Delete this category?')) window.location.href='?delete=<?php echo $category['id']; ?>'"
+                                                title="Delete"
+                                                style="font-size: 0.8rem; border-radius: 6px;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
-        <?php endforeach; ?>
+        </div>
     </div>
     <div id="noResultsCategories" class="text-center py-5" style="display: none;">
         <i class="bi bi-search display-4 text-muted d-block mb-3"></i>
@@ -499,6 +506,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 clearSearchBtn.style.display = 'none';
                 if (noResults) noResults.style.display = 'none';
                 if (categoriesList) categoriesList.style.display = '';
+                document.getElementById('categoriesTable').style.display = '';
             } else {
                 // Filter categories
                 categoryItems.forEach(item => {
@@ -518,10 +526,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Show/hide no results message
                 if (visibleCount === 0) {
                     if (noResults) noResults.style.display = 'block';
-                    if (categoriesList) categoriesList.style.display = 'none';
+                    document.getElementById('categoriesTable').style.display = 'none';
                 } else {
                     if (noResults) noResults.style.display = 'none';
-                    if (categoriesList) categoriesList.style.display = '';
+                    document.getElementById('categoriesTable').style.display = '';
                 }
             }
         });
