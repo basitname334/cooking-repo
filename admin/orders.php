@@ -147,6 +147,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         }
     }
     
+    // Get additional items
+    $additional_items_data = [];
+    if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
+        foreach ($_POST['additional_items'] as $item_key => $quantity) {
+            $quantity = intval($quantity);
+            if ($quantity > 0) {
+                $additional_items_data[$item_key] = $quantity;
+            }
+        }
+    }
+    
     // Validation - check if using new form fields or old customer selection
     $use_new_form = !empty($customer_name) || !empty($customer_cell);
     
@@ -211,7 +222,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             $order_id = null;
             foreach ($valid_dishes as $dish_info) {
                 // Prepare extra ingredients JSON (same for all dishes in the order)
-                $extra_ingredients_json = !empty($extra_ingredients_data) ? json_encode($extra_ingredients_data) : null;
+                // Include both extra ingredients and additional items
+                $combined_data = [];
+                if (!empty($extra_ingredients_data)) {
+                    $combined_data['extra_ingredients'] = $extra_ingredients_data;
+                }
+                if (!empty($additional_items_data)) {
+                    $combined_data['additional_items'] = $additional_items_data;
+                }
+                $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
                 
                 if ($use_new_form) {
                     // New form with all required fields - use NULL for customer_id since customer info is in separate fields
@@ -1403,6 +1422,51 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             </div>
                         </div>
                         
+                        <!-- Additional Items Section -->
+                        <div class="mt-5 pt-4 border-top">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label class="form-label fw-bold mb-0">
+                                    <i class="bi bi-box-seam me-2 text-info"></i>
+                                    Additional Items (Optional)
+                                </label>
+                            </div>
+                            <p class="text-muted small mb-3">Add additional items that may be needed for the order.</p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        Cloth Malmal
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[cloth_malmal]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        Match Box
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[match_box]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        Surrf
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[surrf]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        Sponjis (Iron)
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[sponjis_iron]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(1)">
                                 <i class="bi bi-arrow-left me-2"></i> Previous
@@ -2198,6 +2262,48 @@ function updateReview() {
         if (hasExtraIngredients) {
             dishesHTML += extraIngredientsHTML;
         }
+    }
+    
+    // Add additional items to review
+    const additionalItemInputs = document.querySelectorAll('.additional-item');
+    let hasAdditionalItems = false;
+    let additionalItemsHTML = '';
+    
+    additionalItemInputs.forEach(function(input) {
+        const quantity = parseInt(input.value) || 0;
+        if (quantity > 0) {
+            if (!hasAdditionalItems) {
+                additionalItemsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-info"><i class="bi bi-box-seam me-1"></i>Additional Items:</strong></div>';
+                hasAdditionalItems = true;
+            }
+            
+            // Get the item name from the input name attribute
+            const itemName = input.name.match(/\[([^\]]+)\]/);
+            let displayName = '';
+            if (itemName) {
+                const key = itemName[1];
+                const nameMap = {
+                    'cloth_malmal': 'Cloth Malmal',
+                    'match_box': 'Match Box',
+                    'surrf': 'Surrf',
+                    'sponjis_iron': 'Sponjis (Iron)'
+                };
+                displayName = nameMap[key] || key;
+            }
+            
+            additionalItemsHTML += `
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                    <div>
+                        <strong class="text-info">${escapeHtml(displayName)}</strong><br>
+                        <small class="text-muted">Quantity: ${quantity}</small>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    if (hasAdditionalItems) {
+        dishesHTML += additionalItemsHTML;
     }
     
     if (dishesHTML) {
