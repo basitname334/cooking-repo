@@ -22,13 +22,90 @@ if (!$result || $result->num_rows == 0) {
     $conn->query("UPDATE `orders` SET `order_number` = CONCAT('ORD-', LPAD(`id`, 6, '0')) WHERE `order_number` IS NULL");
 }
 
+// Update orders table schema if needed - add required columns for order form
+$required_columns = [
+    'customer_name' => "VARCHAR(100) DEFAULT NULL",
+    'customer_cell' => "VARCHAR(20) DEFAULT NULL",
+    'delivery_date' => "DATE DEFAULT NULL",
+    'delivery_time' => "TIME DEFAULT NULL",
+    'shift' => "ENUM('afternoon', 'evening') DEFAULT NULL",
+    'number_of_persons' => "INT DEFAULT NULL"
+];
+
+foreach ($required_columns as $column => $definition) {
+    $result = $conn->query("SHOW COLUMNS FROM `orders` LIKE '$column'");
+    if (!$result || $result->num_rows == 0) {
+        $conn->query("ALTER TABLE `orders` ADD COLUMN `$column` $definition");
+    }
+}
+
+// Check if order_date column exists, if not add it
+$check_order_date = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_date'");
+if (!$check_order_date || $check_order_date->num_rows == 0) {
+    $conn->query("ALTER TABLE `orders` ADD COLUMN `order_date` DATETIME DEFAULT NULL AFTER `customer_cell`");
+}
+
+// Check if extra_ingredients column exists, if not add it
+$check_extra_ingredients = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'extra_ingredients'");
+if (!$check_extra_ingredients || $check_extra_ingredients->num_rows == 0) {
+    $conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
+}
+
+// Make customer_id nullable to support orders without registered customers
+$check_customer_id = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
+if ($check_customer_id && $check_customer_id->num_rows > 0) {
+    $column_info = $check_customer_id->fetch_assoc();
+    if ($column_info['Null'] === 'NO') {
+        // Try to drop the foreign key constraint first, then modify the column
+        try {
+            $conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `orders_ibfk_1`");
+        } catch (Exception $e) {
+            // Constraint might not exist or have different name, try alternative
+            $fk_result = $conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE 
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' 
+                AND COLUMN_NAME = 'customer_id' AND REFERENCED_TABLE_NAME IS NOT NULL");
+            if ($fk_result && $fk_result->num_rows > 0) {
+                $fk_row = $fk_result->fetch_assoc();
+                $fk_name = $fk_row['CONSTRAINT_NAME'];
+                $conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `$fk_name`");
+            }
+        }
+        // Make column nullable
+        $conn->query("ALTER TABLE `orders` MODIFY `customer_id` INT(11) NULL");
+        // Re-add foreign key constraint with ON DELETE SET NULL
+        try {
+            $conn->query("ALTER TABLE `orders` ADD CONSTRAINT `orders_ibfk_1` 
+                FOREIGN KEY (`customer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL");
+        } catch (Exception $e) {
+            // If it fails, we'll continue without the constraint for now
+        }
+    }
+}
+
 // Handle create order
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     $customer_id = intval($_POST['customer_id'] ?? 0);
+    $customer_name = trim($_POST['customer_name'] ?? '');
+    $customer_cell = trim($_POST['customer_cell'] ?? '');
+    $order_date = trim($_POST['order_date'] ?? '');
+    $order_time = trim($_POST['order_time'] ?? '');
+    $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
+    $shift = trim($_POST['shift'] ?? '');
+    $delivery_date = trim($_POST['delivery_date'] ?? '');
+    $delivery_time = trim($_POST['delivery_time'] ?? '');
     $notes = trim($_POST['notes'] ?? '');
     
     // Translate notes to Urdu if current language is Urdu
     $notes = translateForDatabase($notes);
+    
+    // Combine order date and time - default to current datetime if not provided
+    $order_datetime = null;
+    if (!empty($order_date) && !empty($order_time)) {
+        $order_datetime = $order_date . ' ' . $order_time . ':00';
+    } else {
+        // If order_date or order_time is missing, use current datetime
+        $order_datetime = date('Y-m-d H:i:s');
+    }
     
     // Get dishes array - can be single or multiple
     $dishes_data = [];
@@ -52,9 +129,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         }
     }
     
-    if ($customer_id <= 0 || empty($dishes_data)) {
-        $error = t('fill_all_required_fields');
+    // Get extra ingredients array
+    $extra_ingredients_data = [];
+    if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
+        foreach ($_POST['extra_ingredients'] as $ingredient_data) {
+            $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
+            $quantity = floatval($ingredient_data['quantity'] ?? 0);
+            $unit = trim($ingredient_data['unit'] ?? '');
+            
+            if ($ingredient_id > 0 && $quantity > 0) {
+                $extra_ingredients_data[] = [
+                    'ingredient_id' => $ingredient_id,
+                    'quantity' => $quantity,
+                    'unit' => $unit
+                ];
+            }
+        }
+    }
+    
+    // Validation - check if using new form fields or old customer selection
+    $use_new_form = !empty($customer_name) || !empty($customer_cell);
+    
+    if ($use_new_form) {
+        // New form validation
+        if (empty($customer_name) || empty($customer_cell) || empty($order_date) || empty($order_time) || 
+            $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
+            $error = 'Please fill all required fields in Step 1.';
+        } elseif (empty($dishes_data)) {
+            $error = 'Please select at least one dish in Step 2.';
+        }
     } else {
+        // Old form validation (backward compatibility)
+        if ($customer_id <= 0 || empty($dishes_data)) {
+            $error = t('fill_all_required_fields');
+        }
+    }
+    
+    if (empty($error)) {
         $status = 'pending';
         $orders_created = 0;
         $errors = [];
@@ -99,9 +210,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             // Create order records for each dish with the same order_number
             $order_id = null;
             foreach ($valid_dishes as $dish_info) {
-                $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                // Prepare extra ingredients JSON (same for all dishes in the order)
+                $extra_ingredients_json = !empty($extra_ingredients_data) ? json_encode($extra_ingredients_data) : null;
+                
+                if ($use_new_form) {
+                    // New form with all required fields - use NULL for customer_id since customer info is in separate fields
+                    // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                        customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
+                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    if ($stmt) {
+                        // Skip customer_id in bind_param since we're using NULL directly in the query
+                        $stmt->bind_param("siidsssssssiss", 
+                            $order_number, 
+                            $dish_info['dish_id'], 
+                            $dish_info['quantity'], 
+                            $dish_info['total_amount'], 
+                            $status,
+                            $customer_name,
+                            $customer_cell,
+                            $order_datetime,
+                            $delivery_date,
+                            $delivery_time,
+                            $shift,
+                            $number_of_persons,
+                            $notes,
+                            $extra_ingredients_json
+                        );
+                    }
+                } else {
+                    // Old form (backward compatibility)
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    if ($stmt) {
+                        $stmt->bind_param("siiddsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
+                    }
+                }
+                
                 if ($stmt) {
-                    $stmt->bind_param("siiddss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['total_amount'], $status, $notes);
                     if ($stmt->execute()) {
                         if ($order_id === null) {
                             $order_id = $conn->insert_id;
@@ -109,10 +254,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                         $orders_created++;
                     } else {
                         $errors[] = 'Failed to create order for dish ID ' . $dish_info['dish_id'] . ': ' . $stmt->error;
+                        error_log("Order creation error: " . $stmt->error);
+                        error_log("Order number: " . $order_number);
+                        error_log("Dish ID: " . $dish_info['dish_id']);
                     }
                     $stmt->close();
                 } else {
                     $errors[] = 'Failed to prepare insert query for dish ID ' . $dish_info['dish_id'] . ': ' . $conn->error;
+                    error_log("Prepare error: " . $conn->error);
                 }
             }
             
@@ -227,13 +376,90 @@ if ($result && $result->num_rows > 0) {
     // Translate customer names if needed (though names usually don't need translation)
 }
 
-// Get all dishes for dropdown
+// Get previously used customer names from orders (for autocomplete)
+$previous_customer_names = [];
+$prev_cust_query = "SELECT DISTINCT customer_name, customer_cell 
+    FROM orders 
+    WHERE customer_name IS NOT NULL AND customer_name != '' 
+    ORDER BY customer_name";
+$prev_cust_result = $conn->query($prev_cust_query);
+if ($prev_cust_result && $prev_cust_result->num_rows > 0) {
+    $previous_customer_names = $prev_cust_result->fetch_all(MYSQLI_ASSOC);
+}
+
+// Combine registered customers and previously used names for autocomplete
+$all_customer_names = [];
+// Add registered customers
+foreach ($customers as $customer) {
+    $all_customer_names[$customer['name']] = [
+        'name' => $customer['name'],
+        'cell' => $customer['email'] ?? '',
+        'type' => 'registered'
+    ];
+}
+// Add previously used customer names (avoid duplicates)
+foreach ($previous_customer_names as $prev_cust) {
+    if (!empty($prev_cust['customer_name']) && !isset($all_customer_names[$prev_cust['customer_name']])) {
+        $all_customer_names[$prev_cust['customer_name']] = [
+            'name' => $prev_cust['customer_name'],
+            'cell' => $prev_cust['customer_cell'] ?? '',
+            'type' => 'previous'
+        ];
+    }
+}
+// Sort by name
+ksort($all_customer_names);
+
+// Get all dishes for dropdown with images and categories
 $dishes = [];
-$result = $conn->query("SELECT id, name FROM dishes ORDER BY name");
+$result = $conn->query("SELECT d.id, d.name, d.image, c.name as category_name 
+    FROM dishes d 
+    LEFT JOIN categories c ON d.category_id = c.id 
+    ORDER BY d.name");
 if ($result && $result->num_rows > 0) {
     $dishes = $result->fetch_all(MYSQLI_ASSOC);
     // Translate dish names if needed
     foreach ($dishes as &$dish) {
+        if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
+            $dish['name'] = translateToUrdu($dish['name']);
+        }
+    }
+    unset($dish);
+}
+
+// Get all ingredients for extra ingredients section
+$ingredients = [];
+$ingredients_result = $conn->query("SELECT i.id, i.name, i.unit, c.name as category_name 
+    FROM ingredients i 
+    LEFT JOIN categories c ON i.category_id = c.id 
+    ORDER BY i.name");
+if ($ingredients_result && $ingredients_result->num_rows > 0) {
+    $ingredients = $ingredients_result->fetch_all(MYSQLI_ASSOC);
+    // Translate ingredient names if needed
+    foreach ($ingredients as &$ingredient) {
+        if (isset($ingredient['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ingredient['name'])) {
+            $ingredient['name'] = translateToUrdu($ingredient['name']);
+        }
+    }
+    unset($ingredient);
+}
+
+// Get previously used dishes from recent orders (last 30 days)
+$previously_used_dishes = [];
+$recent_orders_query = "SELECT DISTINCT o.dish_id, d.id, d.name,
+    COUNT(o.id) as order_count,
+    MAX(o.order_date) as last_used_date
+    FROM orders o
+    INNER JOIN dishes d ON o.dish_id = d.id
+    WHERE o.order_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+    GROUP BY o.dish_id, d.id
+    ORDER BY order_count DESC, last_used_date DESC
+    LIMIT 20";
+$recent_result = $conn->query($recent_orders_query);
+if ($recent_result && $recent_result->num_rows > 0) {
+    $previously_used_dishes = $recent_result->fetch_all(MYSQLI_ASSOC);
+    // Translate dish names if needed
+    foreach ($previously_used_dishes as &$dish) {
         if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
             $dish['name'] = translateToUrdu($dish['name']);
         }
@@ -247,13 +473,112 @@ $current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 
 // Get all orders grouped by order_number
 $orders = [];
-$result = $conn->query("SELECT o.*, u.name as customer_name, u.email as customer_email, d.name as dish_name, d.id as dish_id, d.number_of_persons
+// Use COALESCE to get customer_name from orders table first, then fallback to users table
+// Also explicitly select o.customer_name and o.customer_cell to ensure they're available
+// Show all orders - removed WHERE clause to ensure all orders are displayed
+// Simplified query to ensure it works
+$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.total_amount, 
+    o.status, o.notes, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
+    o.delivery_time, o.shift, o.number_of_persons, o.created_at,
+    o.customer_name as order_customer_name,
+    o.customer_cell as order_customer_cell,
+    u.name as user_customer_name,
+    u.email as user_customer_email,
+    COALESCE(u.name, o.customer_name) as customer_name, 
+    COALESCE(u.email, o.customer_cell) as customer_email, 
+    d.name as dish_name, d.id as dish_id, d.number_of_persons
     FROM orders o
     LEFT JOIN users u ON o.customer_id = u.id
     LEFT JOIN dishes d ON o.dish_id = d.id
-    ORDER BY o.order_date DESC, o.order_number, o.id");
+    ORDER BY 
+        CASE 
+            WHEN o.order_date IS NOT NULL THEN o.order_date 
+            WHEN o.created_at IS NOT NULL THEN o.created_at 
+            ELSE NOW() 
+        END DESC, 
+        COALESCE(o.order_number, ''), 
+        o.id DESC";
+
+$result = $conn->query($query);
+if (!$result) {
+    // Log query error for debugging
+    $error_msg = "Orders query error: " . $conn->error;
+    error_log($error_msg);
+    error_log("Query: " . $query);
+    
+    // Try a simpler query to see if orders table exists and has data
+    $test_result = $conn->query("SELECT COUNT(*) as count FROM orders");
+    if ($test_result) {
+        $test_row = $test_result->fetch_assoc();
+        error_log("Total orders in database: " . $test_row['count']);
+        if ($test_row['count'] > 0) {
+            // Orders exist but main query failed - try simpler query
+            $query = "SELECT * FROM orders ORDER BY id DESC LIMIT 100";
+            $result = $conn->query($query);
+        }
+    }
+    
+    // Also show error in page for debugging (remove in production)
+    if (isset($_GET['debug'])) {
+        $error = $error_msg;
+    }
+}
+
+// Always initialize variables even if query fails
+$orders = [];
+$grouped_orders = [];
+$paginated_orders = [];
+$total_orders = 0;
+$total_pages = 0;
+
 if ($result && $result->num_rows > 0) {
     $orders = $result->fetch_all(MYSQLI_ASSOC);
+    
+    // If using fallback query, we need to fetch dish and customer info separately
+    $using_fallback = !isset($orders[0]['dish_name']);
+    
+    if ($using_fallback) {
+        // Fetch dish and customer info for each order
+        foreach ($orders as &$order) {
+            // Get dish info
+            if (!empty($order['dish_id'])) {
+                $dish_result = $conn->query("SELECT id, name, number_of_persons FROM dishes WHERE id = " . intval($order['dish_id']));
+                if ($dish_result && $dish_result->num_rows > 0) {
+                    $dish = $dish_result->fetch_assoc();
+                    $order['dish_name'] = $dish['name'];
+                    $order['dish_id'] = $dish['id'];
+                    $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
+                }
+            }
+            
+            // Get customer info if customer_id exists
+            if (!empty($order['customer_id'])) {
+                $cust_result = $conn->query("SELECT name, email FROM users WHERE id = " . intval($order['customer_id']));
+                if ($cust_result && $cust_result->num_rows > 0) {
+                    $cust = $cust_result->fetch_assoc();
+                    // Prioritize customer name from users table
+                    $order['user_customer_name'] = $cust['name'];
+                    $order['user_customer_email'] = $cust['email'];
+                    // Keep order_customer_name as fallback
+                    if (empty($order['customer_name'])) {
+                        $order['customer_name'] = $cust['name'];
+                    }
+                    if (empty($order['customer_email']) && empty($order['customer_cell'])) {
+                        $order['customer_email'] = $cust['email'];
+                    }
+                }
+            }
+            
+            // Set aliases for consistency
+            $order['order_customer_name'] = $order['customer_name'] ?? '';
+            $order['order_customer_cell'] = $order['customer_cell'] ?? '';
+            // Ensure user_customer_name is set if customer_id exists
+            if (empty($order['user_customer_name']) && !empty($order['customer_id'])) {
+                $order['user_customer_name'] = $order['customer_name'] ?? '';
+            }
+        }
+        unset($order);
+    }
     
     // Get ingredients for each dish
     foreach ($orders as &$order) {
@@ -268,7 +593,7 @@ if ($result && $result->num_rows > 0) {
         }
         
         $order_ingredients = [];
-        if ($order['dish_id']) {
+        if (isset($order['dish_id']) && $order['dish_id']) {
             $dish_id = intval($order['dish_id']);
             $stmt = $conn->prepare("SELECT di.quantity, di.unit, i.name as ingredient_name, i.id as ingredient_id, 
                 i.category_id, c.name as category_name
@@ -306,12 +631,27 @@ if ($result && $result->num_rows > 0) {
     foreach ($orders as $order) {
         $order_num = $order['order_number'] ?? 'ORD-' . str_pad($order['id'], 6, '0', STR_PAD_LEFT);
         if (!isset($grouped_orders[$order_num])) {
+            // Prioritize customer name from users table (registered customers), then from orders table, then fallback
+            $customer_name = !empty($order['user_customer_name']) ? $order['user_customer_name'] : 
+                            (!empty($order['order_customer_name']) ? $order['order_customer_name'] : 
+                            (!empty($order['customer_name']) ? $order['customer_name'] : 'Guest Customer'));
+            // Prioritize customer email from users table, then customer_cell from orders table
+            $customer_email = !empty($order['user_customer_email']) ? $order['user_customer_email'] : 
+                             (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] : 
+                             (!empty($order['customer_email']) ? $order['customer_email'] : ''));
+            
             $grouped_orders[$order_num] = [
                 'order_number' => $order_num,
                 'customer_id' => $order['customer_id'],
-                'customer_name' => $order['customer_name'],
-                'customer_email' => $order['customer_email'],
-                'order_date' => $order['order_date'],
+                'customer_name' => $customer_name,
+                'customer_email' => $customer_email,
+                'customer_cell' => $order['customer_cell'] ?? '',
+                'order_date' => !empty($order['order_date']) ? $order['order_date'] : 
+                               (!empty($order['created_at']) ? $order['created_at'] : date('Y-m-d H:i:s')),
+                'delivery_date' => $order['delivery_date'] ?? '',
+                'delivery_time' => $order['delivery_time'] ?? '',
+                'shift' => $order['shift'] ?? '',
+                'number_of_persons' => $order['number_of_persons'] ?? 0,
                 'status' => $order['status'],
                 'notes' => $order['notes'],
                 'id' => $order['id'], // Use first order ID for reference
@@ -323,10 +663,15 @@ if ($result && $result->num_rows > 0) {
         $grouped_orders[$order_num]['total_amount'] += floatval($order['total_amount']);
     }
     
-    // Convert to indexed array and sort by date
+    // Convert to indexed array and sort by date (newest first)
     $grouped_orders = array_values($grouped_orders);
     usort($grouped_orders, function($a, $b) {
-        return strtotime($b['order_date']) - strtotime($a['order_date']);
+        // Get order date, fallback to created_at, then to current time
+        $date_a = !empty($a['order_date']) ? strtotime($a['order_date']) : 
+                 (!empty($a['created_at']) ? strtotime($a['created_at']) : time());
+        $date_b = !empty($b['order_date']) ? strtotime($b['order_date']) : 
+                 (!empty($b['created_at']) ? strtotime($b['created_at']) : time());
+        return $date_b - $date_a; // Descending order (newest first)
     });
     
     // Pagination calculations
@@ -589,6 +934,41 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     min-width: 150px;
 }
 
+.dish-modal-card {
+    transition: all 0.3s ease;
+}
+
+.dish-modal-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px rgba(99, 102, 241, 0.2) !important;
+    border-color: #6366f1 !important;
+}
+
+.category-filter {
+    border: 2px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.category-filter:hover {
+    border-color: #6366f1;
+    color: #6366f1;
+    background: #eef2ff;
+}
+
+.category-filter.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: white;
+}
+
+.modal-dish-item.hidden {
+    display: none;
+}
+
 .order-review-card {
     animation: slideIn 0.4s ease-out;
 }
@@ -765,29 +1145,89 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                 <form method="POST" action="" id="orderForm">
                     <input type="hidden" name="create_order" value="1">
                     
-                    <!-- Step 1: Select Customer -->
+                    <!-- Step 1: Customer Information -->
                     <div class="order-step" id="step1" data-step="1">
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-person-fill me-2 text-primary"></i>
-                                Step 1: Select Customer
+                                Step 1: Customer Information
                             </h4>
-                            <p class="text-muted">Choose the customer for this order</p>
+                            <p class="text-muted">Fill in the customer details and order information</p>
                         </div>
                         <div class="row g-3">
-                            <div class="col-md-12">
-                                <label for="customer_id" class="form-label fw-semibold">
-                                    <i class="bi bi-person-fill me-1 text-primary"></i>
-                                    <?php e('customer'); ?> <span class="text-danger">*</span>
+                            <div class="col-md-6">
+                                <label for="customer_name" class="form-label fw-semibold">
+                                    <i class="bi bi-person me-1 text-primary"></i>
+                                    Customer Name <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select form-select-lg" id="customer_id" name="customer_id" required>
-                                    <option value=""><?php e('select_customer'); ?></option>
-                                    <?php foreach ($customers as $customer): ?>
-                                        <option value="<?php echo $customer['id']; ?>">
-                                            <?php echo htmlspecialchars($customer['name']); ?> (<?php echo htmlspecialchars($customer['email']); ?>)
+                                <input type="text" class="form-control form-control-lg" id="customer_name" name="customer_name" 
+                                       list="customer_names_list" autocomplete="off"
+                                       value="<?php echo htmlspecialchars($_POST['customer_name'] ?? ''); ?>" required>
+                                <datalist id="customer_names_list">
+                                    <?php foreach ($all_customer_names as $cust_info): ?>
+                                        <option value="<?php echo htmlspecialchars($cust_info['name']); ?>" 
+                                                data-cell="<?php echo htmlspecialchars($cust_info['cell']); ?>"
+                                                data-type="<?php echo htmlspecialchars($cust_info['type']); ?>">
+                                            <?php echo htmlspecialchars($cust_info['name']); ?>
                                         </option>
                                     <?php endforeach; ?>
+                                </datalist>
+                                <small class="text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>Start typing to see previously added customers
+                                </small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="customer_cell" class="form-label fw-semibold">
+                                    <i class="bi bi-telephone me-1 text-primary"></i>
+                                    Customer Cell No <span class="text-danger">*</span>
+                                </label>
+                                <input type="tel" class="form-control form-control-lg" id="customer_cell" name="customer_cell" 
+                                       value="<?php echo htmlspecialchars($_POST['customer_cell'] ?? ''); ?>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="order_date" class="form-label fw-semibold">
+                                    <i class="bi bi-calendar me-1 text-primary"></i>
+                                    Date & Time <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" class="form-control mb-2" id="order_date" name="order_date" 
+                                       value="<?php echo htmlspecialchars($_POST['order_date'] ?? date('Y-m-d')); ?>" required>
+                                <input type="time" class="form-control" id="order_time" name="order_time" 
+                                       value="<?php echo htmlspecialchars($_POST['order_time'] ?? date('H:i')); ?>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="number_of_persons" class="form-label fw-semibold">
+                                    <i class="bi bi-people me-1 text-primary"></i>
+                                    Number of Persons <span class="text-danger">*</span>
+                                </label>
+                                <input type="number" class="form-control form-control-lg" id="number_of_persons" name="number_of_persons" 
+                                       value="<?php echo htmlspecialchars($_POST['number_of_persons'] ?? ''); ?>" required min="1">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="delivery_date" class="form-label fw-semibold">
+                                    <i class="bi bi-calendar-check me-1 text-primary"></i>
+                                    Delivery Date <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" class="form-control form-control-lg" id="delivery_date" name="delivery_date" 
+                                       value="<?php echo htmlspecialchars($_POST['delivery_date'] ?? ''); ?>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="shift" class="form-label fw-semibold">
+                                    <i class="bi bi-clock me-1 text-primary"></i>
+                                    Shift <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select form-select-lg" id="shift" name="shift" required>
+                                    <option value="">-- Select Shift --</option>
+                                    <option value="afternoon" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'afternoon') ? 'selected' : ''; ?>>Afternoon</option>
+                                    <option value="evening" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'evening') ? 'selected' : ''; ?>>Evening</option>
                                 </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="delivery_time" class="form-label fw-semibold">
+                                    <i class="bi bi-clock-history me-1 text-primary"></i>
+                                    Delivery Time <span class="text-danger">*</span>
+                                </label>
+                                <input type="time" class="form-control form-control-lg" id="delivery_time" name="delivery_time" 
+                                       value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>" required>
                             </div>
                         </div>
                         <div class="step-actions mt-4">
@@ -806,13 +1246,52 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             </h4>
                             <p class="text-muted">Add dishes to the order. You can add multiple dishes.</p>
                         </div>
+                        
+                        <!-- Dish Selection Tabs -->
+                        <div class="dish-tabs mb-3" style="border-bottom: 2px solid #e2e8f0;">
+                            <button type="button" class="dish-tab active" onclick="showDishTab('all')" id="tabAll" style="padding: 0.75rem 1.5rem; background: transparent; border: none; border-bottom: 3px solid transparent; color: #64748b; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">
+                                <i class="bi bi-grid me-2"></i>All Dishes
+                            </button>
+                            <?php if (!empty($previously_used_dishes)): ?>
+                            <button type="button" class="dish-tab" onclick="showDishTab('previous')" id="tabPrevious" style="padding: 0.75rem 1.5rem; background: transparent; border: none; border-bottom: 3px solid transparent; color: #64748b; font-weight: 600; cursor: pointer; transition: all 0.3s ease;">
+                                <i class="bi bi-clock-history me-2"></i>Previously Added Dishes
+                                <span class="badge bg-success ms-2"><?php echo count($previously_used_dishes); ?></span>
+                            </button>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <!-- Previously Added Dishes Quick Select -->
+                        <?php if (!empty($previously_used_dishes)): ?>
+                        <div id="previousDishesSection" style="display: none;" class="mb-4">
+                            <div class="alert alert-info mb-3">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>Previously Added Dishes:</strong> These are dishes that were frequently ordered in the last 30 days. Click on a dish to quickly add it to your order.
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <?php foreach ($previously_used_dishes as $dish): ?>
+                                <div class="col-md-3 col-sm-6">
+                                    <button type="button" class="btn btn-outline-primary w-100 text-start previous-dish-btn" 
+                                            data-dish-id="<?php echo $dish['id']; ?>" 
+                                            data-dish-name="<?php echo htmlspecialchars($dish['name']); ?>"
+                                            style="white-space: normal; text-align: left;">
+                                        <i class="bi bi-star-fill me-1 text-warning"></i>
+                                        <strong><?php echo htmlspecialchars($dish['name']); ?></strong>
+                                        <br>
+                                        <small class="text-muted">Ordered <?php echo $dish['order_count']; ?> time(s)</small>
+                                    </button>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <label class="form-label fw-semibold mb-0">
                                     <i class="bi bi-egg-fried me-1 text-primary"></i>
                                     <?php e('dish'); ?> <span class="text-danger">*</span>
                                 </label>
-                                <button type="button" class="btn btn-sm btn-primary" id="addDishBtn">
+                                <button type="button" class="btn btn-sm btn-primary" id="addDishBtn" onclick="addNewDishRow()">
                                     <i class="bi bi-plus-circle me-1"></i> Add Dish
                                 </button>
                             </div>
@@ -824,14 +1303,21 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             <label class="form-label fw-semibold small">
                                                 <?php e('dish'); ?> <span class="text-danger">*</span>
                                             </label>
-                                            <select class="form-select dish-select" name="dishes[0][dish_id]" required>
-                                                <option value=""><?php e('select_dish'); ?></option>
-                                                <?php foreach ($dishes as $dish): ?>
-                                                    <option value="<?php echo $dish['id']; ?>">
-                                                        <?php echo htmlspecialchars($dish['name']); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                            <div class="position-relative">
+                                                <select class="form-select dish-select" name="dishes[0][dish_id]" required onfocus="openDishSelectionModal(0)">
+                                                    <option value=""><?php e('select_dish'); ?></option>
+                                                    <?php foreach ($dishes as $dish): ?>
+                                                        <option value="<?php echo $dish['id']; ?>">
+                                                            <?php echo htmlspecialchars($dish['name']); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <button type="button" class="btn btn-sm btn-outline-primary position-absolute end-0 top-0 h-100" 
+                                                        style="border-top-left-radius: 0; border-bottom-left-radius: 0; z-index: 10;"
+                                                        onclick="openDishSelectionModal(0)" title="Browse dishes with pictures">
+                                                    <i class="bi bi-grid-3x3-gap"></i>
+                                                </button>
+                                            </div>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small">
@@ -864,6 +1350,66 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Extra Ingredients Section -->
+                        <div class="mt-5 pt-4 border-top">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <label class="form-label fw-bold mb-0">
+                                    <i class="bi bi-plus-circle me-2 text-success"></i>
+                                    Extra Ingredients (Optional)
+                                </label>
+                                <button type="button" class="btn btn-sm btn-success" id="addExtraIngredientBtn">
+                                    <i class="bi bi-plus-circle me-1"></i> Add Extra Ingredient
+                                </button>
+                            </div>
+                            <p class="text-muted small mb-3">Add additional ingredients that are not part of the selected dishes.</p>
+                            <div id="extraIngredientsContainer">
+                                <!-- First extra ingredient row -->
+                                <div class="extra-ingredient-row mb-3 p-3 border rounded" data-row="0" style="display: none;">
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">
+                                                Ingredient <span class="text-danger">*</span>
+                                            </label>
+                                            <select class="form-select extra-ingredient-select" name="extra_ingredients[0][ingredient_id]">
+                                                <option value="">Select Ingredient</option>
+                                                <?php foreach ($ingredients as $ingredient): ?>
+                                                    <option value="<?php echo $ingredient['id']; ?>">
+                                                        <?php echo htmlspecialchars($ingredient['name']); ?> 
+                                                        <?php if (!empty($ingredient['unit'])): ?>
+                                                            (<?php echo htmlspecialchars($ingredient['unit']); ?>)
+                                                        <?php endif; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold small">
+                                                Quantity <span class="text-danger">*</span>
+                                            </label>
+                                            <input type="number" class="form-control extra-ingredient-quantity" 
+                                                   name="extra_ingredients[0][quantity]" 
+                                                   placeholder="0.00" step="0.01" min="0.01">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold small">
+                                                Unit
+                                            </label>
+                                            <input type="text" class="form-control extra-ingredient-unit" 
+                                                   name="extra_ingredients[0][unit]" 
+                                                   placeholder="kg, g, pieces, etc.">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold small d-block">&nbsp;</label>
+                                            <button type="button" class="btn btn-sm btn-danger remove-extra-ingredient-btn">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(1)">
                                 <i class="bi bi-arrow-left me-2"></i> Previous
@@ -926,6 +1472,112 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dish Selection Modal (Browse All Dishes) -->
+<div class="modal fade" id="dishSelectionModal" tabindex="-1" aria-labelledby="dishSelectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
+                <h5 class="modal-title text-white fw-bold" id="dishSelectionModalLabel">
+                    <i class="bi bi-egg-fried me-2"></i>Select Dish
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Search Bar -->
+                <div class="mb-4">
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text" style="background: #f8fafc; border-right: none;">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control" id="dishSearchInput" placeholder="Search dishes by name or category..." 
+                               style="border-left: none; border-right: none;" oninput="filterDishesInModal(this.value)">
+                        <button class="btn btn-outline-secondary" type="button" onclick="clearDishSearch()">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Category Filter -->
+                <div class="mb-4">
+                    <div class="d-flex flex-wrap gap-2" id="categoryFilters">
+                        <button class="btn btn-sm rounded-pill category-filter active" data-category="all" onclick="filterByCategory('all')">
+                            All Categories
+                        </button>
+                        <?php
+                        $categories = [];
+                        foreach ($dishes as $dish) {
+                            $catName = $dish['category_name'] ?? 'Uncategorized';
+                            if (!in_array($catName, $categories)) {
+                                $categories[] = $catName;
+                            }
+                        }
+                        foreach ($categories as $catName):
+                        ?>
+                            <button class="btn btn-sm rounded-pill category-filter" data-category="<?php echo htmlspecialchars($catName); ?>" onclick="filterByCategory('<?php echo htmlspecialchars($catName); ?>')">
+                                <?php echo htmlspecialchars($catName); ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                
+                <!-- Dishes Grid -->
+                <div class="row g-3" id="modalDishesGrid">
+                    <?php foreach ($dishes as $dish): 
+                        $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
+                        $image_exists = !empty($dish['image']) && file_exists(__DIR__ . '/../' . $dish['image']);
+                    ?>
+                        <div class="col-md-4 col-lg-3 modal-dish-item" 
+                             data-dish-id="<?php echo $dish['id']; ?>"
+                             data-dish-name="<?php echo htmlspecialchars($dish['name']); ?>"
+                             data-category="<?php echo htmlspecialchars($dish['category_name'] ?? 'Uncategorized'); ?>"
+                             onclick="selectDishFromModal(<?php echo $dish['id']; ?>, '<?php echo htmlspecialchars(addslashes($dish['name'])); ?>')">
+                            <div class="card h-100 shadow-sm border-0 dish-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
+                                <div style="position: relative; overflow: hidden; height: 200px; background: #f1f5f9;">
+                                    <?php if ($image_exists): ?>
+                                        <img src="<?php echo htmlspecialchars($image_path); ?>" 
+                                             class="w-100 h-100" 
+                                             style="object-fit: cover; transition: transform 0.3s ease;"
+                                             alt="<?php echo htmlspecialchars($dish['name']); ?>"
+                                             onmouseover="this.style.transform='scale(1.1)'"
+                                             onmouseout="this.style.transform='scale(1)'">
+                                    <?php else: ?>
+                                        <div class="w-100 h-100 d-flex align-items-center justify-content-center" 
+                                             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                            <i class="bi bi-egg-fried text-white" style="font-size: 4rem;"></i>
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="position-absolute top-0 end-0 m-2">
+                                        <span class="badge bg-primary rounded-pill">
+                                            <i class="bi bi-check-circle me-1"></i>Select
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="card-body p-3">
+                                    <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
+                                        <?php echo htmlspecialchars($dish['name']); ?>
+                                    </h6>
+                                    <small class="text-muted d-block">
+                                        <i class="bi bi-folder me-1"></i><?php echo htmlspecialchars($dish['category_name'] ?? 'Uncategorized'); ?>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <!-- No Results Message -->
+                <div id="noDishesFound" class="text-center py-5" style="display: none;">
+                    <i class="bi bi-search" style="font-size: 4rem; color: #cbd5e1;"></i>
+                    <p class="text-muted mt-3">No dishes found matching your search.</p>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -1226,13 +1878,145 @@ function previousStep(step) {
     }
 }
 
+// Tab switching function for dish selection
+function showDishTab(tab) {
+    const tabAll = document.getElementById('tabAll');
+    const tabPrevious = document.getElementById('tabPrevious');
+    const previousSection = document.getElementById('previousDishesSection');
+    
+    if (tab === 'all') {
+        if (tabAll) tabAll.classList.add('active');
+        if (tabPrevious) tabPrevious.classList.remove('active');
+        if (previousSection) previousSection.style.display = 'none';
+    } else if (tab === 'previous') {
+        if (tabAll) tabAll.classList.remove('active');
+        if (tabPrevious) tabPrevious.classList.add('active');
+        if (previousSection) previousSection.style.display = 'block';
+    }
+}
+
+// Add event listeners for previously used dishes quick select
+document.addEventListener('DOMContentLoaded', function() {
+    const previousDishBtns = document.querySelectorAll('.previous-dish-btn');
+    previousDishBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const dishId = this.dataset.dishId;
+            const dishName = this.dataset.dishName;
+            
+            // Find the first empty dish row or add a new one
+            const dishRows = document.querySelectorAll('.dish-row');
+            let targetRow = null;
+            
+            for (let row of dishRows) {
+                const dishSelect = row.querySelector('.dish-select');
+                if (dishSelect && !dishSelect.value) {
+                    targetRow = row;
+                    break;
+                }
+            }
+            
+            // If no empty row, add a new one
+            if (!targetRow) {
+                const addBtn = document.getElementById('addDishBtn');
+                if (addBtn) {
+                    addBtn.click();
+                    // Wait a bit for the new row to be added
+                    setTimeout(function() {
+                        const newRows = document.querySelectorAll('.dish-row');
+                        targetRow = newRows[newRows.length - 1];
+                        if (targetRow) {
+                            const dishSelect = targetRow.querySelector('.dish-select');
+                            if (dishSelect) dishSelect.value = dishId;
+                        }
+                    }, 100);
+                }
+            } else {
+                const dishSelect = targetRow.querySelector('.dish-select');
+                if (dishSelect) {
+                    dishSelect.value = dishId;
+                    // Trigger change event to update any dependent fields
+                    dishSelect.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+    });
+    
+    // Update tab styles on hover
+    const dishTabs = document.querySelectorAll('.dish-tab');
+    dishTabs.forEach(function(tab) {
+        tab.addEventListener('mouseenter', function() {
+            if (!this.classList.contains('active')) {
+                this.style.color = '#6366f1';
+                this.style.background = 'rgba(99, 102, 241, 0.05)';
+            }
+        });
+        tab.addEventListener('mouseleave', function() {
+            if (!this.classList.contains('active')) {
+                this.style.color = '#64748b';
+                this.style.background = 'transparent';
+            }
+        });
+    });
+    
+    // Set active tab styles
+    const activeTab = document.querySelector('.dish-tab.active');
+    if (activeTab) {
+        activeTab.style.color = '#6366f1';
+        activeTab.style.borderBottomColor = '#6366f1';
+        activeTab.style.background = 'rgba(99, 102, 241, 0.05)';
+    }
+});
+
 function validateCurrentStep() {
     if (currentStep === 1) {
-        // Validate customer selection
-        const customerSelect = document.getElementById('customer_id');
-        if (!customerSelect.value) {
-            alert('Please select a customer');
-            customerSelect.focus();
+        // Validate new customer information fields
+        const customerName = document.getElementById('customer_name');
+        const customerCell = document.getElementById('customer_cell');
+        const orderDate = document.getElementById('order_date');
+        const orderTime = document.getElementById('order_time');
+        const numberOfPersons = document.getElementById('number_of_persons');
+        const shift = document.getElementById('shift');
+        const deliveryDate = document.getElementById('delivery_date');
+        const deliveryTime = document.getElementById('delivery_time');
+        
+        if (customerName && !customerName.value.trim()) {
+            alert('Please enter customer name');
+            customerName.focus();
+            return false;
+        }
+        if (customerCell && !customerCell.value.trim()) {
+            alert('Please enter customer cell number');
+            customerCell.focus();
+            return false;
+        }
+        if (orderDate && !orderDate.value) {
+            alert('Please select order date');
+            orderDate.focus();
+            return false;
+        }
+        if (orderTime && !orderTime.value) {
+            alert('Please select order time');
+            orderTime.focus();
+            return false;
+        }
+        if (numberOfPersons && (!numberOfPersons.value || parseInt(numberOfPersons.value) <= 0)) {
+            alert('Please enter number of persons (must be greater than 0)');
+            numberOfPersons.focus();
+            return false;
+        }
+        if (shift && !shift.value) {
+            alert('Please select shift (afternoon or evening)');
+            shift.focus();
+            return false;
+        }
+        if (deliveryDate && !deliveryDate.value) {
+            alert('Please select delivery date');
+            deliveryDate.focus();
+            return false;
+        }
+        if (deliveryTime && !deliveryTime.value) {
+            alert('Please select delivery time');
+            deliveryTime.focus();
             return false;
         }
         return true;
@@ -1299,25 +2083,51 @@ function updateProgressIndicator(fromStep, toStep) {
 }
 
 function updateReview() {
-    // Update customer information
-    const customerSelect = document.getElementById('customer_id');
-    const customerId = customerSelect ? customerSelect.value : '';
+    // Update customer information - check for new form fields first
+    const customerName = document.getElementById('customer_name');
+    const customerCell = document.getElementById('customer_cell');
+    const orderDate = document.getElementById('order_date');
+    const orderTime = document.getElementById('order_time');
+    const numberOfPersons = document.getElementById('number_of_persons');
+    const shift = document.getElementById('shift');
+    const deliveryDate = document.getElementById('delivery_date');
+    const deliveryTime = document.getElementById('delivery_time');
     const reviewCustomer = document.getElementById('reviewCustomer');
     
-    if (customerId && customersData) {
-        const customer = customersData.find(c => c.id == customerId);
-        if (customer) {
-            reviewCustomer.innerHTML = `
-                <div class="d-flex align-items-center">
-                    <div>
-                        <strong>${escapeHtml(customer.name)}</strong><br>
-                        <small class="text-muted">${escapeHtml(customer.email)}</small>
-                    </div>
-                </div>
-            `;
-        }
+    if (customerName && customerName.value) {
+        // New form fields
+        let customerInfo = `
+            <div>
+                <strong>Customer Name:</strong> ${escapeHtml(customerName.value)}<br>
+                <strong>Cell No:</strong> ${escapeHtml(customerCell ? customerCell.value : '')}<br>
+                <strong>Date & Time:</strong> ${escapeHtml(orderDate ? orderDate.value : '')} ${escapeHtml(orderTime ? orderTime.value : '')}<br>
+                <strong>Number of Persons:</strong> ${escapeHtml(numberOfPersons ? numberOfPersons.value : '')}<br>
+                <strong>Delivery Date:</strong> ${escapeHtml(deliveryDate ? deliveryDate.value : '')}<br>
+                <strong>Shift:</strong> ${escapeHtml(shift ? shift.options[shift.selectedIndex].text : '')}<br>
+                <strong>Delivery Time:</strong> ${escapeHtml(deliveryTime ? deliveryTime.value : '')}
+            </div>
+        `;
+        reviewCustomer.innerHTML = customerInfo;
     } else {
-        reviewCustomer.innerHTML = '<p class="text-muted mb-0">No customer selected</p>';
+        // Old form - check customer selection
+        const customerSelect = document.getElementById('customer_id');
+        const customerId = customerSelect ? customerSelect.value : '';
+        
+        if (customerId && customersData) {
+            const customer = customersData.find(c => c.id == customerId);
+            if (customer) {
+                reviewCustomer.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <strong>${escapeHtml(customer.name)}</strong><br>
+                            <small class="text-muted">${escapeHtml(customer.email)}</small>
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            reviewCustomer.innerHTML = '<p class="text-muted mb-0">No customer information provided</p>';
+        }
     }
     
     // Update dishes information
@@ -1358,6 +2168,45 @@ function updateReview() {
         });
     }
     
+    // Add extra ingredients to review
+    const extraIngredientRows = document.querySelectorAll('.extra-ingredient-row[style*="block"], .extra-ingredient-row:not([style*="none"])');
+    const ingredientsData = typeof window.ingredientsData !== 'undefined' ? window.ingredientsData : [];
+    
+    if (extraIngredientRows.length > 0 && ingredientsData.length > 0) {
+        let hasExtraIngredients = false;
+        let extraIngredientsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-success"><i class="bi bi-plus-circle me-1"></i>Extra Ingredients:</strong></div>';
+        
+        extraIngredientRows.forEach(function(row) {
+            const ingredientSelect = row.querySelector('.extra-ingredient-select');
+            const quantityInput = row.querySelector('.extra-ingredient-quantity');
+            const unitInput = row.querySelector('.extra-ingredient-unit');
+            
+            if (ingredientSelect && ingredientSelect.value && quantityInput && quantityInput.value) {
+                const ingredientId = ingredientSelect.value;
+                const ingredient = ingredientsData.find(i => i.id == ingredientId);
+                const quantity = parseFloat(quantityInput.value) || 0;
+                const unit = unitInput ? unitInput.value : '';
+                
+                if (ingredient && quantity > 0) {
+                    hasExtraIngredients = true;
+                    const unitText = unit ? ' ' + escapeHtml(unit) : '';
+                    extraIngredientsHTML += `
+                        <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
+                            <div>
+                                <strong class="text-success">${escapeHtml(ingredient.name)}</strong><br>
+                                <small class="text-muted">Quantity: ${quantity}${unitText}</small>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        });
+        
+        if (hasExtraIngredients) {
+            dishesHTML += extraIngredientsHTML;
+        }
+    }
+    
     if (dishesHTML) {
         reviewDishes.innerHTML = dishesHTML;
     } else {
@@ -1386,6 +2235,56 @@ function escapeHtml(text) {
 
 // Listen for changes to update review in real-time
 document.addEventListener('DOMContentLoaded', function() {
+    // Auto-fill customer cell when customer name is selected from dropdown
+    const customerName = document.getElementById('customer_name');
+    const customerCell = document.getElementById('customer_cell');
+    const customerDatalist = document.getElementById('customer_names_list');
+    
+    if (customerName && customerCell && customerDatalist) {
+        // Store customer data for quick lookup
+        const customerData = {};
+        <?php foreach ($all_customer_names as $cust_info): ?>
+        customerData['<?php echo addslashes($cust_info['name']); ?>'] = '<?php echo addslashes($cust_info['cell']); ?>';
+        <?php endforeach; ?>
+        
+        // Handle input event to auto-fill cell number
+        customerName.addEventListener('input', function() {
+            const selectedName = this.value.trim();
+            if (customerData[selectedName]) {
+                customerCell.value = customerData[selectedName];
+            }
+        });
+        
+        // Handle change event (when dropdown option is selected)
+        customerName.addEventListener('change', function() {
+            const selectedName = this.value.trim();
+            if (customerData[selectedName]) {
+                customerCell.value = customerData[selectedName];
+            }
+        });
+    }
+    
+    // Listen for new form field changes
+    const customerNameField = document.getElementById('customer_name');
+    const customerCellField = document.getElementById('customer_cell');
+    const orderDate = document.getElementById('order_date');
+    const orderTime = document.getElementById('order_time');
+    const numberOfPersons = document.getElementById('number_of_persons');
+    const shift = document.getElementById('shift');
+    const deliveryDate = document.getElementById('delivery_date');
+    const deliveryTime = document.getElementById('delivery_time');
+    
+    [customerNameField, customerCellField, orderDate, orderTime, numberOfPersons, shift, deliveryDate, deliveryTime].forEach(function(field) {
+        if (field) {
+            field.addEventListener('change', function() {
+                if (currentStep === 3) {
+                    updateReview();
+                }
+            });
+        }
+    });
+    
+    // Old form - customer selection
     const customerSelect = document.getElementById('customer_id');
     if (customerSelect) {
         customerSelect.addEventListener('change', function() {
@@ -1418,11 +2317,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // Get dishes data for cloning
     const dishesData = <?php echo json_encode($dishes); ?>;
     
+    // Get ingredients data for extra ingredients
+    const ingredientsData = <?php echo json_encode($ingredients); ?>;
+    window.ingredientsData = ingredientsData; // Make it globally available for review function
+    
     // Function to create dish options HTML
     function getDishOptionsHTML() {
         let html = '<option value=""><?php e('select_dish'); ?></option>';
         dishesData.forEach(function(dish) {
             html += '<option value="' + dish.id + '">' + escapeHtml(dish.name) + '</option>';
+        });
+        return html;
+    }
+    
+    // Function to create ingredient options HTML
+    function getIngredientOptionsHTML() {
+        let html = '<option value="">Select Ingredient</option>';
+        ingredientsData.forEach(function(ingredient) {
+            const unitText = ingredient.unit ? ' (' + escapeHtml(ingredient.unit) + ')' : '';
+            html += '<option value="' + ingredient.id + '">' + escapeHtml(ingredient.name) + unitText + '</option>';
         });
         return html;
     }
@@ -1517,9 +2430,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     <label class="form-label fw-semibold small">
                         <?php e('dish'); ?> <span class="text-danger">*</span>
                     </label>
-                    <select class="form-select dish-select" name="dishes[${dishRowCount}][dish_id]" required>
-                        ${getDishOptionsHTML()}
-                    </select>
+                    <div class="position-relative">
+                        <select class="form-select dish-select" name="dishes[${dishRowCount}][dish_id]" required onfocus="openDishSelectionModal(${dishRowCount})">
+                            ${getDishOptionsHTML()}
+                        </select>
+                        <button type="button" class="btn btn-sm btn-outline-primary position-absolute end-0 top-0 h-100" 
+                                style="border-top-left-radius: 0; border-bottom-left-radius: 0; z-index: 10;"
+                                onclick="openDishSelectionModal(${dishRowCount})" title="Browse dishes with pictures">
+                            <i class="bi bi-grid-3x3-gap"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold small">
@@ -1593,6 +2513,98 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initial setup
     updateRemoveButtons();
+    
+    // Extra Ingredients Management
+    const extraIngredientsContainer = document.getElementById('extraIngredientsContainer');
+    const addExtraIngredientBtn = document.getElementById('addExtraIngredientBtn');
+    let extraIngredientRowCount = 0;
+    
+    // Add extra ingredient row
+    if (addExtraIngredientBtn && extraIngredientsContainer) {
+        addExtraIngredientBtn.addEventListener('click', function() {
+            const newRow = document.createElement('div');
+            newRow.className = 'extra-ingredient-row mb-3 p-3 border rounded';
+            newRow.setAttribute('data-row', extraIngredientRowCount);
+            newRow.style.display = 'block';
+            
+            newRow.innerHTML = `
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold small">
+                            Ingredient <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select extra-ingredient-select" name="extra_ingredients[${extraIngredientRowCount}][ingredient_id]">
+                            ${getIngredientOptionsHTML()}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold small">
+                            Quantity <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control extra-ingredient-quantity" 
+                               name="extra_ingredients[${extraIngredientRowCount}][quantity]" 
+                               placeholder="0.00" step="0.01" min="0.01">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold small">
+                            Unit
+                        </label>
+                        <input type="text" class="form-control extra-ingredient-unit" 
+                               name="extra_ingredients[${extraIngredientRowCount}][unit]" 
+                               placeholder="kg, g, pieces, etc.">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold small d-block">&nbsp;</label>
+                        <button type="button" class="btn btn-sm btn-danger remove-extra-ingredient-btn">
+                            <i class="bi bi-trash"></i> Remove
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            extraIngredientsContainer.appendChild(newRow);
+            
+            // Auto-fill unit when ingredient is selected
+            const select = newRow.querySelector('.extra-ingredient-select');
+            const unitInput = newRow.querySelector('.extra-ingredient-unit');
+            if (select && unitInput) {
+                select.addEventListener('change', function() {
+                    const ingredientId = this.value;
+                    const ingredient = ingredientsData.find(i => i.id == ingredientId);
+                    if (ingredient && ingredient.unit) {
+                        unitInput.value = ingredient.unit;
+                    }
+                });
+            }
+            
+            extraIngredientRowCount++;
+        });
+        
+        // Remove extra ingredient row
+        extraIngredientsContainer.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-extra-ingredient-btn')) {
+                const row = e.target.closest('.extra-ingredient-row');
+                if (row) {
+                    row.remove();
+                }
+            }
+        });
+        
+        // Auto-fill unit for existing rows
+        document.querySelectorAll('.extra-ingredient-select').forEach(function(select) {
+            const row = select.closest('.extra-ingredient-row');
+            const unitInput = row ? row.querySelector('.extra-ingredient-unit') : null;
+            if (select && unitInput) {
+                select.addEventListener('change', function() {
+                    const ingredientId = this.value;
+                    const ingredient = ingredientsData.find(i => i.id == ingredientId);
+                    if (ingredient && ingredient.unit) {
+                        unitInput.value = ingredient.unit;
+                    }
+                });
+            }
+        });
+    }
     
     // Search functionality for orders
     const searchInput = document.getElementById('searchOrders');
@@ -2522,6 +3534,115 @@ function printOrder(orderNumberOrId) {
     `);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 250);
+}
+
+// Dish Selection Modal Functions
+let dishSelectionModal = null;
+let currentCategoryFilter = 'all';
+let currentDishRowIndex = 0;
+
+// Open dish selection modal
+function openDishSelectionModal(rowIndex) {
+    currentDishRowIndex = rowIndex || 0;
+    
+    if (!dishSelectionModal) {
+        const modalElement = document.getElementById('dishSelectionModal');
+        if (modalElement) {
+            dishSelectionModal = new bootstrap.Modal(modalElement);
+        }
+    }
+    if (dishSelectionModal) {
+        dishSelectionModal.show();
+        // Reset filters
+        const searchInput = document.getElementById('dishSearchInput');
+        if (searchInput) searchInput.value = '';
+        filterByCategory('all');
+    }
+}
+
+// Filter dishes in modal by search term
+function filterDishesInModal(searchTerm) {
+    const searchLower = searchTerm.toLowerCase().trim();
+    const dishItems = document.querySelectorAll('.modal-dish-item');
+    let visibleCount = 0;
+    
+    dishItems.forEach(item => {
+        const dishName = item.getAttribute('data-dish-name').toLowerCase();
+        const category = item.getAttribute('data-category').toLowerCase();
+        const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
+        const matchesCategory = currentCategoryFilter === 'all' || item.getAttribute('data-category') === currentCategoryFilter;
+        
+        if (matchesSearch && matchesCategory) {
+            item.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            item.classList.add('hidden');
+        }
+    });
+    
+    // Show/hide no results message
+    const noResults = document.getElementById('noDishesFound');
+    if (noResults) {
+        noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+}
+
+// Filter by category
+function filterByCategory(category) {
+    currentCategoryFilter = category;
+    
+    // Update active button
+    document.querySelectorAll('.category-filter').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-category') === category) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Apply filters
+    const searchTerm = document.getElementById('dishSearchInput')?.value || '';
+    filterDishesInModal(searchTerm);
+}
+
+// Clear search
+function clearDishSearch() {
+    const searchInput = document.getElementById('dishSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        filterDishesInModal('');
+    }
+}
+
+// Select dish from modal
+function selectDishFromModal(dishId, dishName) {
+    // Find the select field for the current row
+    const row = document.querySelector(`.dish-row[data-row="${currentDishRowIndex}"]`);
+    if (row) {
+        const select = row.querySelector('.dish-select');
+        if (select) {
+            select.value = dishId;
+            // Trigger change event to update any dependent fields
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+    
+    // Close modal
+    if (dishSelectionModal) {
+        dishSelectionModal.hide();
+    }
+    
+    // Update review if on step 3
+    if (typeof updateReview === 'function' && typeof currentStep !== 'undefined' && currentStep === 3) {
+        updateReview();
+    }
+}
+
+// Add new dish row function (called from button)
+function addNewDishRow() {
+    const addDishBtn = document.getElementById('addDishBtn');
+    if (addDishBtn) {
+        addDishBtn.click();
+    }
 }
 </script>
 

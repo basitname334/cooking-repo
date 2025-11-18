@@ -17,13 +17,13 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    $category_id = intval($_POST['category_id'] ?? 0);
+    $category_id = null; // Category removed - set to null
     $dish_id = $_POST['dish_id'] ?? null;
     $ingredients = $_POST['ingredients'] ?? [];
     $quantities = $_POST['quantities'] ?? [];
     $number_of_persons = intval($_POST['number_of_persons'] ?? 1);
     $base_quantity = floatval($_POST['base_quantity'] ?? 1);
-    $base_unit = trim($_POST['base_unit'] ?? 'serving');
+    $base_unit = trim($_POST['base_unit'] ?? 'kg');
     
     // Translate to Urdu if current language is Urdu
     $name = translateForDatabase($name);
@@ -56,8 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Error uploading image: ' . $_FILES['dish_image']['error'];
     }
     
-    if (empty($name) || $category_id <= 0) {
-        $error = 'Dish name and category are required.';
+    if (empty($name)) {
+        $error = 'Dish name is required.';
     } else {
         // Check if number_of_persons column exists, if not add it
         $check_column = $conn->query("SHOW COLUMNS FROM dishes LIKE 'number_of_persons'");
@@ -417,36 +417,6 @@ include __DIR__ . '/../includes/header.php';
                                        value="<?php echo htmlspecialchars($edit_dish['name'] ?? ''); ?>">
                             </div>
                             
-                            <!-- Category -->
-                            <div class="mb-3">
-                                <label for="category_id" class="form-label fw-semibold">
-                                    <i class="bi bi-folder me-1 text-primary"></i>
-                                    Category <span class="text-danger">*</span>
-                                </label>
-                                <div class="d-flex gap-2">
-                                    <div class="searchable-select-wrapper flex-grow-1" id="category_wrapper">
-                                        <input type="text" class="form-control searchable-select-input" 
-                                               id="category_id_search" 
-                                               placeholder="Search..." 
-                                               autocomplete="off"
-                                               style="display: none;">
-                                        <select class="form-select searchable-select" id="category_id" name="category_id" required tabindex="0">
-                                            <option value="">-- Select Category --</option>
-                                            <?php foreach ($categories as $cat): ?>
-                                                <option value="<?php echo $cat['id']; ?>" 
-                                                    data-search="<?php echo strtolower(htmlspecialchars($cat['name'])); ?>"
-                                                    <?php echo ($edit_dish && $edit_dish['category_id'] == $cat['id']) ? 'selected' : ''; ?>>
-                                                    <?php echo htmlspecialchars($cat['name']); ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal" title="Add New Category">
-                                        <i class="bi bi-plus-lg"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            
                             <!-- Description -->
                             <div class="mb-3">
                                 <label for="description" class="form-label fw-semibold">
@@ -514,11 +484,9 @@ include __DIR__ . '/../includes/header.php';
                                     <i class="bi bi-rulers me-1 text-primary"></i>
                                     Unit
                                 </label>
-                                <select class="form-select" id="base_unit" name="base_unit">
-                                    <option value="serving" <?php echo ($edit_dish && isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'serving') ? 'selected' : ''; ?>>Serving</option>
-                                    <option value="portion" <?php echo ($edit_dish && isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'portion') ? 'selected' : ''; ?>>Portion</option>
-                                    <option value="piece" <?php echo ($edit_dish && isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'piece') ? 'selected' : ''; ?>>Piece</option>
-                                </select>
+                                <input type="hidden" id="base_unit" name="base_unit" value="kg">
+                                <input type="text" class="form-control" value="kg" disabled style="background-color: #e9ecef;">
+                                <small class="form-text text-muted">Unit is fixed as kg</small>
                             </div>
                             
                             <!-- Ingredients Section -->
@@ -1425,11 +1393,7 @@ function initSearchableSelect(selectElement) {
 
 // Initialize all searchable selects on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize dish category select
-    const dishCategorySelect = document.getElementById('category_id');
-    if (dishCategorySelect) {
-        initSearchableSelect(dishCategorySelect);
-    }
+    // Category field removed - no longer initializing dish category select
     
     // Initialize existing ingredient selects
     document.querySelectorAll('.ingredient-category-select, .ingredient-select').forEach(select => {
@@ -2274,12 +2238,7 @@ function selectCategory(categoryId, categoryName) {
             }
         }
     } else {
-        // Update dish category select
-        const dishCategorySelect = document.getElementById('category_id');
-        if (dishCategorySelect) {
-            dishCategorySelect.value = categoryId;
-            dishCategorySelect.dispatchEvent(new Event('change'));
-        }
+        // Category field removed - no longer updating dish category select
     }
     
     // Close modal
@@ -2510,9 +2469,9 @@ window.saveCategory = function() {
             successDiv.textContent = 'Category added successfully!';
             successDiv.style.display = 'block';
             
-            // Add to all category selects
+            // Add to all category selects (dish category field removed, only ingredient categories remain)
             const category = data.category;
-            const categorySelects = document.querySelectorAll('#category_id, .ingredient-category-select, #newIngredientCategory');
+            const categorySelects = document.querySelectorAll('.ingredient-category-select, #newIngredientCategory');
             
             categorySelects.forEach(select => {
                 const option = document.createElement('option');
