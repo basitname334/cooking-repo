@@ -479,7 +479,7 @@ $orders = [];
 // Simplified query to ensure it works
 $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.total_amount, 
     o.status, o.notes, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
-    o.delivery_time, o.shift, o.number_of_persons, o.created_at,
+    o.delivery_time, o.shift, o.number_of_persons,
     o.customer_name as order_customer_name,
     o.customer_cell as order_customer_cell,
     u.name as user_customer_name,
@@ -491,11 +491,7 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.t
     LEFT JOIN users u ON o.customer_id = u.id
     LEFT JOIN dishes d ON o.dish_id = d.id
     ORDER BY 
-        CASE 
-            WHEN o.order_date IS NOT NULL THEN o.order_date 
-            WHEN o.created_at IS NOT NULL THEN o.created_at 
-            ELSE NOW() 
-        END DESC, 
+        COALESCE(o.order_date, NOW()) DESC, 
         COALESCE(o.order_number, ''), 
         o.id DESC";
 
