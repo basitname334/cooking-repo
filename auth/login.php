@@ -84,15 +84,16 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="row justify-content-center align-items-center min-vh-75">
     <div class="col-md-5">
-        <div class="card shadow-lg border-0">
-            <div class="card-header bg-gradient-primary text-white text-center py-4">
-                <div class="d-flex align-items-center justify-content-center mb-3">
-                    <img src="../images/logo.jpg" alt="Logo" style="height: 50px; width: auto; border-radius: 8px; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
-                    <h4 class="mb-0 fw-bold"><i class="bi bi-box-arrow-in-right me-2"></i><?php e('login'); ?></h4>
+        <div class="card shadow-2xl border-0" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-radius: 24px; overflow: hidden;">
+            <div class="card-header text-center py-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; position: relative;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,<svg width=\"100\" height=\"100\" xmlns=\"http://www.w3.org/2000/svg\"><defs><pattern id=\"grid\" width=\"40\" height=\"40\" patternUnits=\"userSpaceOnUse\"><path d=\"M 40 0 L 0 0 0 40\" fill=\"none\" stroke=\"rgba(255,255,255,0.1)\" stroke-width=\"1\"/></pattern></defs><rect width=\"100\" height=\"100\" fill=\"url(%23grid)\" /></svg>'); opacity: 0.3;"></div>
+                <div class="d-flex align-items-center justify-content-center mb-3 position-relative" style="z-index: 1;">
+                    <img src="../images/logo.jpg" alt="Logo" style="height: 60px; width: auto; border-radius: 16px; margin-right: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
+                    <h3 class="mb-0 fw-bold text-white"><i class="bi bi-box-arrow-in-right me-2"></i><?php e('login'); ?></h3>
                 </div>
-                <p class="mb-0 opacity-75"><?php e('login_welcome'); ?></p>
+                <p class="mb-0 text-white opacity-90 position-relative" style="z-index: 1;"><?php e('login_welcome'); ?></p>
             </div>
-            <div class="card-body p-4">
+            <div class="card-body p-5">
                 <?php if ($error): ?>
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
                         <i class="bi bi-exclamation-triangle me-2"></i><?php echo htmlspecialchars($error); ?>
@@ -108,36 +109,52 @@ include __DIR__ . '/../includes/header.php';
                 
                 <form method="POST" action="">
                     <div class="mb-4">
-                        <label for="email" class="form-label fw-semibold"><?php e('email'); ?></label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light"><i class="bi bi-envelope text-primary"></i></span>
+                        <label for="email" class="form-label fw-semibold mb-3" style="color: #1e293b; font-size: 1rem;">
+                            <i class="bi bi-envelope me-2" style="color: #6366f1;"></i><?php e('email'); ?>
+                        </label>
+                        <div class="input-group" style="box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1); border-radius: 12px; overflow: hidden;">
+                            <span class="input-group-text" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; padding: 0.75rem 1.25rem;">
+                                <i class="bi bi-envelope"></i>
+                            </span>
                             <input type="email" class="form-control" id="email" name="email" required 
                                    placeholder="<?php e('enter_email'); ?>"
-                                   value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>">
+                                   value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>"
+                                   style="border: none; padding: 0.75rem 1.25rem; font-size: 1rem; background: #f8fafc;">
                         </div>
                     </div>
                     <div class="mb-4">
-                        <label for="password" class="form-label fw-semibold"><?php e('password'); ?></label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light"><i class="bi bi-lock text-primary"></i></span>
+                        <label for="password" class="form-label fw-semibold mb-3" style="color: #1e293b; font-size: 1rem;">
+                            <i class="bi bi-lock me-2" style="color: #6366f1;"></i><?php e('password'); ?>
+                        </label>
+                        <div class="input-group" style="box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1); border-radius: 12px; overflow: hidden;">
+                            <span class="input-group-text" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; padding: 0.75rem 1.25rem;">
+                                <i class="bi bi-lock"></i>
+                            </span>
                             <input type="password" class="form-control" id="password" name="password" required
-                                   placeholder="<?php e('enter_password'); ?>">
+                                   placeholder="<?php e('enter_password'); ?>"
+                                   style="border: none; padding: 0.75rem 1.25rem; font-size: 1rem; background: #f8fafc;">
                         </div>
                     </div>
                     <div class="d-grid mb-3">
-                        <button type="submit" class="btn btn-primary btn-lg rounded-pill">
+                        <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow-lg" style="padding: 0.875rem 2rem; font-size: 1.1rem; font-weight: 600;">
                             <i class="bi bi-box-arrow-in-right me-2"></i><?php e('login'); ?>
                         </button>
                     </div>
                 </form>
                 
                 <div class="text-center mt-4">
-                    <p class="mb-2"><?php e('dont_have_account'); ?> <a href="register.php" class="fw-bold text-primary"><?php e('register_here'); ?></a></p>
-                    <div class="bg-light rounded p-3 mt-3">
-                        <p class="text-muted small mb-1"><strong><?php e('demo_credentials'); ?>:</strong></p>
-                        <p class="text-muted small mb-0">
-                            <strong><?php e('admin'); ?>:</strong> admin@example.com / admin123<br>
-                            <strong><?php e('user'); ?>:</strong> <?php e('register'); ?> <?php echo t('to_create_account', 'to create an account'); ?>
+                    <p class="mb-3" style="color: #64748b; font-size: 1rem;"><?php e('dont_have_account'); ?> 
+                        <a href="register.php" class="fw-bold" style="color: #6366f1; text-decoration: none; transition: all 0.3s;">
+                            <?php e('register_here'); ?>
+                        </a>
+                    </p>
+                    <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%); border-radius: 16px; padding: 1.5rem; border: 1px solid rgba(99, 102, 241, 0.1);">
+                        <p class="mb-2" style="color: #1e293b; font-weight: 600; font-size: 0.95rem;">
+                            <i class="bi bi-info-circle me-2" style="color: #6366f1;"></i><?php e('demo_credentials'); ?>:
+                        </p>
+                        <p class="mb-0" style="color: #64748b; font-size: 0.9rem; line-height: 1.8;">
+                            <strong style="color: #1e293b;"><?php e('admin'); ?>:</strong> admin@example.com / admin123<br>
+                            <strong style="color: #1e293b;"><?php e('user'); ?>:</strong> <?php e('register'); ?> <?php echo t('to_create_account', 'to create an account'); ?>
                         </p>
                     </div>
                 </div>

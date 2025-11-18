@@ -106,9 +106,41 @@ $pageTitle = 'Manage Customers';
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <h2><i class="bi bi-people"></i> Manage Customers</h2>
+<style>
+.page-header-modern {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.customer-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.customer-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 35px rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+</style>
+
+<div class="page-header-modern">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                <i class="bi bi-people-fill me-3"></i>Manage Customers
+            </h1>
+            <p class="lead mb-0" style="color: #64748b;">
+                <i class="bi bi-info-circle me-2"></i>
+                <?php echo count($customers); ?> <?php echo count($customers) == 1 ? 'customer' : 'customers'; ?> registered
+            </p>
+        </div>
     </div>
 </div>
 
@@ -129,58 +161,69 @@ include __DIR__ . '/../includes/header.php';
 <!-- Create Customer Section -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white border-0 pb-0" style="border-bottom: 1px solid #e0e0e0 !important;">
+        <div class="card shadow-lg border-0" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(251, 146, 60, 0.05) 100%); border-radius: 20px; border: 1px solid rgba(245, 158, 11, 0.1);">
+            <div class="card-header border-0 pb-0" style="background: transparent; border-bottom: 1px solid rgba(245, 158, 11, 0.1) !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center">
-                        <div class="bg-warning rounded d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
-                            <i class="bi bi-person-plus text-white"></i>
+                        <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+                            <i class="bi bi-person-plus text-white fs-5"></i>
                         </div>
                         <div>
-                            <h5 class="mb-0 fw-bold">Create Customer</h5>
+                            <h5 class="mb-0 fw-bold" style="color: #1e293b;">Create Customer</h5>
                             <p class="text-muted small mb-0">Add a new customer account to the system</p>
                         </div>
                     </div>
-                    <i class="bi bi-chevron-down text-muted"></i>
                 </div>
             </div>
             <div class="card-body">
                 <form method="POST" action="" id="customerForm">
                     <input type="hidden" name="create_customer" value="1">
                     
-                    <div class="row mb-3">
+                    <div class="row mb-3 g-3">
                         <div class="col-md-6">
-                            <label for="name" class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
+                            <label for="name" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                                <i class="bi bi-person me-1" style="color: #f59e0b;"></i>Full Name <span class="text-danger">*</span>
+                            </label>
                             <input type="text" class="form-control" id="name" name="name" required 
                                    placeholder="Enter customer full name"
-                                   value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>">
+                                   value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>"
+                                   style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
                         </div>
                         <div class="col-md-6">
-                            <label for="email" class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
+                            <label for="email" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                                <i class="bi bi-envelope me-1" style="color: #f59e0b;"></i>Email Address <span class="text-danger">*</span>
+                            </label>
                             <input type="email" class="form-control" id="email" name="email" required 
                                    placeholder="Enter customer email address"
-                                   value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>">
+                                   value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>"
+                                   style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
                         </div>
                     </div>
                     
-                    <div class="row mb-3">
+                    <div class="row mb-3 g-3">
                         <div class="col-md-6">
-                            <label for="password" class="form-label fw-semibold">Password <span class="text-danger">*</span></label>
+                            <label for="password" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                                <i class="bi bi-lock me-1" style="color: #f59e0b;"></i>Password <span class="text-danger">*</span>
+                            </label>
                             <input type="password" class="form-control" id="password" name="password" required 
-                                   placeholder="Enter password" minlength="6">
-                            <small class="form-text text-muted">Password must be at least 6 characters long.</small>
+                                   placeholder="Enter password" minlength="6"
+                                   style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
+                            <small class="form-text text-muted mt-1">Password must be at least 6 characters long.</small>
                         </div>
                         <div class="col-md-6">
-                            <label for="confirm_password" class="form-label fw-semibold">Confirm Password <span class="text-danger">*</span></label>
+                            <label for="confirm_password" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                                <i class="bi bi-lock-fill me-1" style="color: #f59e0b;"></i>Confirm Password <span class="text-danger">*</span>
+                            </label>
                             <input type="password" class="form-control" id="confirm_password" name="confirm_password" required 
-                                   placeholder="Confirm password" minlength="6">
-                            <small class="form-text text-muted">Re-enter the password to confirm.</small>
+                                   placeholder="Confirm password" minlength="6"
+                                   style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
+                            <small class="form-text text-muted mt-1">Re-enter the password to confirm.</small>
                         </div>
                     </div>
                     
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-warning btn-lg rounded-pill px-4">
-                            <i class="bi bi-check-lg"></i> Create Customer
+                        <button type="submit" class="btn btn-warning btn-lg rounded-pill shadow-lg px-4" style="font-weight: 600; padding: 0.875rem;">
+                            <i class="bi bi-check-lg me-2"></i>Create Customer
                         </button>
                     </div>
                 </form>
@@ -191,36 +234,56 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="row">
     <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="bi bi-list-ul"></i> All Customers</h5>
+        <div class="card shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
+            <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
+                <h5 class="mb-0 fw-bold">
+                    <i class="bi bi-list-ul me-2"></i>All Customers
+                    <span class="badge bg-white text-primary ms-2 rounded-pill px-3"><?php echo count($customers); ?></span>
+                </h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-4">
                 <?php if (empty($customers)): ?>
-                    <p class="text-muted text-center py-4">No customers found. Customers will appear here when they register.</p>
+                    <div class="text-center py-5">
+                        <div style="width: 100px; height: 100px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);">
+                            <i class="bi bi-people display-4" style="color: #6366f1;"></i>
+                        </div>
+                        <h5 class="text-muted mb-2">No customers found</h5>
+                        <p class="text-muted">Customers will appear here when they register.</p>
+                    </div>
                 <?php else: ?>
                     <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
+                        <table class="table table-hover mb-0" style="border-radius: 12px; overflow: hidden;">
+                            <thead style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);">
                                 <tr>
-                                    <th>ID</th>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Registered Date</th>
-                                    <th>Actions</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 0.875rem; letter-spacing: 0.5px;">ID</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 0.875rem; letter-spacing: 0.5px;">Name</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 0.875rem; letter-spacing: 0.5px;">Email</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 0.875rem; letter-spacing: 0.5px;">Registered Date</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 700; color: #1e293b; text-transform: uppercase; font-size: 0.875rem; letter-spacing: 0.5px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($customers as $customer): ?>
-                                    <tr>
-                                        <td><?php echo $customer['id']; ?></td>
-                                        <td><strong><?php echo htmlspecialchars($customer['name']); ?></strong></td>
-                                        <td><?php echo htmlspecialchars($customer['email']); ?></td>
-                                        <td><?php echo date('M d, Y', strtotime($customer['created_at'])); ?></td>
-                                        <td>
-                                            <a href="?delete=<?php echo $customer['id']; ?>" class="btn btn-sm btn-danger" 
-                                               title="Delete" onclick="return confirm('Are you sure you want to delete this customer? This will also delete all their orders.');">
-                                                <i class="bi bi-trash"></i>
+                                    <tr class="customer-card" style="border-bottom: 1px solid #e2e8f0;">
+                                        <td style="padding: 1rem; color: #64748b; font-weight: 600;"><?php echo $customer['id']; ?></td>
+                                        <td style="padding: 1rem;">
+                                            <div class="d-flex align-items-center">
+                                                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 0.75rem;">
+                                                    <i class="bi bi-person-fill" style="color: #6366f1;"></i>
+                                                </div>
+                                                <strong style="color: #1e293b;"><?php echo htmlspecialchars($customer['name']); ?></strong>
+                                            </div>
+                                        </td>
+                                        <td style="padding: 1rem; color: #64748b;"><?php echo htmlspecialchars($customer['email']); ?></td>
+                                        <td style="padding: 1rem; color: #64748b;">
+                                            <i class="bi bi-calendar3 me-1"></i><?php echo date('M d, Y', strtotime($customer['created_at'])); ?>
+                                        </td>
+                                        <td style="padding: 1rem;">
+                                            <a href="?delete=<?php echo $customer['id']; ?>" class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm" 
+                                               title="Delete" 
+                                               onclick="return confirm('Are you sure you want to delete this customer? This will also delete all their orders.');"
+                                               style="font-weight: 600;">
+                                                <i class="bi bi-trash me-1"></i>Delete
                                             </a>
                                         </td>
                                     </tr>

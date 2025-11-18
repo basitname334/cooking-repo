@@ -249,39 +249,95 @@ include __DIR__ . '/../includes/header.php';
     <div class="modal-backdrop fade show"></div>
 <?php endif; ?>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-3">
-            <div>
-                <h2 class="mb-1">
-                    <i class="bi bi-folder2-open-fill me-2 text-primary"></i>
-                    Manage Categories
-                </h2>
-                <p class="text-muted mb-0"><?php echo count($categories); ?> <?php echo count($categories) == 1 ? 'category' : 'categories'; ?></p>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <!-- Search Box -->
-                <div style="max-width: 300px;">
-                    <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0">
-                            <i class="bi bi-search text-muted"></i>
-                        </span>
-                        <input type="text" class="form-control border-start-0" id="searchCategories" 
-                               placeholder="Search categories..." 
-                               autocomplete="off">
-                        <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchCategories" style="display: none;">
-                            <i class="bi bi-x-lg"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-chevron-down fs-5"></i>
+<style>
+.page-header-modern {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.category-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.category-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+.category-card:hover::before {
+    opacity: 1;
+}
+
+.category-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 12px 35px rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.search-modern {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.search-modern:focus-within {
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2);
+}
+</style>
+
+<div class="page-header-modern">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                <i class="bi bi-folder2-open-fill me-3"></i>Manage Categories
+            </h1>
+            <p class="lead mb-0" style="color: #64748b;">
+                <i class="bi bi-info-circle me-2"></i>
+                <?php echo count($categories); ?> <?php echo count($categories) == 1 ? 'category' : 'categories'; ?> organized
+            </p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <!-- Search Box -->
+            <div class="search-modern" style="max-width: 350px;">
+                <div class="input-group border-0">
+                    <span class="input-group-text bg-transparent border-0" style="color: #6366f1;">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control border-0 bg-transparent" id="searchCategories" 
+                           placeholder="Search categories..." 
+                           autocomplete="off"
+                           style="box-shadow: none;">
+                    <button class="btn btn-link border-0 text-muted p-2" type="button" id="clearSearchCategories" style="display: none;">
+                        <i class="bi bi-x-lg"></i>
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2"></i>Delete All</a></li>
-                    </ul>
                 </div>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-outline-primary rounded-pill px-3" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px;">
+                    <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2 text-danger"></i>Delete All</a></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -303,43 +359,58 @@ include __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
-<!-- Add Category Form (Inline) -->
+<!-- Add Category Form -->
 <?php if ($edit_category): ?>
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <form method="POST" action="" class="row align-items-end">
+    <div class="card shadow-lg border-0 mb-4" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%); border-radius: 20px; border: 1px solid rgba(99, 102, 241, 0.1);">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-4" style="color: #1e293b;">
+                <i class="bi bi-pencil-square me-2" style="color: #6366f1;"></i>Edit Category
+            </h5>
+            <form method="POST" action="" class="row align-items-end g-3">
                 <input type="hidden" name="category_id" value="<?php echo $edit_category['id']; ?>">
-                <div class="col-md-4 mb-3 mb-md-0">
-                    <label for="name" class="form-label mb-1">Category Name</label>
+                <div class="col-md-4">
+                    <label for="name" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                        <i class="bi bi-tag me-1" style="color: #6366f1;"></i>Category Name
+                    </label>
                     <input type="text" class="form-control" id="name" name="name" required
                            placeholder="Category name (e.g., Grains, Vegetables, Spices)"
-                           value="<?php echo htmlspecialchars($edit_category['name'] ?? ''); ?>">
+                           value="<?php echo htmlspecialchars($edit_category['name'] ?? ''); ?>"
+                           style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
                 </div>
-                <div class="col-md-5 mb-3 mb-md-0">
-                    <label for="description" class="form-label mb-1">Description (Optional)</label>
+                <div class="col-md-5">
+                    <label for="description" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                        <i class="bi bi-card-text me-1" style="color: #6366f1;"></i>Description (Optional)
+                    </label>
                     <input type="text" class="form-control" id="description" name="description"
                            placeholder="Optional description..."
-                           value="<?php echo htmlspecialchars($edit_category['description'] ?? ''); ?>">
+                           value="<?php echo htmlspecialchars($edit_category['description'] ?? ''); ?>"
+                           style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
                 </div>
                 <div class="col-md-3">
-                    <button type="submit" class="btn btn-success w-100">
-                        <i class="bi bi-check-lg me-2"></i>Update
+                    <button type="submit" class="btn btn-primary w-100 rounded-pill shadow-lg" style="padding: 0.75rem; font-weight: 600;">
+                        <i class="bi bi-check-lg me-2"></i>Update Category
                     </button>
-                    <a href="categories.php" class="btn btn-secondary w-100 mt-2">Cancel</a>
+                    <a href="categories.php" class="btn btn-outline-secondary w-100 mt-2 rounded-pill">Cancel</a>
                 </div>
             </form>
         </div>
     </div>
 <?php else: ?>
-    <div class="mb-4">
-        <form method="POST" action="" class="d-flex gap-2">
-            <input type="text" class="form-control flex-grow-1" id="name" name="name" required
-                   placeholder="Category name (e.g., Grains, Vegetables, Spices)">
-            <input type="hidden" name="description" value="">
-            <button type="submit" class="btn btn-success">
-                <i class="bi bi-plus-lg me-2"></i>Add
-            </button>
-        </form>
+    <div class="card shadow-lg border-0 mb-4" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%); border-radius: 20px; border: 1px solid rgba(99, 102, 241, 0.1);">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3" style="color: #1e293b;">
+                <i class="bi bi-plus-circle-fill me-2" style="color: #6366f1;"></i>Add New Category
+            </h5>
+            <form method="POST" action="" class="d-flex gap-3 flex-wrap">
+                <input type="text" class="form-control flex-grow-1" id="name" name="name" required
+                       placeholder="Category name (e.g., Grains, Vegetables, Spices)"
+                       style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; max-width: 500px;">
+                <input type="hidden" name="description" value="">
+                <button type="submit" class="btn btn-primary rounded-pill shadow-lg px-4" style="font-weight: 600; padding: 0.75rem 1.5rem;">
+                    <i class="bi bi-plus-lg me-2"></i>Add Category
+                </button>
+            </form>
+        </div>
     </div>
 <?php endif; ?>
 
@@ -358,27 +429,42 @@ include __DIR__ . '/../includes/header.php';
             <div class="col-md-6 col-lg-4 category-item" 
                  data-name="<?php echo strtolower(htmlspecialchars($category['name'])); ?>"
                  data-description="<?php echo strtolower(htmlspecialchars($category['description'] ?? '')); ?>">
-                <div class="card h-100 border-0 shadow-sm category-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $category['id']; ?>'">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="flex-grow-1">
-                            <div class="d-flex align-items-center mb-2">
-                                <i class="bi bi-folder2 me-2 text-primary fs-5"></i>
-                                <h6 class="card-title mb-0 fw-bold"><?php echo htmlspecialchars($category['name']); ?></h6>
+                <div class="card h-100 border-0 shadow-lg category-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $category['id']; ?>'">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-start justify-content-between mb-3">
+                            <div class="d-flex align-items-center">
+                                <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);">
+                                    <i class="bi bi-folder2 text-white fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="card-title mb-1 fw-bold" style="color: #1e293b; font-size: 1.1rem;">
+                                        <?php echo htmlspecialchars($category['name']); ?>
+                                    </h6>
+                                    <p class="text-muted small mb-0">
+                                        <i class="bi bi-basket me-1"></i>
+                                        <?php echo $ingredients_count; ?> <?php echo $ingredients_count == 1 ? 'ingredient' : 'ingredients'; ?>
+                                        <?php if (isset($category['dishes_count']) && $category['dishes_count'] > 0): ?>
+                                            <span class="ms-2">
+                                                <i class="bi bi-egg-fried me-1"></i>
+                                                <?php echo $category['dishes_count']; ?> <?php echo $category['dishes_count'] == 1 ? 'dish' : 'dishes'; ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
                             </div>
-                            <p class="text-muted small mb-0">
-                                <?php echo $ingredients_count; ?> <?php echo $ingredients_count == 1 ? 'ingredient' : 'ingredients'; ?>
-                            </p>
                         </div>
-                        <div class="d-flex gap-1 ms-2">
-                            <button class="btn btn-sm btn-primary rounded-circle p-2" 
+                        <div class="d-flex gap-2 justify-content-end">
+                            <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" 
                                     onclick="event.stopPropagation(); window.location.href='?edit=<?php echo $category['id']; ?>'"
-                                    title="Edit Category">
-                                <i class="bi bi-pencil"></i>
+                                    title="Edit Category"
+                                    style="font-weight: 600;">
+                                <i class="bi bi-pencil me-1"></i>Edit
                             </button>
-                            <button class="btn btn-sm btn-danger rounded-circle p-2" 
+                            <button class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm" 
                                     onclick="event.stopPropagation(); if(confirm('Delete this category?')) window.location.href='?delete=<?php echo $category['id']; ?>'"
-                                    title="Delete">
-                                <i class="bi bi-trash"></i>
+                                    title="Delete"
+                                    style="font-weight: 600;">
+                                <i class="bi bi-trash me-1"></i>Delete
                             </button>
                         </div>
                     </div>

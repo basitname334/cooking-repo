@@ -29,6 +29,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = translateForDatabase($name);
     $description = translateForDatabase($description);
     
+    // Handle image upload
+    $image_path = null;
+    if (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = __DIR__ . '/../uploads/dishes/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+        
+        $file_extension = strtolower(pathinfo($_FILES['dish_image']['name'], PATHINFO_EXTENSION));
+        $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        
+        if (in_array($file_extension, $allowed_extensions)) {
+            $file_name = uniqid('dish_', true) . '.' . $file_extension;
+            $target_path = $upload_dir . $file_name;
+            
+            if (move_uploaded_file($_FILES['dish_image']['tmp_name'], $target_path)) {
+                $image_path = 'uploads/dishes/' . $file_name;
+            } else {
+                $error = 'Failed to upload image.';
+            }
+        } else {
+            $error = 'Invalid image format. Allowed formats: JPG, JPEG, PNG, GIF, WEBP';
+        }
+    } elseif (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] !== UPLOAD_ERR_NO_FILE) {
+        $error = 'Error uploading image: ' . $_FILES['dish_image']['error'];
+    }
+    
     if (empty($name) || $category_id <= 0) {
         $error = 'Dish name and category are required.';
     } else {
@@ -48,14 +75,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->query("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving' AFTER base_quantity");
         }
         
+        // Check if image column exists, if not add it
+        $check_image = $conn->query("SHOW COLUMNS FROM dishes LIKE 'image'");
+        if ($check_image->num_rows == 0) {
+            $conn->query("ALTER TABLE dishes ADD COLUMN image VARCHAR(255) DEFAULT NULL AFTER base_unit");
+        }
+        
         // Start transaction
         $conn->begin_transaction();
         
         try {
             if ($dish_id) {
+                // Get existing image path if no new image uploaded
+                if ($image_path === null) {
+                    $existing_stmt = $conn->prepare("SELECT image FROM dishes WHERE id = ?");
+                    $existing_stmt->bind_param("i", $dish_id);
+                    $existing_stmt->execute();
+                    $existing_result = $existing_stmt->get_result();
+                    if ($existing_row = $existing_result->fetch_assoc()) {
+                        $image_path = $existing_row['image'];
+                    }
+                    $existing_stmt->close();
+                } else {
+                    // Delete old image if new one is uploaded
+                    $old_stmt = $conn->prepare("SELECT image FROM dishes WHERE id = ?");
+                    $old_stmt->bind_param("i", $dish_id);
+                    $old_stmt->execute();
+                    $old_result = $old_stmt->get_result();
+                    if ($old_row = $old_result->fetch_assoc() && !empty($old_row['image'])) {
+                        $old_image_path = __DIR__ . '/../' . $old_row['image'];
+                        if (file_exists($old_image_path)) {
+                            unlink($old_image_path);
+                        }
+                    }
+                    $old_stmt->close();
+                }
+                
                 // Update existing dish
-                $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ? WHERE id = ?");
-                $stmt->bind_param("ssiidsi", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $dish_id);
+                $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?");
+                $stmt->bind_param("ssiidssi", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id);
                 $stmt->execute();
                 $stmt->close();
                 
@@ -68,8 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $current_dish_id = $dish_id;
             } else {
                 // Create new dish
-                $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit) VALUES (?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("ssiids", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit);
+                $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("ssiidss", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path);
                 $stmt->execute();
                 $current_dish_id = $stmt->insert_id;
                 $stmt->close();
@@ -193,26 +251,77 @@ include __DIR__ . '/../includes/header.php';
 
 <link rel="stylesheet" href="../assets/css/user-friendly.css">
 
-<!-- Page Header -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-3">
-            <div>
-                <h2 class="mb-2 fw-bold">
-                    <i class="bi bi-egg-fried me-2 text-primary"></i>
-                    Manage Dishes
-                </h2>
-                <p class="text-muted mb-0">
-                    <i class="bi bi-info-circle me-1"></i>
-                    <?php echo count($dishes); ?> <?php echo count($dishes) == 1 ? 'dish' : 'dishes'; ?> in your menu
-                </p>
-            </div>
-            <div>
-                <button type="button" class="btn btn-primary" onclick="printDishesPage()">
-                    <i class="bi bi-printer-fill me-2"></i>
-                    Print Page
-                </button>
-            </div>
+<style>
+.page-header-modern {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.dish-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.dish-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+.dish-card:hover::before {
+    opacity: 1;
+}
+
+.dish-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 12px 35px rgba(6, 182, 212, 0.25);
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+.search-modern {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.search-modern:focus-within {
+    border-color: rgba(6, 182, 212, 0.3);
+    box-shadow: 0 4px 20px rgba(6, 182, 212, 0.2);
+}
+</style>
+
+<!-- Modern Page Header -->
+<div class="page-header-modern">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                <i class="bi bi-egg-fried me-3"></i>Manage Dishes
+            </h1>
+            <p class="lead mb-0" style="color: #64748b;">
+                <i class="bi bi-info-circle me-2"></i>
+                <?php echo count($dishes); ?> <?php echo count($dishes) == 1 ? 'dish' : 'dishes'; ?> in your menu
+            </p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary rounded-pill shadow-lg px-4" onclick="printDishesPage()" style="font-weight: 600;">
+                <i class="bi bi-printer-fill me-2"></i>Print Page
+            </button>
         </div>
     </div>
 </div>
@@ -286,15 +395,15 @@ include __DIR__ . '/../includes/header.php';
 <!-- Add/Edit Dish Form Section -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-lg border-0">
-            <div class="card-header bg-gradient-primary text-white py-3">
+        <div class="card shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
+            <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border: none;">
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-<?php echo $edit_dish ? 'pencil-square' : 'plus-circle-fill'; ?> me-2"></i>
                     <?php echo $edit_dish ? 'Edit Dish' : 'Add New Dish'; ?>
                 </h5>
             </div>
             <div class="card-body p-4">
-                <form method="POST" action="" id="dishForm">
+                <form method="POST" action="" id="dishForm" enctype="multipart/form-data">
                     <?php if ($edit_dish): ?>
                         <input type="hidden" name="dish_id" value="<?php echo $edit_dish['id']; ?>">
                     <?php endif; ?>
@@ -351,6 +460,32 @@ include __DIR__ . '/../includes/header.php';
                                 </label>
                                 <textarea class="form-control" id="description" name="description" rows="3"
                                           placeholder="Describe this dish, its taste, and cooking style..."><?php echo htmlspecialchars($edit_dish['description'] ?? ''); ?></textarea>
+                            </div>
+                            
+                            <!-- Dish Image -->
+                            <div class="mb-3">
+                                <label for="dish_image" class="form-label fw-semibold">
+                                    <i class="bi bi-image me-1 text-primary"></i>
+                                    Dish Image
+                                </label>
+                                <input type="file" class="form-control" id="dish_image" name="dish_image" 
+                                       accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                                       onchange="previewImage(this)">
+                                <small class="form-text text-muted">Allowed formats: JPG, JPEG, PNG, GIF, WEBP</small>
+                                <?php if ($edit_dish && !empty($edit_dish['image'])): ?>
+                                    <div class="mt-2">
+                                        <img src="../<?php echo htmlspecialchars($edit_dish['image']); ?>" 
+                                             alt="<?php echo htmlspecialchars($edit_dish['name']); ?>" 
+                                             id="current_image_preview"
+                                             class="img-thumbnail mt-2" 
+                                             style="max-width: 200px; max-height: 200px; object-fit: cover;">
+                                        <p class="text-muted small mb-0 mt-1">Current image</p>
+                                    </div>
+                                <?php endif; ?>
+                                <div id="image_preview" class="mt-2" style="display: none;">
+                                    <img id="preview_img" src="" alt="Preview" class="img-thumbnail" style="max-width: 200px; max-height: 200px; object-fit: cover;">
+                                    <p class="text-muted small mb-0 mt-1">New image preview</p>
+                                </div>
                             </div>
                         </div>
                         
@@ -441,23 +576,24 @@ include __DIR__ . '/../includes/header.php';
 <!-- Dishes List Section -->
 <div class="row">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3">
+        <div class="card shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
+            <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border: none;">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                     <h5 class="mb-0 fw-bold">
-                        <i class="bi bi-list-ul me-2 text-primary"></i>
-                        All Dishes <span class="badge bg-primary ms-2"><?php echo count($dishes); ?></span>
+                        <i class="bi bi-list-ul me-2"></i>
+                        All Dishes <span class="badge bg-white text-info ms-2 rounded-pill px-3"><?php echo count($dishes); ?></span>
                     </h5>
                     <!-- Search Box -->
-                    <div class="flex-grow-1" style="max-width: 400px;">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0">
-                                <i class="bi bi-search text-muted"></i>
+                    <div class="search-modern flex-grow-1" style="max-width: 400px;">
+                        <div class="input-group border-0">
+                            <span class="input-group-text bg-transparent border-0" style="color: #06b6d4;">
+                                <i class="bi bi-search"></i>
                             </span>
-                            <input type="text" class="form-control border-start-0" id="searchDishes" 
+                            <input type="text" class="form-control border-0 bg-transparent" id="searchDishes" 
                                    placeholder="Search dishes by name or category..." 
-                                   autocomplete="off">
-                            <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearch" style="display: none;">
+                                   autocomplete="off"
+                                   style="box-shadow: none;">
+                            <button class="btn btn-link border-0 text-muted p-2" type="button" id="clearSearch" style="display: none;">
                                 <i class="bi bi-x-lg"></i>
                             </button>
                         </div>
@@ -481,22 +617,32 @@ include __DIR__ . '/../includes/header.php';
                             <div class="col-md-6 col-lg-4 col-xl-3 dish-item" 
                                  data-name="<?php echo strtolower(htmlspecialchars($dish['name'])); ?>"
                                  data-category="<?php echo strtolower($category_name); ?>">
-                                <div class="card h-100 border shadow-sm dish-card" 
-                                     style="cursor: pointer; transition: all 0.3s ease;" 
-                                     onclick="window.location.href='?edit=<?php echo $dish['id']; ?>'"
-                                     onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 8px 16px rgba(0,0,0,0.15)'"
-                                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                                <div class="card h-100 border-0 shadow-lg dish-card" 
+                                     style="cursor: pointer;" 
+                                     onclick="window.location.href='?edit=<?php echo $dish['id']; ?>'">
+                                    <?php 
+                                    $dish_image_path = !empty($dish['image']) ? htmlspecialchars($dish['image']) : '';
+                                    $dish_image_full_path = !empty($dish_image_path) ? '../' . $dish_image_path : '';
+                                    $dish_image_exists = !empty($dish_image_path) && file_exists(__DIR__ . '/../' . $dish_image_path);
+                                    ?>
+                                    <?php if (!empty($dish_image_path) && $dish_image_exists): ?>
+                                        <div style="height: 150px; overflow: hidden; background: #f8f9fa;">
+                                            <img src="<?php echo $dish_image_full_path; ?>" 
+                                                 alt="<?php echo htmlspecialchars($dish['name']); ?>" 
+                                                 style="width: 100%; height: 100%; object-fit: cover;"
+                                                 onerror="this.parentElement.innerHTML='<div style=\'height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;\'><i class=\'bi bi-egg-fried text-white\' style=\'font-size: 3rem;\'></i></div>'">
+                                        </div>
+                                    <?php else: ?>
+                                        <div style="height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
+                                            <i class="bi bi-egg-fried text-white" style="font-size: 3rem;"></i>
+                                        </div>
+                                    <?php endif; ?>
                                     <div class="card-body p-3">
                                         <div class="d-flex align-items-start justify-content-between mb-2">
                                             <div class="flex-grow-1">
-                                                <div class="d-flex align-items-center mb-2">
-                                                    <div class="bg-primary bg-opacity-10 rounded p-2 me-2">
-                                                        <i class="bi bi-egg-fried text-primary"></i>
-                                                    </div>
-                                                    <h6 class="card-title mb-0 fw-bold text-dark" style="font-size: 0.95rem;">
-                                                        <?php echo htmlspecialchars($dish['name']); ?>
-                                                    </h6>
-                                                </div>
+                                                <h6 class="card-title mb-2 fw-bold text-dark" style="font-size: 0.95rem;">
+                                                    <?php echo htmlspecialchars($dish['name']); ?>
+                                                </h6>
                                                 <div class="mb-2">
                                                     <span class="badge bg-info bg-opacity-10 text-info small">
                                                         <i class="bi bi-folder me-1"></i><?php echo $category_name; ?>
@@ -2690,6 +2836,36 @@ function printDishesPage() {
     // "Background graphics" in their browser's print settings
     // Trigger print dialog - CSS will handle showing the banner and contact info
     window.print();
+}
+
+// Image Preview Function
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            const previewDiv = document.getElementById('image_preview');
+            const previewImg = document.getElementById('preview_img');
+            const currentImagePreview = document.getElementById('current_image_preview');
+            
+            if (previewDiv && previewImg) {
+                previewImg.src = e.target.result;
+                previewDiv.style.display = 'block';
+            }
+            
+            // Hide current image preview if editing
+            if (currentImagePreview) {
+                currentImagePreview.style.display = 'none';
+            }
+        };
+        
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        const previewDiv = document.getElementById('image_preview');
+        if (previewDiv) {
+            previewDiv.style.display = 'none';
+        }
+    }
 }
 </script>
 

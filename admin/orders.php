@@ -349,81 +349,139 @@ $delivered_orders = count(array_filter($grouped_orders, fn($o) => $o['status'] =
 $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 ?>
 
-<!-- Page Header -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-3">
-            <div>
-                <h2 class="mb-2 fw-bold">
-                    <i class="bi bi-cart-check me-2 text-primary"></i>
-                    <?php e('orders_title'); ?>
-                </h2>
-                <p class="text-muted mb-0">
-                    <i class="bi bi-info-circle me-1"></i>
-                    <?php echo $total_orders; ?> <?php echo $total_orders == 1 ? 'order' : 'orders'; ?> in total
-                </p>
-            </div>
+<style>
+.page-header-modern {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.order-stat-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.order-stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--stat-gradient);
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+.order-stat-card:hover::before {
+    opacity: 1;
+}
+
+.order-stat-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.order-stat-card.primary { --stat-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.order-stat-card.warning { --stat-gradient: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); }
+.order-stat-card.success { --stat-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.order-stat-card.info { --stat-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+
+.order-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.order-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 35px rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+</style>
+
+<!-- Modern Page Header -->
+<div class="page-header-modern">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                <i class="bi bi-cart-check me-3"></i><?php e('orders_title'); ?>
+            </h1>
+            <p class="lead mb-0" style="color: #64748b;">
+                <i class="bi bi-info-circle me-2"></i>
+                <?php echo $total_orders; ?> <?php echo $total_orders == 1 ? 'order' : 'orders'; ?> in total
+            </p>
         </div>
     </div>
 </div>
 
-<!-- Statistics Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-lg-3 col-md-6 col-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
+<!-- Modern Statistics Cards -->
+<div class="row g-4 mb-5">
+    <div class="col-lg-3 col-md-6">
+        <div class="order-stat-card primary h-100">
+            <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 rounded p-3 me-3">
-                        <i class="bi bi-cart-check fs-4 text-primary"></i>
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);">
+                        <i class="bi bi-cart-check fs-4 text-white"></i>
                     </div>
                     <div>
-                        <div class="text-muted small mb-1">Total Orders</div>
-                        <div class="h4 mb-0 fw-bold"><?php echo $total_orders; ?></div>
+                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Total Orders</div>
+                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"><?php echo $total_orders; ?></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-3 col-md-6 col-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
+    <div class="col-lg-3 col-md-6">
+        <div class="order-stat-card warning h-100">
+            <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                    <div class="bg-warning bg-opacity-10 rounded p-3 me-3">
-                        <i class="bi bi-clock-history fs-4 text-warning"></i>
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+                        <i class="bi bi-clock-history fs-4 text-white"></i>
                     </div>
                     <div>
-                        <div class="text-muted small mb-1">Pending</div>
-                        <div class="h4 mb-0 fw-bold"><?php echo $pending_orders; ?></div>
+                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Pending</div>
+                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"><?php echo $pending_orders; ?></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-3 col-md-6 col-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
+    <div class="col-lg-3 col-md-6">
+        <div class="order-stat-card success h-100">
+            <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                    <div class="bg-success bg-opacity-10 rounded p-3 me-3">
-                        <i class="bi bi-check-circle fs-4 text-success"></i>
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                        <i class="bi bi-check-circle fs-4 text-white"></i>
                     </div>
                     <div>
-                        <div class="text-muted small mb-1">Delivered</div>
-                        <div class="h4 mb-0 fw-bold"><?php echo $delivered_orders; ?></div>
+                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Delivered</div>
+                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"><?php echo $delivered_orders; ?></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-3 col-md-6 col-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
+    <div class="col-lg-3 col-md-6">
+        <div class="order-stat-card info h-100">
+            <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                    <div class="bg-info bg-opacity-10 rounded p-3 me-3">
-                        <i class="bi bi-currency-exchange fs-4 text-info"></i>
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);">
+                        <i class="bi bi-currency-exchange fs-4 text-white"></i>
                     </div>
                     <div>
-                        <div class="text-muted small mb-1">Total Revenue</div>
-                        <div class="h4 mb-0 fw-bold">Rs <?php echo number_format($total_revenue, 0); ?></div>
+                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Total Revenue</div>
+                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Rs <?php echo number_format($total_revenue, 0); ?></div>
                     </div>
                 </div>
             </div>
@@ -451,8 +509,8 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 <!-- Create Order Section -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-lg border-0">
-            <div class="card-header bg-gradient-primary text-white py-3">
+        <div class="card shadow-lg border-0" style="border-radius: 20px; overflow: hidden;">
+            <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-cart-plus-fill me-2"></i>
                     <?php e('create_order'); ?>
@@ -620,12 +678,12 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         }
                         ?>
                         <?php foreach ($grouped_orders as $grouped_order): ?>
-                            <div class="col-lg-6 col-xl-4 order-item" 
+                                <div class="col-lg-6 col-xl-4 order-item" 
                                  data-id="<?php echo $grouped_order['id']; ?>"
                                  data-order-number="<?php echo htmlspecialchars($grouped_order['order_number']); ?>"
                                  data-customer="<?php echo strtolower(htmlspecialchars($grouped_order['customer_name'])); ?>"
                                  data-status="<?php echo $grouped_order['status']; ?>">
-                                <div class="card border shadow-sm h-100 order-card" style="transition: all 0.3s ease;">
+                                <div class="card border-0 shadow-lg h-100 order-card" style="border-radius: 16px;">
                                     <div class="card-header bg-white border-bottom">
                                         <div class="d-flex justify-content-between align-items-start mb-2">
                                             <div>

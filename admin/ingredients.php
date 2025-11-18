@@ -212,39 +212,95 @@ include __DIR__ . '/../includes/header.php';
     <div class="modal-backdrop fade show"></div>
 <?php endif; ?>
 
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-3">
-            <div>
-                <h2 class="mb-1">
-                    <i class="bi bi-basket-fill me-2 text-primary"></i>
-                    Manage Ingredients
-                </h2>
-                <p class="text-muted mb-0"><?php echo count($ingredients); ?> <?php echo count($ingredients) == 1 ? 'ingredient' : 'ingredients'; ?></p>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <!-- Search Box -->
-                <div style="max-width: 300px;">
-                    <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0">
-                            <i class="bi bi-search text-muted"></i>
-                        </span>
-                        <input type="text" class="form-control border-start-0" id="searchIngredients" 
-                               placeholder="Search ingredients..." 
-                               autocomplete="off">
-                        <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchIngredients" style="display: none;">
-                            <i class="bi bi-x-lg"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="dropdown">
-                    <button class="btn btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-chevron-down fs-5"></i>
+<style>
+.page-header-modern {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.ingredient-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.ingredient-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    opacity: 0;
+    transition: opacity 0.4s;
+}
+
+.ingredient-card:hover::before {
+    opacity: 1;
+}
+
+.ingredient-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 12px 35px rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.search-modern {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.search-modern:focus-within {
+    border-color: rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.2);
+}
+</style>
+
+<div class="page-header-modern">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                <i class="bi bi-basket-fill me-3"></i>Manage Ingredients
+            </h1>
+            <p class="lead mb-0" style="color: #64748b;">
+                <i class="bi bi-info-circle me-2"></i>
+                <?php echo count($ingredients); ?> <?php echo count($ingredients) == 1 ? 'ingredient' : 'ingredients'; ?> in your inventory
+            </p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <!-- Search Box -->
+            <div class="search-modern" style="max-width: 350px;">
+                <div class="input-group border-0">
+                    <span class="input-group-text bg-transparent border-0" style="color: #6366f1;">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control border-0 bg-transparent" id="searchIngredients" 
+                           placeholder="Search ingredients..." 
+                           autocomplete="off"
+                           style="box-shadow: none;">
+                    <button class="btn btn-link border-0 text-muted p-2" type="button" id="clearSearchIngredients" style="display: none;">
+                        <i class="bi bi-x-lg"></i>
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2"></i>Delete All</a></li>
-                    </ul>
                 </div>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-outline-primary rounded-pill px-3" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px;">
+                    <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2 text-danger"></i>Delete All</a></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -268,19 +324,28 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Add/Edit Ingredient Form -->
 <?php if ($edit_ingredient): ?>
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <form method="POST" action="" class="row align-items-end">
+    <div class="card shadow-lg border-0 mb-4" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%); border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.1);">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-4" style="color: #1e293b;">
+                <i class="bi bi-pencil-square me-2" style="color: #10b981;"></i>Edit Ingredient
+            </h5>
+            <form method="POST" action="" class="row align-items-end g-3">
                 <input type="hidden" name="ingredient_id" value="<?php echo $edit_ingredient['id']; ?>">
-                <div class="col-md-4 mb-3 mb-md-0">
-                    <label for="name" class="form-label mb-1">Ingredient Name</label>
+                <div class="col-md-4">
+                    <label for="name" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                        <i class="bi bi-tag me-1" style="color: #10b981;"></i>Ingredient Name
+                    </label>
                     <input type="text" class="form-control" id="name" name="name" required
                            placeholder="Ingredient name (e.g., Chicken Breast, Rice)"
-                           value="<?php echo htmlspecialchars($edit_ingredient['name'] ?? ''); ?>">
+                           value="<?php echo htmlspecialchars($edit_ingredient['name'] ?? ''); ?>"
+                           style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
                 </div>
-                <div class="col-md-4 mb-3 mb-md-0">
-                    <label for="category_id" class="form-label mb-1">Category</label>
-                    <select class="form-select" id="category_id" name="category_id" required>
+                <div class="col-md-4">
+                    <label for="category_id" class="form-label fw-semibold mb-2" style="color: #1e293b;">
+                        <i class="bi bi-folder me-1" style="color: #10b981;"></i>Category
+                    </label>
+                    <select class="form-select" id="category_id" name="category_id" required
+                            style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem;">
                         <option value="">-- Select Category --</option>
                         <?php foreach ($categories as $category): ?>
                             <option value="<?php echo $category['id']; ?>" 
@@ -291,31 +356,38 @@ include __DIR__ . '/../includes/header.php';
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <button type="submit" class="btn btn-success w-100">
-                        <i class="bi bi-check-lg me-2"></i>Update
+                    <button type="submit" class="btn btn-success w-100 rounded-pill shadow-lg" style="padding: 0.75rem; font-weight: 600;">
+                        <i class="bi bi-check-lg me-2"></i>Update Ingredient
                     </button>
-                    <a href="ingredients.php" class="btn btn-secondary w-100 mt-2">Cancel</a>
+                    <a href="ingredients.php" class="btn btn-outline-secondary w-100 mt-2 rounded-pill">Cancel</a>
                 </div>
             </form>
         </div>
     </div>
 <?php else: ?>
-    <div class="mb-4">
-        <form method="POST" action="" class="d-flex gap-2">
-            <input type="text" class="form-control flex-grow-1" id="name" name="name" required
-                   placeholder="Ingredient name (e.g., Chicken Breast, Rice)">
-            <select class="form-select" id="category_id" name="category_id" required style="max-width: 200px;">
-                <option value="">-- Category --</option>
-                <?php foreach ($categories as $category): ?>
-                    <option value="<?php echo $category['id']; ?>">
-                        <?php echo htmlspecialchars($category['name']); ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <button type="submit" class="btn btn-success">
-                <i class="bi bi-plus-lg me-2"></i>Add
-            </button>
-        </form>
+    <div class="card shadow-lg border-0 mb-4" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%); border-radius: 20px; border: 1px solid rgba(16, 185, 129, 0.1);">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3" style="color: #1e293b;">
+                <i class="bi bi-plus-circle-fill me-2" style="color: #10b981;"></i>Add New Ingredient
+            </h5>
+            <form method="POST" action="" class="d-flex gap-3 flex-wrap">
+                <input type="text" class="form-control flex-grow-1" id="name" name="name" required
+                       placeholder="Ingredient name (e.g., Chicken Breast, Rice)"
+                       style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; max-width: 400px;">
+                <select class="form-select" id="category_id" name="category_id" required 
+                        style="border-radius: 12px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; max-width: 250px;">
+                    <option value="">-- Select Category --</option>
+                    <?php foreach ($categories as $category): ?>
+                        <option value="<?php echo $category['id']; ?>">
+                            <?php echo htmlspecialchars($category['name']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit" class="btn btn-success rounded-pill shadow-lg px-4" style="font-weight: 600; padding: 0.75rem 1.5rem;">
+                    <i class="bi bi-plus-lg me-2"></i>Add Ingredient
+                </button>
+            </form>
+        </div>
     </div>
 <?php endif; ?>
 
@@ -335,29 +407,35 @@ include __DIR__ . '/../includes/header.php';
                     <div class="col-md-6 col-lg-4 ingredient-item" 
                          data-name="<?php echo strtolower(htmlspecialchars($ingredient['name'])); ?>"
                          data-category="<?php echo strtolower(htmlspecialchars($ingredient['category_name'] ?? '')); ?>">
-                        <div class="card h-100 border-0 shadow-sm ingredient-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $ingredient['id']; ?>'">
-                            <div class="card-body d-flex align-items-center">
-                                <div class="flex-grow-1">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <i class="bi bi-basket me-2 text-success fs-5"></i>
-                                        <h6 class="card-title mb-0 fw-bold"><?php echo htmlspecialchars($ingredient['name']); ?></h6>
+                        <div class="card h-100 border-0 shadow-lg ingredient-card" style="cursor: pointer;" onclick="window.location.href='?edit=<?php echo $ingredient['id']; ?>'">
+                            <div class="card-body p-4">
+                                <div class="d-flex align-items-start justify-content-between mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                                            <i class="bi bi-basket text-white fs-5"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="card-title mb-1 fw-bold" style="color: #1e293b; font-size: 1.1rem;">
+                                                <?php echo htmlspecialchars($ingredient['name']); ?>
+                                            </h6>
+                                            <span class="badge rounded-pill px-3 py-1" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 600;">
+                                                <?php echo htmlspecialchars($ingredient['category_name']); ?>
+                                            </span>
+                                        </div>
                                     </div>
-                                    <p class="text-muted small mb-0">
-                                        <span class="badge bg-primary">
-                                            <?php echo htmlspecialchars($ingredient['category_name']); ?>
-                                        </span>
-                                    </p>
                                 </div>
-                                <div class="d-flex gap-1 ms-2">
-                                    <button class="btn btn-sm btn-primary rounded-circle p-2" 
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <button class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" 
                                             onclick="event.stopPropagation(); window.location.href='?edit=<?php echo $ingredient['id']; ?>'"
-                                            title="Edit Ingredient">
-                                        <i class="bi bi-pencil"></i>
+                                            title="Edit Ingredient"
+                                            style="font-weight: 600;">
+                                        <i class="bi bi-pencil me-1"></i>Edit
                                     </button>
-                                    <button class="btn btn-sm btn-danger rounded-circle p-2" 
+                                    <button class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm" 
                                             onclick="event.stopPropagation(); if(confirm('Delete this ingredient?')) window.location.href='?delete=<?php echo $ingredient['id']; ?>'"
-                                            title="Delete">
-                                        <i class="bi bi-trash"></i>
+                                            title="Delete"
+                                            style="font-weight: 600;">
+                                        <i class="bi bi-trash me-1"></i>Delete
                                     </button>
                                 </div>
                             </div>
