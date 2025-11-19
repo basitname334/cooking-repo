@@ -87,8 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     $customer_id = intval($_POST['customer_id'] ?? 0);
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_cell = trim($_POST['customer_cell'] ?? '');
-    $order_date = trim($_POST['order_date'] ?? '');
-    $order_time = trim($_POST['order_time'] ?? '');
     $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
     $shift = trim($_POST['shift'] ?? '');
     $delivery_date = trim($_POST['delivery_date'] ?? '');
@@ -98,14 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     // Translate notes to Urdu if current language is Urdu
     $notes = translateForDatabase($notes);
     
-    // Combine order date and time - default to current datetime if not provided
-    $order_datetime = null;
-    if (!empty($order_date) && !empty($order_time)) {
-        $order_datetime = $order_date . ' ' . $order_time . ':00';
-    } else {
-        // If order_date or order_time is missing, use current datetime
-        $order_datetime = date('Y-m-d H:i:s');
-    }
+    // Use current datetime for order_date
+    $order_datetime = date('Y-m-d H:i:s');
     
     // Get dishes array - can be single or multiple
     $dishes_data = [];
@@ -163,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     
     if ($use_new_form) {
         // New form validation
-        if (empty($customer_name) || empty($customer_cell) || empty($order_date) || empty($order_time) || 
+        if (empty($customer_name) || empty($customer_cell) || 
             $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
             $error = 'Please fill all required fields in Step 1.';
         } elseif (empty($dishes_data)) {
@@ -1198,16 +1190,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                        value="<?php echo htmlspecialchars($_POST['customer_cell'] ?? ''); ?>" required>
                             </div>
                             <div class="col-md-6">
-                                <label for="order_date" class="form-label fw-semibold">
-                                    <i class="bi bi-calendar me-1 text-primary"></i>
-                                    Date & Time <span class="text-danger">*</span>
-                                </label>
-                                <input type="date" class="form-control mb-2" id="order_date" name="order_date" 
-                                       value="<?php echo htmlspecialchars($_POST['order_date'] ?? date('Y-m-d')); ?>" required>
-                                <input type="time" class="form-control" id="order_time" name="order_time" 
-                                       value="<?php echo htmlspecialchars($_POST['order_time'] ?? date('H:i')); ?>" required>
-                            </div>
-                            <div class="col-md-6">
                                 <label for="number_of_persons" class="form-label fw-semibold">
                                     <i class="bi bi-people me-1 text-primary"></i>
                                     Number of Persons <span class="text-danger">*</span>
@@ -2144,8 +2126,6 @@ function updateReview() {
     // Update customer information - check for new form fields first
     const customerName = document.getElementById('customer_name');
     const customerCell = document.getElementById('customer_cell');
-    const orderDate = document.getElementById('order_date');
-    const orderTime = document.getElementById('order_time');
     const numberOfPersons = document.getElementById('number_of_persons');
     const shift = document.getElementById('shift');
     const deliveryDate = document.getElementById('delivery_date');
@@ -2158,7 +2138,6 @@ function updateReview() {
             <div>
                 <strong>Customer Name:</strong> ${escapeHtml(customerName.value)}<br>
                 <strong>Cell No:</strong> ${escapeHtml(customerCell ? customerCell.value : '')}<br>
-                <strong>Date & Time:</strong> ${escapeHtml(orderDate ? orderDate.value : '')} ${escapeHtml(orderTime ? orderTime.value : '')}<br>
                 <strong>Number of Persons:</strong> ${escapeHtml(numberOfPersons ? numberOfPersons.value : '')}<br>
                 <strong>Delivery Date:</strong> ${escapeHtml(deliveryDate ? deliveryDate.value : '')}<br>
                 <strong>شفٹ:</strong> ${escapeHtml(shift ? shift.options[shift.selectedIndex].text : '')}<br>
@@ -2378,14 +2357,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Listen for new form field changes
     const customerNameField = document.getElementById('customer_name');
     const customerCellField = document.getElementById('customer_cell');
-    const orderDate = document.getElementById('order_date');
-    const orderTime = document.getElementById('order_time');
     const numberOfPersons = document.getElementById('number_of_persons');
     const shift = document.getElementById('shift');
     const deliveryDate = document.getElementById('delivery_date');
     const deliveryTime = document.getElementById('delivery_time');
     
-    [customerNameField, customerCellField, orderDate, orderTime, numberOfPersons, shift, deliveryDate, deliveryTime].forEach(function(field) {
+    [customerNameField, customerCellField, numberOfPersons, shift, deliveryDate, deliveryTime].forEach(function(field) {
         if (field) {
             field.addEventListener('change', function() {
                 if (currentStep === 3) {
