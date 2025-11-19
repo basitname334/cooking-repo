@@ -1723,21 +1723,32 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             <div class="fw-semibold mb-1" style="font-size: 0.75rem;">
                                                 <i class="bi bi-egg-fried text-success me-1"></i>Dishes (<?php echo count($grouped_order['dishes']); ?>)
                                             </div>
-                                            <div style="max-height: 80px; overflow-y: auto;">
-                                                <?php foreach (array_slice($grouped_order['dishes'], 0, 3) as $dish): ?>
-                                                    <div class="mb-1">
-                                                        <small class="fw-semibold d-block" style="font-size: 0.75rem;"><?php echo htmlspecialchars($dish['dish_name']); ?></small>
-                                                        <small class="text-muted" style="font-size: 0.7rem;">
-                                                            Qty: <?php echo number_format($dish['quantity'], 2); ?>
-                                                            <?php if ($dish['total_amount'] > 0): ?>
-                                                                - Rs <?php echo number_format($dish['total_amount'], 2); ?>
-                                                            <?php endif; ?>
-                                                        </small>
-                                                    </div>
-                                                <?php endforeach; ?>
-                                                <?php if (count($grouped_order['dishes']) > 3): ?>
-                                                    <small class="text-muted" style="font-size: 0.7rem;">+<?php echo count($grouped_order['dishes']) - 3; ?> more</small>
-                                                <?php endif; ?>
+                                            <div>
+                                                <?php 
+                                                $dish_names = [];
+                                                $total_quantity = 0;
+                                                $dish_count = 0;
+                                                $max_display = 3;
+                                                foreach ($grouped_order['dishes'] as $dish): 
+                                                    $dish_count++;
+                                                    if ($dish_count <= $max_display) {
+                                                        $dish_names[] = htmlspecialchars($dish['dish_name']);
+                                                        $total_quantity += floatval($dish['quantity']);
+                                                    }
+                                                endforeach; 
+                                                ?>
+                                                <small class="fw-semibold d-block" style="font-size: 0.75rem; line-height: 1.4;">
+                                                    <?php echo implode(', ', $dish_names); ?>
+                                                    <?php if (count($grouped_order['dishes']) > $max_display): ?>
+                                                        <span class="text-muted">+<?php echo count($grouped_order['dishes']) - $max_display; ?> more</span>
+                                                    <?php endif; ?>
+                                                </small>
+                                                <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                                    Total Qty: <?php echo number_format($total_quantity, 2); ?>
+                                                    <?php if ($grouped_order['total_amount'] > 0): ?>
+                                                        - Total: Rs <?php echo number_format($grouped_order['total_amount'], 2); ?>
+                                                    <?php endif; ?>
+                                                </small>
                                             </div>
                                         </div>
                                         
@@ -3161,111 +3172,90 @@ function printIngredients(orderNumberOrId) {
         ingredientsHtml += '<tr><td colspan="2" style="padding: 8px 10px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 13px; line-height: 1.5;">' + translations.no_ingredients_found + '</td></tr>';
         ingredientsHtml += '</tbody></table>';
     } else {
-        // Display each dish with its categories and ingredients
-        // Sort dishes by name for consistent display
-        const sortedDishKeys = dishKeys.sort((a, b) => {
-            const dishA = ingredientsByDish[a];
-            const dishB = ingredientsByDish[b];
-            return (dishA.dish_name || '').localeCompare(dishB.dish_name || '');
+        // Collect all ingredients from all dishes into a single combined list
+        // No dish or category headers - just a clean aligned grid
+        const allIngredientsMap = {};
+        
+        // Loop through all dishes and collect ingredients
+        dishKeys.forEach(function(dishKey) {
+            const dish = ingredientsByDish[dishKey];
+            const categoryKeys = Object.keys(dish.categories);
+            
+            categoryKeys.forEach(function(categoryId) {
+                const category = dish.categories[categoryId];
+                const categoryIngredients = Object.values(category.ingredients);
+                
+                // Add each ingredient to the combined map
+                categoryIngredients.forEach(function(ing) {
+                    const ingredientId = ing.ingredient_id || 0;
+                    const ingredientName = ing.ingredient_name || 'N/A';
+                    const key = ingredientId > 0 ? ingredientId : ingredientName.toLowerCase().trim();
+                    
+                    // Combine ingredients with same name/ID
+                    if (allIngredientsMap[key]) {
+                        // Add quantities if same ingredient
+                        allIngredientsMap[key].quantity += parseFloat(ing.quantity) || 0;
+                    } else {
+                        // Add new ingredient
+                        allIngredientsMap[key] = {
+                            ingredient_id: ingredientId,
+                            ingredient_name: ingredientName,
+                            quantity: parseFloat(ing.quantity) || 0,
+                            unit: ing.unit || ''
+                        };
+                    }
+                });
+            });
         });
         
-        sortedDishKeys.forEach(function(dishKey) {
-            const dish = ingredientsByDish[dishKey];
-            
-            // Dish header - compact
-            ingredientsHtml += '<div class="dish-section" style="margin-top: 12px; margin-bottom: 8px; page-break-inside: avoid; border-bottom: 2px solid #10b981; padding-bottom: 5px;">';
-            ingredientsHtml += '<h2 class="dish-header" style="font-size: 16px; font-weight: bold; color: #ffffff; padding: 6px 12px; background-color: #10b981; border-radius: 4px; font-family: ' + fontFamily + '; text-align: right; margin: 0 0 8px 0;">';
-            ingredientsHtml += '🍽️ ' + dish.dish_name;
-            if (dish.quantity && dish.quantity > 1) {
-                ingredientsHtml += ' (x' + dish.quantity + ')';
-            }
-            ingredientsHtml += '</h2>';
-            ingredientsHtml += '</div>';
-            
-            // Get all categories for this dish
-            const categoryKeys = Object.keys(dish.categories);
-            if (categoryKeys.length === 0) {
-                ingredientsHtml += '<p style="text-align: center; color: #64748b; font-size: 14px; margin: 10px 0; font-family: ' + fontFamily + ';">' + translations.no_ingredients_found + '</p>';
-            } else {
-                // Organize categories for this dish
-                const allCategories = [];
-                categoryKeys.forEach(function(categoryId) {
-                    const category = dish.categories[categoryId];
-                    // Get all ingredients from this category - ensure all are included
-                    const categoryIngredients = Object.values(category.ingredients);
-                    if (categoryIngredients.length > 0) {
-                        allCategories.push({
-                            id: categoryId,
-                            name: category.category_name || 'بغیر زمرہ',
-                            ingredients: categoryIngredients
-                        });
-                    }
-                });
-                
-                // Sort categories by name
-                allCategories.sort((a, b) => {
-                    return (a.name || '').localeCompare(b.name || '');
-                });
-                
-                // Display each category with its ingredients - show all ingredients completely
-                allCategories.forEach(function(category) {
-                    // Category header - compact
-                    ingredientsHtml += '<div class="category-section" style="margin-top: 10px; margin-bottom: 6px; page-break-inside: avoid;">';
-                    ingredientsHtml += '<h3 class="category-header" style="font-size: 14px; font-weight: bold; color: #ffffff; padding: 5px 10px; background-color: #8b5cf6; border-radius: 4px; font-family: ' + fontFamily + '; text-align: right; margin: 0 0 6px 0;">';
-                    ingredientsHtml += '📋 ' + category.name;
-                    ingredientsHtml += '</h3>';
-                    ingredientsHtml += '</div>';
-                    
-                    // Sort ingredients within category by name - ensure all ingredients are shown
-                    const sortedIngredients = [...category.ingredients].sort((a, b) => {
-                        const nameA = a.ingredient_name || '';
-                        const nameB = b.ingredient_name || '';
-                        return nameA.localeCompare(nameB);
-                    });
-                    
-                    if (sortedIngredients.length > 0) {
-                        // Use 6-column layout for more compact display - show all ingredients completely
-                        ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 8px; page-break-inside: avoid;">';
-                        
-                        sortedIngredients.forEach(function(ing) {
-                            let quantity = parseFloat(ing.quantity) || 0;
-                            let unit = ing.unit || '';
-                            
-                            // Convert large gram values to kg for better readability
-                            if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                                quantity = (quantity / 1000).toFixed(2);
-                                unit = 'kg';
-                            } else {
-                                // Format quantity based on unit type
-                                const unitLower = unit.toLowerCase();
-                                // For countable items (pieces, piece, serving, servings, etc.), show as whole number
-                                if (unitLower === 'piece' || unitLower === 'pieces' || 
-                                    unitLower === 'serving' || unitLower === 'servings' ||
-                                    unitLower === 'portion' || unitLower === 'portions' ||
-                                    unitLower === 'item' || unitLower === 'items') {
-                                    quantity = Math.round(quantity).toString();
-                                } else {
-                                    // For weight/volume units, show 2 decimal places
-                                    quantity = quantity.toFixed(2);
-                                }
-                            }
-                            
-                            const quantityUnit = quantity + (unit ? ' ' + unit : '');
-                            const ingredientName = ing.ingredient_name || 'N/A';
-                            
-                            // Format for 6-column layout: Compact display
-                            // Show ingredient completely with all details in compact format
-                            ingredientsHtml += '<div style="padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 3px; background-color: #ffffff; page-break-inside: avoid;">';
-                            ingredientsHtml += '<div style="font-size: 11px; font-weight: bold; color: #1e293b; margin-bottom: 2px; font-family: ' + fontFamily + '; line-height: 1.3;">' + ingredientName + '</div>';
-                            ingredientsHtml += '<div style="font-size: 10px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + quantityUnit + '</div>';
-                            ingredientsHtml += '</div>';
-                        });
-                        
-                        ingredientsHtml += '</div>';
-                    }
-                });
-            }
+        // Convert map to array and sort alphabetically by name
+        const allIngredients = Object.values(allIngredientsMap).sort((a, b) => {
+            const nameA = a.ingredient_name || '';
+            const nameB = b.ingredient_name || '';
+            return nameA.localeCompare(nameB);
         });
+        
+        if (allIngredients.length > 0) {
+            // Display all ingredients in a single 6-column grid - clean and aligned
+            ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 8px; page-break-inside: avoid;">';
+            
+            allIngredients.forEach(function(ing) {
+                let quantity = parseFloat(ing.quantity) || 0;
+                let unit = ing.unit || '';
+                
+                // Convert large gram values to kg for better readability
+                if (unit.toLowerCase() === 'g' && quantity >= 1000) {
+                    quantity = (quantity / 1000).toFixed(2);
+                    unit = 'kg';
+                } else {
+                    // Format quantity based on unit type
+                    const unitLower = unit.toLowerCase();
+                    // For countable items (pieces, piece, serving, servings, etc.), show as whole number
+                    if (unitLower === 'piece' || unitLower === 'pieces' || 
+                        unitLower === 'serving' || unitLower === 'servings' ||
+                        unitLower === 'portion' || unitLower === 'portions' ||
+                        unitLower === 'item' || unitLower === 'items') {
+                        quantity = Math.round(quantity).toString();
+                    } else {
+                        // For weight/volume units, show 2 decimal places
+                        quantity = quantity.toFixed(2);
+                    }
+                }
+                
+                const quantityUnit = quantity + (unit ? ' ' + unit : '');
+                const ingredientName = ing.ingredient_name || 'N/A';
+                
+                // Format for 6-column layout: Clean aligned display
+                ingredientsHtml += '<div style="padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 3px; background-color: #ffffff; page-break-inside: avoid;">';
+                ingredientsHtml += '<div style="font-size: 11px; font-weight: bold; color: #1e293b; margin-bottom: 2px; font-family: ' + fontFamily + '; line-height: 1.3;">' + ingredientName + '</div>';
+                ingredientsHtml += '<div style="font-size: 10px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + quantityUnit + '</div>';
+                ingredientsHtml += '</div>';
+            });
+            
+            ingredientsHtml += '</div>';
+        } else {
+            ingredientsHtml += '<p style="text-align: center; color: #64748b; font-size: 14px; margin: 10px 0; font-family: ' + fontFamily + ';">' + translations.no_ingredients_found + '</p>';
+        }
     }
     
     ingredientsHtml += '</div>';
