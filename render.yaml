@@ -17,7 +17,9 @@ services:
         sync: false
       - key: DB_PORT
         value: "3306"
-    healthCheckPath: /
+      - key: DB_SSL_REQUIRED
+        sync: false
+    healthCheckPath: /health.php
 
 databases:
   # MySQL Database

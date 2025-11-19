@@ -52,7 +52,7 @@ function getDBConnection() {
     }
     
     // Check connection
-    if ($conn->connect_error) {
+    if (!$conn || $conn->connect_error) {
         // If connection fails, try to create database (only in local development)
         if (DB_HOST === 'localhost' || DB_HOST === '127.0.0.1') {
             $temp_conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, '', (int)DB_PORT);
