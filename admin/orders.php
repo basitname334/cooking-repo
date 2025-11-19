@@ -1161,15 +1161,15 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-person-fill me-2 text-primary"></i>
-                                Step 1: Customer Information
+                                مرحلہ 1: گاہک کی معلومات
                             </h4>
-                            <p class="text-muted">Fill in the customer details and order information</p>
+                            <p class="text-muted">گاہک کی تفصیلات اور آرڈر کی معلومات درج کریں</p>
                         </div>
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label for="customer_name" class="form-label fw-semibold">
                                     <i class="bi bi-person me-1 text-primary"></i>
-                                    Customer Name <span class="text-danger">*</span>
+                                    گاہک کا نام <span class="text-danger">*</span>
                                 </label>
                                 <input type="text" class="form-control form-control-lg" id="customer_name" name="customer_name" 
                                        list="customer_names_list" autocomplete="off"
@@ -1184,13 +1184,13 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                     <?php endforeach; ?>
                                 </datalist>
                                 <small class="text-muted">
-                                    <i class="bi bi-info-circle me-1"></i>Start typing to see previously added customers
+                                    <i class="bi bi-info-circle me-1"></i>پہلے شامل کیے گئے گاہکوں کو دیکھنے کے لیے ٹائپ کرنا شروع کریں
                                 </small>
                             </div>
                             <div class="col-md-6">
                                 <label for="customer_cell" class="form-label fw-semibold">
                                     <i class="bi bi-telephone me-1 text-primary"></i>
-                                    Customer Cell No <span class="text-danger">*</span>
+                                    گاہک کا نمبر <span class="text-danger">*</span>
                                 </label>
                                 <input type="tel" class="form-control form-control-lg" id="customer_cell" name="customer_cell" 
                                        value="<?php echo htmlspecialchars($_POST['customer_cell'] ?? ''); ?>" required>
@@ -1198,7 +1198,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="col-md-6">
                                 <label for="number_of_persons" class="form-label fw-semibold">
                                     <i class="bi bi-people me-1 text-primary"></i>
-                                    Number of Persons <span class="text-danger">*</span>
+                                    افراد کی تعداد <span class="text-danger">*</span>
                                 </label>
                                 <input type="number" class="form-control form-control-lg" id="number_of_persons" name="number_of_persons" 
                                        value="<?php echo htmlspecialchars($_POST['number_of_persons'] ?? ''); ?>" required min="1">
@@ -1206,7 +1206,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="col-md-6">
                                 <label for="delivery_date" class="form-label fw-semibold">
                                     <i class="bi bi-calendar-check me-1 text-primary"></i>
-                                    Delivery Date <span class="text-danger">*</span>
+                                    ڈیلیوری تاریخ <span class="text-danger">*</span>
                                 </label>
                                 <input type="date" class="form-control form-control-lg" id="delivery_date" name="delivery_date" 
                                        value="<?php echo htmlspecialchars($_POST['delivery_date'] ?? ''); ?>" required>
@@ -1225,7 +1225,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="col-md-6">
                                 <label for="delivery_time" class="form-label fw-semibold">
                                     <i class="bi bi-clock-history me-1 text-primary"></i>
-                                    Delivery Time <span class="text-danger">*</span>
+                                    ڈیلیوری وقت <span class="text-danger">*</span>
                                 </label>
                                 <input type="time" class="form-control form-control-lg" id="delivery_time" name="delivery_time" 
                                        value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>" required>
@@ -1233,7 +1233,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         </div>
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(2)">
-                                Next: Add Dishes <i class="bi bi-arrow-right ms-2"></i>
+                                اگلا: ڈشز شامل کریں <i class="bi bi-arrow-right ms-2"></i>
                             </button>
                         </div>
                     </div>
@@ -1243,9 +1243,9 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-egg-fried me-2 text-primary"></i>
-                                Step 2: Add Dishes
+                                مرحلہ 2: ڈشز شامل کریں
                             </h4>
-                            <p class="text-muted">Add dishes to the order. You can add multiple dishes.</p>
+                            <p class="text-muted">آرڈر میں ڈشز شامل کریں۔ آپ متعدد ڈشز شامل کر سکتے ہیں۔</p>
                         </div>
                         
                         <!-- Dish Selection Tabs -->
@@ -1471,24 +1471,24 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-check-circle me-2 text-success"></i>
-                                Step 3: Review & Confirm
+                                مرحلہ 3: جائزہ لیں اور تصدیق کریں
                             </h4>
-                            <p class="text-muted">Review your order details before submitting</p>
+                            <p class="text-muted">جمع کرانے سے پہلے اپنے آرڈر کی تفصیلات کا جائزہ لیں</p>
                         </div>
                         
                         <div class="order-review-card p-4 mb-4" style="background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
                             <h5 class="fw-bold mb-3">
-                                <i class="bi bi-person-fill me-2 text-primary"></i>Customer Information
+                                <i class="bi bi-person-fill me-2 text-primary"></i>گاہک کی معلومات
                             </h5>
                             <div id="reviewCustomer" class="mb-4">
-                                <p class="text-muted mb-0">Select a customer in Step 1</p>
+                                <p class="text-muted mb-0">مرحلہ 1 میں گاہک منتخب کریں</p>
                             </div>
                             
                             <h5 class="fw-bold mb-3">
-                                <i class="bi bi-egg-fried me-2 text-primary"></i>Order Items
+                                <i class="bi bi-egg-fried me-2 text-primary"></i>آرڈر کی اشیاء
                             </h5>
                             <div id="reviewDishes" class="mb-4">
-                                <p class="text-muted mb-0">Add dishes in Step 2</p>
+                                <p class="text-muted mb-0">مرحلہ 2 میں ڈشز شامل کریں</p>
                             </div>
                             
                             <div class="mb-3">
@@ -1502,7 +1502,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             
                             <div class="order-total-section p-3 mt-4" style="background: white; border-radius: 8px; border: 2px solid #667eea;">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <h5 class="mb-0 fw-bold">Total Amount:</h5>
+                                    <h5 class="mb-0 fw-bold">کل رقم:</h5>
                                     <h4 class="mb-0 fw-bold text-primary" id="reviewTotal">Rs 0.00</h4>
                                 </div>
                             </div>
@@ -1510,7 +1510,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(2)">
-                                <i class="bi bi-arrow-left me-2"></i> Previous
+                                <i class="bi bi-arrow-left me-2"></i> پچھلا
                             </button>
                             <button type="submit" class="btn btn-success btn-lg">
                                 <i class="bi bi-check-lg me-2"></i> <?php e('create_order'); ?>
