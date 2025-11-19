@@ -448,7 +448,7 @@ if ($result && $result->num_rows > 0) {
 
 // Get all ingredients for extra ingredients section
 $ingredients = [];
-$ingredients_result = $conn->query("SELECT i.id, i.name, i.unit, c.name as category_name 
+$ingredients_result = $conn->query("SELECT i.id, i.name, i.unit, i.category_id, c.name as category_name 
     FROM ingredients i 
     LEFT JOIN categories c ON i.category_id = c.id 
     ORDER BY i.name");
@@ -497,7 +497,7 @@ $orders = [];
 // Show all orders - removed WHERE clause to ensure all orders are displayed
 // Simplified query to ensure it works
 $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.total_amount, 
-    o.status, o.notes, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
+    o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
     o.delivery_time, o.shift, o.number_of_persons,
     o.customer_name as order_customer_name,
     o.customer_cell as order_customer_cell,
@@ -668,6 +668,7 @@ if ($result && $result->num_rows > 0) {
                 'number_of_persons' => $order['number_of_persons'] ?? 0,
                 'status' => $order['status'],
                 'notes' => $order['notes'],
+                'extra_ingredients' => $order['extra_ingredients'] ?? null,
                 'id' => $order['id'], // Use first order ID for reference
                 'total_amount' => 0,
                 'dishes' => []
@@ -1225,12 +1226,12 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="col-md-6">
                                 <label for="shift" class="form-label fw-semibold">
                                     <i class="bi bi-clock me-1 text-primary"></i>
-                                    Shift <span class="text-danger">*</span>
+                                    شفٹ <span class="text-danger">*</span>
                                 </label>
                                 <select class="form-select form-select-lg" id="shift" name="shift" required>
-                                    <option value="">-- Select Shift --</option>
-                                    <option value="afternoon" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'afternoon') ? 'selected' : ''; ?>>Afternoon</option>
-                                    <option value="evening" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'evening') ? 'selected' : ''; ?>>Evening</option>
+                                    <option value="">-- شفٹ منتخب کریں --</option>
+                                    <option value="afternoon" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'afternoon') ? 'selected' : ''; ?>>دوپہر</option>
+                                    <option value="evening" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'evening') ? 'selected' : ''; ?>>شام</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
@@ -1368,23 +1369,23 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <label class="form-label fw-bold mb-0">
                                     <i class="bi bi-plus-circle me-2 text-success"></i>
-                                    Extra Ingredients (Optional)
+                                    <?php e('extra_ingredients'); ?> (<?php e('optional'); ?>)
                                 </label>
                                 <button type="button" class="btn btn-sm btn-success" id="addExtraIngredientBtn">
-                                    <i class="bi bi-plus-circle me-1"></i> Add Extra Ingredient
+                                    <i class="bi bi-plus-circle me-1"></i> <?php e('add'); ?> <?php e('extra_ingredients'); ?>
                                 </button>
                             </div>
-                            <p class="text-muted small mb-3">Add additional ingredients that are not part of the selected dishes.</p>
+                            <p class="text-muted small mb-3"><?php echo t('add_additional_ingredients_not_in_dishes'); ?></p>
                             <div id="extraIngredientsContainer">
                                 <!-- First extra ingredient row -->
                                 <div class="extra-ingredient-row mb-3 p-3 border rounded" data-row="0" style="display: none;">
                                     <div class="row g-3">
                                         <div class="col-md-4">
                                             <label class="form-label fw-semibold small">
-                                                Ingredient <span class="text-danger">*</span>
+                                                <?php e('ingredient_name'); ?> <span class="text-danger">*</span>
                                             </label>
                                             <select class="form-select extra-ingredient-select" name="extra_ingredients[0][ingredient_id]">
-                                                <option value="">Select Ingredient</option>
+                                                <option value=""><?php e('select_ingredient'); ?></option>
                                                 <?php foreach ($ingredients as $ingredient): ?>
                                                     <option value="<?php echo $ingredient['id']; ?>">
                                                         <?php echo htmlspecialchars($ingredient['name']); ?> 
@@ -1397,7 +1398,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-semibold small">
-                                                Quantity <span class="text-danger">*</span>
+                                                <?php e('quantity'); ?> <span class="text-danger">*</span>
                                             </label>
                                             <input type="number" class="form-control extra-ingredient-quantity" 
                                                    name="extra_ingredients[0][quantity]" 
@@ -1405,16 +1406,16 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-semibold small">
-                                                Unit
+                                                <?php e('unit_label'); ?>
                                             </label>
                                             <input type="text" class="form-control extra-ingredient-unit" 
                                                    name="extra_ingredients[0][unit]" 
-                                                   placeholder="kg, g, pieces, etc.">
+                                                   placeholder="<?php echo t('unit_placeholder', 'kg, g, pieces, etc.'); ?>">
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small d-block">&nbsp;</label>
                                             <button type="button" class="btn btn-sm btn-danger remove-extra-ingredient-btn">
-                                                <i class="bi bi-trash"></i> Remove
+                                                <i class="bi bi-trash"></i> <?php e('delete'); ?>
                                             </button>
                                         </div>
                                     </div>
@@ -1427,14 +1428,14 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <label class="form-label fw-bold mb-0">
                                     <i class="bi bi-box-seam me-2 text-info"></i>
-                                    Additional Items (Optional)
+                                    اضافی اشیاء (اختیاری)
                                 </label>
                             </div>
-                            <p class="text-muted small mb-3">Add additional items that may be needed for the order.</p>
+                            <p class="text-muted small mb-3">آرڈر کے لیے ضروری اضافی اشیاء شامل کریں۔</p>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">
-                                        Cloth Malmal
+                                        کپڑا ململ
                                     </label>
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[cloth_malmal]" 
@@ -1442,7 +1443,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">
-                                        Match Box
+                                        میچ باکس
                                     </label>
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[match_box]" 
@@ -1450,7 +1451,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">
-                                        Surrf
+                                        سرف
                                     </label>
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[surrf]" 
@@ -1458,7 +1459,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">
-                                        Sponjis (Iron)
+                                        اسپنجز (آئرن)
                                     </label>
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[sponjis_iron]" 
@@ -2062,7 +2063,7 @@ function validateCurrentStep() {
             return false;
         }
         if (shift && !shift.value) {
-            alert('Please select shift (afternoon or evening)');
+            alert('براہ کرم شفٹ منتخب کریں (دوپہر یا شام)');
             shift.focus();
             return false;
         }
@@ -2160,7 +2161,7 @@ function updateReview() {
                 <strong>Date & Time:</strong> ${escapeHtml(orderDate ? orderDate.value : '')} ${escapeHtml(orderTime ? orderTime.value : '')}<br>
                 <strong>Number of Persons:</strong> ${escapeHtml(numberOfPersons ? numberOfPersons.value : '')}<br>
                 <strong>Delivery Date:</strong> ${escapeHtml(deliveryDate ? deliveryDate.value : '')}<br>
-                <strong>Shift:</strong> ${escapeHtml(shift ? shift.options[shift.selectedIndex].text : '')}<br>
+                <strong>شفٹ:</strong> ${escapeHtml(shift ? shift.options[shift.selectedIndex].text : '')}<br>
                 <strong>Delivery Time:</strong> ${escapeHtml(deliveryTime ? deliveryTime.value : '')}
             </div>
         `;
@@ -2229,9 +2230,20 @@ function updateReview() {
     const extraIngredientRows = document.querySelectorAll('.extra-ingredient-row[style*="block"], .extra-ingredient-row:not([style*="none"])');
     const ingredientsData = typeof window.ingredientsData !== 'undefined' ? window.ingredientsData : [];
     
+    // Get translations from PHP for review section
+    const reviewTranslations = typeof window.reviewTranslations !== 'undefined' ? window.reviewTranslations : {
+        extra_ingredients: '<?php echo addslashes(t("extra_ingredients")); ?>',
+        additional_items: '<?php echo addslashes(t("additional_items")); ?>',
+        quantity: '<?php echo addslashes(t("quantity")); ?>',
+        cloth_malmal: '<?php echo addslashes(t("cloth_malmal")); ?>',
+        match_box: '<?php echo addslashes(t("match_box")); ?>',
+        surrf: '<?php echo addslashes(t("surrf")); ?>',
+        sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>'
+    };
+    
     if (extraIngredientRows.length > 0 && ingredientsData.length > 0) {
         let hasExtraIngredients = false;
-        let extraIngredientsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-success"><i class="bi bi-plus-circle me-1"></i>Extra Ingredients:</strong></div>';
+        let extraIngredientsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-success"><i class="bi bi-plus-circle me-1"></i>' + reviewTranslations.extra_ingredients + ':</strong></div>';
         
         extraIngredientRows.forEach(function(row) {
             const ingredientSelect = row.querySelector('.extra-ingredient-select');
@@ -2251,7 +2263,7 @@ function updateReview() {
                         <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
                             <div>
                                 <strong class="text-success">${escapeHtml(ingredient.name)}</strong><br>
-                                <small class="text-muted">Quantity: ${quantity}${unitText}</small>
+                                <small class="text-muted">${reviewTranslations.quantity}: ${quantity}${unitText}</small>
                             </div>
                         </div>
                     `;
@@ -2273,7 +2285,7 @@ function updateReview() {
         const quantity = parseInt(input.value) || 0;
         if (quantity > 0) {
             if (!hasAdditionalItems) {
-                additionalItemsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-info"><i class="bi bi-box-seam me-1"></i>Additional Items:</strong></div>';
+                additionalItemsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-info"><i class="bi bi-box-seam me-1"></i>' + reviewTranslations.additional_items + ':</strong></div>';
                 hasAdditionalItems = true;
             }
             
@@ -2283,10 +2295,10 @@ function updateReview() {
             if (itemName) {
                 const key = itemName[1];
                 const nameMap = {
-                    'cloth_malmal': 'Cloth Malmal',
-                    'match_box': 'Match Box',
-                    'surrf': 'Surrf',
-                    'sponjis_iron': 'Sponjis (Iron)'
+                    'cloth_malmal': reviewTranslations.cloth_malmal || 'کپڑا ململ',
+                    'match_box': reviewTranslations.match_box || 'میچ باکس',
+                    'surrf': reviewTranslations.surrf || 'سرف',
+                    'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)'
                 };
                 displayName = nameMap[key] || key;
             }
@@ -2295,7 +2307,7 @@ function updateReview() {
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
                     <div>
                         <strong class="text-info">${escapeHtml(displayName)}</strong><br>
-                        <small class="text-muted">Quantity: ${quantity}</small>
+                        <small class="text-muted">${reviewTranslations.quantity}: ${quantity}</small>
                     </div>
                 </div>
             `;
@@ -2419,6 +2431,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Get ingredients data for extra ingredients
     const ingredientsData = <?php echo json_encode($ingredients); ?>;
     window.ingredientsData = ingredientsData; // Make it globally available for review function
+    
+    // Make review translations globally available
+    window.reviewTranslations = {
+        extra_ingredients: '<?php echo addslashes(t("extra_ingredients")); ?>',
+        additional_items: '<?php echo addslashes(t("additional_items")); ?>',
+        quantity: '<?php echo addslashes(t("quantity")); ?>',
+        ingredient_name: '<?php echo addslashes(t("ingredient_name")); ?>',
+        unit_label: '<?php echo addslashes(t("unit_label")); ?>',
+        delete: '<?php echo addslashes(t("delete")); ?>',
+        select_ingredient: '<?php echo addslashes(t("select_ingredient")); ?>',
+        add: '<?php echo addslashes(t("add")); ?>',
+        cloth_malmal: '<?php echo addslashes(t("cloth_malmal")); ?>',
+        match_box: '<?php echo addslashes(t("match_box")); ?>',
+        surrf: '<?php echo addslashes(t("surrf")); ?>',
+        sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
+        unit_placeholder: '<?php echo addslashes(t("unit_placeholder", "kg, g, pieces, etc.")); ?>'
+    };
     
     // Function to create dish options HTML
     function getDishOptionsHTML() {
@@ -2626,11 +2655,12 @@ document.addEventListener('DOMContentLoaded', function() {
             newRow.setAttribute('data-row', extraIngredientRowCount);
             newRow.style.display = 'block';
             
+            const reviewTranslations = window.reviewTranslations || {};
             newRow.innerHTML = `
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label fw-semibold small">
-                            Ingredient <span class="text-danger">*</span>
+                            ${reviewTranslations.ingredient_name || 'Ingredient'} <span class="text-danger">*</span>
                         </label>
                         <select class="form-select extra-ingredient-select" name="extra_ingredients[${extraIngredientRowCount}][ingredient_id]">
                             ${getIngredientOptionsHTML()}
@@ -2638,7 +2668,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold small">
-                            Quantity <span class="text-danger">*</span>
+                            ${reviewTranslations.quantity || 'Quantity'} <span class="text-danger">*</span>
                         </label>
                         <input type="number" class="form-control extra-ingredient-quantity" 
                                name="extra_ingredients[${extraIngredientRowCount}][quantity]" 
@@ -2646,16 +2676,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold small">
-                            Unit
+                            ${reviewTranslations.unit_label || 'Unit'}
                         </label>
                         <input type="text" class="form-control extra-ingredient-unit" 
                                name="extra_ingredients[${extraIngredientRowCount}][unit]" 
-                               placeholder="kg, g, pieces, etc.">
+                               placeholder="${reviewTranslations.unit_placeholder || 'kg, g, pieces, etc.'}">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-semibold small d-block">&nbsp;</label>
                         <button type="button" class="btn btn-sm btn-danger remove-extra-ingredient-btn">
-                            <i class="bi bi-trash"></i> Remove
+                            <i class="bi bi-trash"></i> ${reviewTranslations.delete || 'Remove'}
                         </button>
                     </div>
                 </div>
@@ -2802,7 +2832,14 @@ try {
         'thank_you' => $urduTranslations['thank_you'] ?? 'آپ کے آرڈر کا شکریہ!',
         'status' => $urduTranslations['status'] ?? 'حالت',
         'number_of_persons' => $urduTranslations['number_of_persons'] ?? 'افراد کی تعداد',
-        'persons' => $urduTranslations['persons'] ?? 'افراد'
+        'persons' => $urduTranslations['persons'] ?? 'افراد',
+        'extra_ingredients' => $urduTranslations['extra_ingredients'] ?? 'اضافی اجزاء',
+        'additional_items' => $urduTranslations['additional_items'] ?? 'اضافی اشیاء',
+        'cloth_malmal' => $urduTranslations['cloth_malmal'] ?? 'کپڑا ململ',
+        'match_box' => $urduTranslations['match_box'] ?? 'میچ باکس',
+        'surrf' => $urduTranslations['surrf'] ?? 'سرف',
+        'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
+        'pieces' => $urduTranslations['pieces'] ?? 'ٹکڑے'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     
     // Restore original language
@@ -2833,7 +2870,14 @@ try {
         'thank_you' => 'آپ کے آرڈر کا شکریہ!',
         'status' => 'حالت',
         'number_of_persons' => 'افراد کی تعداد',
-        'persons' => 'افراد'
+        'persons' => 'افراد',
+        'extra_ingredients' => 'اضافی اجزاء',
+        'additional_items' => 'اضافی اشیاء',
+        'cloth_malmal' => 'کپڑا ململ',
+        'match_box' => 'میچ باکس',
+        'surrf' => 'سرف',
+        'sponjis_iron' => 'اسپنجز (آئرن)',
+        'pieces' => 'ٹکڑے'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 }
 ?>;
@@ -2844,15 +2888,33 @@ try {
     // Clean grouped orders data for JSON encoding
     $cleanOrders = [];
     foreach ($grouped_orders as $grouped_order) {
+        // Decode extra_ingredients JSON string if it exists
+        $extra_ingredients_data = null;
+        if (!empty($grouped_order['extra_ingredients'])) {
+            $decoded = json_decode($grouped_order['extra_ingredients'], true);
+            if ($decoded !== null) {
+                $extra_ingredients_data = $decoded;
+            } else {
+                // If decode fails, keep as string and let JavaScript handle it
+                $extra_ingredients_data = $grouped_order['extra_ingredients'];
+            }
+        }
+        
         $orderData = [
             'order_number' => $grouped_order['order_number'] ?? '',
             'id' => $grouped_order['id'] ?? 0,
             'customer_name' => $grouped_order['customer_name'] ?? '',
             'customer_email' => $grouped_order['customer_email'] ?? '',
+            'customer_cell' => $grouped_order['customer_cell'] ?? '',
             'order_date' => $grouped_order['order_date'] ?? '',
+            'delivery_date' => $grouped_order['delivery_date'] ?? '',
+            'delivery_time' => $grouped_order['delivery_time'] ?? '',
+            'shift' => $grouped_order['shift'] ?? '',
+            'number_of_persons' => $grouped_order['number_of_persons'] ?? 0,
             'status' => $grouped_order['status'] ?? 'pending',
             'total_amount' => $grouped_order['total_amount'] ?? 0,
             'notes' => $grouped_order['notes'] ?? '',
+            'extra_ingredients' => $extra_ingredients_data,
             'dishes' => []
         ];
         
@@ -2896,15 +2958,22 @@ function printIngredients(orderNumberOrId) {
     // Use relative path - base tag in print window will handle it
     const bannerImagePath = 'images/newimage.png';
     
+    // Get number of persons from order level
+    const totalPersons = parseInt(order.number_of_persons) || 0;
+    
+    // Shift translation mapping
+    const shiftTranslations = {
+        'afternoon': 'دوپہر',
+        'evening': 'شام',
+        '': ''
+    };
+    
     // Collect all ingredients from all dishes in the order, grouped by category
     let ingredientsByCategory = {};
-    let totalPersons = 0;
     
     order.dishes.forEach(function(dish) {
         const orderQuantity = parseFloat(dish.quantity) || 0;
         const ingredients = dish.ingredients || [];
-        const persons = parseInt(dish.number_of_persons) || 1;
-        totalPersons = Math.max(totalPersons, persons);
         
         ingredients.forEach(function(ing) {
             const key = ing.ingredient_id || ing.ingredient_name;
@@ -2932,6 +3001,121 @@ function printIngredients(orderNumberOrId) {
             }
         });
     });
+    
+    // Process extra ingredients from Step 2
+    // Get ingredientsData from the parent window (before opening new window)
+    const ingredientsData = typeof window.ingredientsData !== 'undefined' ? window.ingredientsData : [];
+    
+    if (order.extra_ingredients) {
+        try {
+            let extraIngredientsData;
+            if (typeof order.extra_ingredients === 'string') {
+                extraIngredientsData = JSON.parse(order.extra_ingredients);
+            } else {
+                extraIngredientsData = order.extra_ingredients;
+            }
+            
+            // Process extra_ingredients array
+            if (extraIngredientsData && extraIngredientsData.extra_ingredients && Array.isArray(extraIngredientsData.extra_ingredients)) {
+                extraIngredientsData.extra_ingredients.forEach(function(extraIng) {
+                    const ingredientId = parseInt(extraIng.ingredient_id) || 0;
+                    const quantity = parseFloat(extraIng.quantity) || 0;
+                    
+                    if (ingredientId > 0 && quantity > 0) {
+                        // Look up ingredient details from ingredientsData
+                        const ingredientInfo = ingredientsData.find(function(i) {
+                            return i.id == ingredientId || parseInt(i.id) == ingredientId;
+                        });
+                        
+                        let categoryName, categoryId, ingredientName, unit;
+                        
+                        if (ingredientInfo) {
+                            // Use data from ingredientsData
+                            categoryName = ingredientInfo.category_name || 'بغیر زمرہ';
+                            categoryId = ingredientInfo.category_id || 'uncategorized';
+                            ingredientName = ingredientInfo.name || 'N/A';
+                            unit = extraIng.unit || ingredientInfo.unit || '';
+                        } else {
+                            // Fallback: use data from extra ingredient or default values
+                            categoryName = translations.extra_ingredients || 'اضافی اجزاء';
+                            categoryId = 'extra_ingredients';
+                            ingredientName = 'جزو #' + ingredientId;
+                            unit = extraIng.unit || '';
+                            
+                            if (ingredientsData.length > 0) {
+                                console.warn('Ingredient not found in ingredientsData:', ingredientId, 'Available:', ingredientsData.map(i => i.id));
+                            }
+                        }
+                        
+                        const key = ingredientId;
+                        
+                        // Initialize category if not exists
+                        if (!ingredientsByCategory[categoryId]) {
+                            ingredientsByCategory[categoryId] = {
+                                category_name: categoryName,
+                                ingredients: {}
+                            };
+                        }
+                        
+                        // Add or update ingredient in category
+                        if (ingredientsByCategory[categoryId].ingredients[key]) {
+                            ingredientsByCategory[categoryId].ingredients[key].quantity += quantity;
+                        } else {
+                            ingredientsByCategory[categoryId].ingredients[key] = {
+                                ingredient_name: ingredientName,
+                                quantity: quantity,
+                                unit: unit
+                            };
+                        }
+                    }
+                });
+            }
+            
+            // Process additional_items object
+            if (extraIngredientsData && extraIngredientsData.additional_items && typeof extraIngredientsData.additional_items === 'object') {
+                const additionalItemsMap = {
+                    'cloth_malmal': translations.cloth_malmal || 'کپڑا ململ',
+                    'match_box': translations.match_box || 'میچ باکس',
+                    'surrf': translations.surrf || 'سرف',
+                    'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)'
+                };
+                
+                // Create a special category for additional items
+                const additionalItemsCategoryId = 'additional_items';
+                const additionalItemsCategoryName = translations.additional_items || 'اضافی اشیاء';
+                
+                if (!ingredientsByCategory[additionalItemsCategoryId]) {
+                    ingredientsByCategory[additionalItemsCategoryId] = {
+                        category_name: additionalItemsCategoryName,
+                        ingredients: {}
+                    };
+                }
+                
+                // Process each additional item
+                Object.keys(extraIngredientsData.additional_items).forEach(function(itemKey) {
+                    const quantity = parseInt(extraIngredientsData.additional_items[itemKey]) || 0;
+                    
+                    if (quantity > 0) {
+                        const itemName = additionalItemsMap[itemKey] || itemKey;
+                        const key = 'additional_' + itemKey;
+                        
+                        // Add or update additional item in category
+                        if (ingredientsByCategory[additionalItemsCategoryId].ingredients[key]) {
+                            ingredientsByCategory[additionalItemsCategoryId].ingredients[key].quantity += quantity;
+                        } else {
+                            ingredientsByCategory[additionalItemsCategoryId].ingredients[key] = {
+                                ingredient_name: itemName,
+                                quantity: quantity,
+                                unit: translations.pieces || 'ٹکڑے'
+                            };
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Error processing extra ingredients:', e, order.extra_ingredients);
+        }
+    }
     
     // Force RTL for Urdu
     const textAlign = 'right';
@@ -3272,20 +3456,36 @@ function printIngredients(orderNumberOrId) {
                 <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
             </div>
             
-            <!-- Fillable Fields Section -->
+            <!-- Customer Details Section -->
             <div class="fillable-section">
+                ${order.customer_name || order.customer_cell ? `
                 <div class="fillable-field">
-                    <span class="fillable-label">تاریخ:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatDateForPrint(order.order_date) : formatDateForPrint(new Date().toISOString())}</div>
+                    <span class="fillable-label">گاہک:</span>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.customer_name || ''}${order.customer_cell ? (order.customer_name ? ' - ' : '') + order.customer_cell : ''}</div>
                 </div>
+                ` : ''}
                 <div class="fillable-field">
-                    <span class="fillable-label">وقت:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatTimeForPrint(order.order_date) : formatTimeForPrint(new Date().toISOString())}</div>
-                </div>
-                <div class="fillable-field">
-                    <span class="fillable-label">${translations.number_of_persons}:</span>
+                    <span class="fillable-label">افراد کی تعداد:</span>
                     <div class="fillable-space" style="text-align: center; font-weight: bold;">${totalPersons > 0 ? totalPersons : ''}</div>
                 </div>
+                ${order.delivery_date ? `
+                <div class="fillable-field">
+                    <span class="fillable-label">ڈیلیوری تاریخ:</span>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${formatDateForPrint(order.delivery_date)}</div>
+                </div>
+                ` : ''}
+                ${order.shift ? `
+                <div class="fillable-field">
+                    <span class="fillable-label">شفٹ:</span>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${shiftTranslations[order.shift] || order.shift}</div>
+                </div>
+                ` : ''}
+                ${order.delivery_time ? `
+                <div class="fillable-field">
+                    <span class="fillable-label">ڈیلیوری وقت:</span>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.delivery_time}</div>
+                </div>
+                ` : ''}
             </div>
             
             <div class="content-wrapper">

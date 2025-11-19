@@ -177,6 +177,10 @@ return [
     'unit_fl_oz' => 'مائع اونس (fl oz)',
     'select_unit' => 'اکائی منتخب کریں',
     'select_ingredient' => 'جزو منتخب کریں',
+    'optional' => 'اختیاری',
+    'add_additional_ingredients_not_in_dishes' => 'منتخب شدہ کھانوں کا حصہ نہیں ہیں ایسے اضافی اجزاء شامل کریں۔',
+    'add_additional_items_for_order' => 'آرڈر کے لیے ضروری اضافی اشیاء شامل کریں۔',
+    'unit_placeholder' => 'kg, g, pieces, etc.',
     
     // Messages
     'success' => 'کامیابی',
@@ -226,6 +230,13 @@ return [
     'to_create_account' => 'اکاؤنٹ بنانے کے لیے',
     'create_new_order' => 'گاہک کے لیے نیا آرڈر بنائیں',
     'confirm_delete_order' => 'کیا آپ واقعی اس آرڈر کو حذف کرنا چاہتے ہیں؟',
+    'extra_ingredients' => 'اضافی اجزاء',
+    'additional_items' => 'اضافی اشیاء',
+    'cloth_malmal' => 'کپڑا ململ',
+    'match_box' => 'میچ باکس',
+    'surrf' => 'سرف',
+    'sponjis_iron' => 'اسپنجز (آئرن)',
+    'pieces' => 'ٹکڑے'
 ];
 
 ?>

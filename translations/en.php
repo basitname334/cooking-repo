@@ -177,6 +177,10 @@ return [
     'unit_fl_oz' => 'Fluid Ounce (fl oz)',
     'select_unit' => 'Select Unit',
     'select_ingredient' => 'Select ingredient',
+    'optional' => 'Optional',
+    'add_additional_ingredients_not_in_dishes' => 'Add additional ingredients that are not part of the selected dishes.',
+    'add_additional_items_for_order' => 'Add additional items that may be needed for the order.',
+    'unit_placeholder' => 'kg, g, pieces, etc.',
     
     // Messages
     'success' => 'Success',
@@ -226,6 +230,13 @@ return [
     'to_create_account' => 'to create an account',
     'create_new_order' => 'Create a new order for a customer',
     'confirm_delete_order' => 'Are you sure you want to delete this order?',
+    'extra_ingredients' => 'Extra Ingredients',
+    'additional_items' => 'Additional Items',
+    'cloth_malmal' => 'Cloth Malmal',
+    'match_box' => 'Match Box',
+    'surrf' => 'Surrf',
+    'sponjis_iron' => 'Sponjis (Iron)',
+    'pieces' => 'pieces'
 ];
 
 ?>
