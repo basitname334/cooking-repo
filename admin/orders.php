@@ -2319,7 +2319,7 @@ function escapeHtml(text) {
         '>': '&gt;',
         '"': '&quot;',
         "'": '&#039;'
-    };
+    };x
     return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
