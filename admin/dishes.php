@@ -58,9 +58,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($name)) {
         $error = 'Dish name is required.';
-    } elseif (empty($category_id)) {
-        $error = 'Category is required. Please select a category for the dish.';
     } else {
+        // Check if category_id allows NULL, if not modify it
+        $check_category_null = $conn->query("SHOW COLUMNS FROM dishes WHERE Field = 'category_id'");
+        if ($check_category_null && $check_category_null->num_rows > 0) {
+            $column_info = $check_category_null->fetch_assoc();
+            if ($column_info['Null'] === 'NO') {
+                // First, get and drop all foreign key constraints on category_id
+                $fk_check = $conn->query("SELECT CONSTRAINT_NAME 
+                    FROM information_schema.KEY_COLUMN_USAGE 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'dishes' 
+                    AND COLUMN_NAME = 'category_id' 
+                    AND REFERENCED_TABLE_NAME IS NOT NULL");
+                if ($fk_check && $fk_check->num_rows > 0) {
+                    while ($fk_row = $fk_check->fetch_assoc()) {
+                        $fk_name = $fk_row['CONSTRAINT_NAME'];
+                        $conn->query("ALTER TABLE dishes DROP FOREIGN KEY `" . $conn->real_escape_string($fk_name) . "`");
+                    }
+                }
+                // Now modify the column to allow NULL
+                $conn->query("ALTER TABLE dishes MODIFY COLUMN category_id INT(11) NULL");
+                // Re-add foreign key constraint (foreign keys can work with NULL values)
+                // Check if constraint already exists before adding
+                $existing_fk = $conn->query("SELECT CONSTRAINT_NAME 
+                    FROM information_schema.KEY_COLUMN_USAGE 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'dishes' 
+                    AND CONSTRAINT_NAME = 'dishes_category_fk'");
+                if (!$existing_fk || $existing_fk->num_rows == 0) {
+                    $conn->query("ALTER TABLE dishes ADD CONSTRAINT dishes_category_fk 
+                        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE");
+                }
+            }
+        }
+        
         // Check if number_of_persons column exists, if not add it
         $check_column = $conn->query("SHOW COLUMNS FROM dishes LIKE 'number_of_persons'");
         if ($check_column->num_rows == 0) {
@@ -114,8 +146,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Update existing dish
-                $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?");
-                $stmt->bind_param("ssiidssi", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id);
+                if ($category_id === null) {
+                    $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = NULL, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?");
+                    $stmt->bind_param("ssidssi", $name, $description, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id);
+                } else {
+                    $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?");
+                    $stmt->bind_param("ssiidssi", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id);
+                }
                 $stmt->execute();
                 $stmt->close();
                 
@@ -128,10 +165,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $current_dish_id = $dish_id;
             } else {
                 // Create new dish
-                $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("ssiidss", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path);
-                $stmt->execute();
+                if ($category_id === null) {
+                    $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image) VALUES (?, ?, NULL, ?, ?, ?, ?)");
+                    $stmt->bind_param("ssidss", $name, $description, $number_of_persons, $base_quantity, $base_unit, $image_path);
+                } else {
+                    $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param("ssiidss", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path);
+                }
+                if (!$stmt->execute()) {
+                    throw new Exception('Failed to insert dish: ' . $stmt->error);
+                }
                 $current_dish_id = $stmt->insert_id;
+                if (!$current_dish_id) {
+                    throw new Exception('Failed to get dish ID after insert');
+                }
                 $stmt->close();
             }
             
@@ -158,6 +205,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Redirect after update to show success message and reload edit form
             if ($dish_id) {
                 header('Location: dishes.php?edit=' . $dish_id . '&success=1');
+                exit();
+            } else {
+                // Redirect after creating new dish to refresh the list (go to page 1 to show newest)
+                header('Location: dishes.php?success=1&created=1&page=1');
                 exit();
             }
             
@@ -192,6 +243,8 @@ if (isset($_GET['success'])) {
         $success = 'Dish deleted successfully!';
     } elseif (isset($_GET['edited'])) {
         $success = 'Dish updated successfully!';
+    } elseif (isset($_GET['created'])) {
+        $success = 'Dish created successfully!';
     } else {
         $success = 'Dish created successfully!';
     }
@@ -257,7 +310,7 @@ $result = $conn->query("SELECT d.*, c.name as category_name,
     (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
-    ORDER BY c.name, d.name
+    ORDER BY d.id DESC, COALESCE(c.name, 'zzz'), d.name
     LIMIT $items_per_page_int OFFSET $offset_int");
 if ($result && $result->num_rows > 0) {
     $dishes = $result->fetch_all(MYSQLI_ASSOC);
@@ -417,23 +470,6 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="text" class="form-control" id="name" name="name" required 
                                        placeholder="e.g., Fried Rice, Chicken Curry"
                                        value="<?php echo htmlspecialchars($edit_dish['name'] ?? ''); ?>">
-                            </div>
-                            
-                            <!-- Category -->
-                            <div class="mb-3">
-                                <label for="category_id" class="form-label fw-semibold">
-                                    <i class="bi bi-folder me-1 text-primary"></i>
-                                    Category <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-select" id="category_id" name="category_id" required>
-                                    <option value="">-- Select Category --</option>
-                                    <?php foreach ($categories as $category): ?>
-                                        <option value="<?php echo $category['id']; ?>" 
-                                                <?php echo (isset($edit_dish['category_id']) && $edit_dish['category_id'] == $category['id']) ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($category['name']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
                             </div>
                             
                             <!-- Description -->
