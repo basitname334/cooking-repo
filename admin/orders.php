@@ -3332,7 +3332,32 @@ function printIngredients(orderNumberOrId) {
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
                         margin: 5px 0 !important;
-                        padding: 4px !important;
+                        padding: 6px !important;
+                    }
+                    .fillable-table {
+                        width: 100% !important;
+                        border-collapse: collapse !important;
+                    }
+                    .fillable-table th {
+                        padding: 6px 4px !important;
+                        border: 1px solid #ddd !important;
+                        font-size: 11px !important;
+                    }
+                    .fillable-table td {
+                        padding: 6px 8px !important;
+                        border: 1px solid #ddd !important;
+                    }
+                    .fillable-table td.fillable-label-cell {
+                        font-size: 12px !important;
+                        width: 25% !important;
+                    }
+                    .fillable-table td.fillable-field-cell {
+                        width: 25% !important;
+                    }
+                    .fillable-space {
+                        height: 20px !important;
+                        min-height: 20px !important;
+                        font-size: 11px !important;
                     }
                     .content-wrapper {
                         padding: 5px !important;
@@ -3497,28 +3522,47 @@ function printIngredients(orderNumberOrId) {
                     padding: 6px;
                     border: 2px dashed #ccc;
                     border-radius: 4px;
-                    display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 4px;
+                    width: 100%;
                 }
-                .fillable-field {
-                    display: flex;
-                    align-items: center;
-                    margin-bottom: 0;
-                    direction: rtl;
+                .fillable-table {
+                    width: 100%;
+                    border-collapse: collapse;
                 }
-                .fillable-label {
+                .fillable-table th {
+                    padding: 8px 6px;
+                    border: 1px solid #ddd;
+                    background-color: #f8f9fa;
                     font-weight: bold;
-                    font-size: 11px;
+                    font-size: 12px;
+                    text-align: center;
                     color: #333;
-                    min-width: 60px;
-                    margin-left: 8px;
+                }
+                .fillable-table td {
+                    padding: 6px 8px;
+                    border: 1px solid #ddd;
+                    vertical-align: middle;
+                }
+                .fillable-table td.fillable-label-cell {
+                    font-weight: bold;
+                    font-size: 12px;
+                    color: #333;
+                    text-align: right;
+                    width: 25%;
+                    background-color: #f8f9fa;
+                }
+                .fillable-table td.fillable-field-cell {
+                    width: 25%;
+                    text-align: center;
                 }
                 .fillable-space {
-                    flex: 1;
                     border-bottom: 2px solid #000;
-                    height: 18px;
-                    margin: 0 6px;
+                    height: 20px;
+                    min-height: 20px;
+                    display: inline-block;
+                    width: 100%;
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 11px;
                 }
                 
                 .content-wrapper {
@@ -3607,46 +3651,80 @@ function printIngredients(orderNumberOrId) {
                 <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
             </div>
             
-            <!-- Customer Details Section with Dish Names -->
+            <!-- Customer Details Section with Table Layout -->
             <div class="fillable-section">
-                ${order.dishes.map(dish => {
-                    const dishName = dish.dish_name || 'N/A';
-                    const quantity = dish.quantity || 1;
-                    return `
-                    <div class="fillable-field">
-                        <span class="fillable-label">${translations.dish || 'Dish'}:</span>
-                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantity > 1 ? ' (x' + quantity + ')' : ''}</div>
-                    </div>
-                    `;
-                }).join('')}
-                ${order.customer_name || order.customer_cell ? `
-                <div class="fillable-field">
-                    <span class="fillable-label">گاہک:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.customer_name || ''}${order.customer_cell ? (order.customer_name ? ' - ' : '') + order.customer_cell : ''}</div>
-                </div>
-                ` : ''}
-                <div class="fillable-field">
-                    <span class="fillable-label">افراد کی تعداد:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${totalPersons > 0 ? totalPersons : ''}</div>
-                </div>
-                ${order.delivery_date ? `
-                <div class="fillable-field">
-                    <span class="fillable-label">ڈیلیوری تاریخ:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${formatDateForPrint(order.delivery_date)}</div>
-                </div>
-                ` : ''}
-                ${order.shift ? `
-                <div class="fillable-field">
-                    <span class="fillable-label">شفٹ:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${shiftTranslations[order.shift] || order.shift}</div>
-                </div>
-                ` : ''}
-                ${order.delivery_time ? `
-                <div class="fillable-field">
-                    <span class="fillable-label">ڈیلیوری وقت:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.delivery_time}</div>
-                </div>
-                ` : ''}
+                <table class="fillable-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th>${order.dishes.length > 0 ? (order.dishes[0].dish_name || 'Dish 1') : 'Dish 1'}${order.dishes.length > 1 ? ' / ' + (order.dishes[1].dish_name || 'Dish 2') : ''}${order.dishes.length > 2 ? ' / ' + (order.dishes[2].dish_name || 'Dish 3') : ''}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="fillable-label-cell">گاہک</td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${order.customer_name || ''}${order.customer_cell ? (order.customer_name ? ' - ' : '') + order.customer_cell : ''}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="fillable-label-cell">افراد کی تعداد</td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${totalPersons > 0 ? totalPersons : ''}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="fillable-label-cell">ڈیلیوری تاریخ</td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${order.delivery_date ? formatDateForPrint(order.delivery_date) : ''}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="fillable-label-cell">شفت</td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${order.shift ? (shiftTranslations[order.shift] || order.shift) : ''}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="fillable-label-cell">ڈیلیوری وقت</td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${order.delivery_time || ''}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
             
             <div class="content-wrapper">
