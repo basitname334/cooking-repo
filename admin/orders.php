@@ -3334,6 +3334,19 @@ function printIngredients(orderNumberOrId) {
                         margin: 5px 0 !important;
                         padding: 6px !important;
                     }
+                    .dishes-list-section {
+                        page-break-inside: avoid !important;
+                        margin: 8px 0 !important;
+                        padding: 8px !important;
+                    }
+                    .dishes-list-section > div:first-child {
+                        font-size: 12px !important;
+                        margin-bottom: 6px !important;
+                    }
+                    .dishes-list-section > div:last-child > div {
+                        padding: 6px 10px !important;
+                        font-size: 11px !important;
+                    }
                     .fillable-table {
                         width: 100% !important;
                         border-collapse: collapse !important;
@@ -3659,7 +3672,7 @@ function printIngredients(orderNumberOrId) {
                             <th></th>
                             <th></th>
                             <th></th>
-                            <th>${order.dishes.length > 0 ? (order.dishes[0].dish_name || 'Dish 1') : 'Dish 1'}${order.dishes.length > 1 ? ' / ' + (order.dishes[1].dish_name || 'Dish 2') : ''}${order.dishes.length > 2 ? ' / ' + (order.dishes[2].dish_name || 'Dish 3') : ''}</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3723,6 +3736,26 @@ function printIngredients(orderNumberOrId) {
                                 <div class="fillable-space"></div>
                             </td>
                         </tr>
+                        ${order.dishes.map((dish, index) => {
+                            const dishName = dish.dish_name || 'N/A';
+                            const quantity = dish.quantity || 1;
+                            const categoryName = dish.category_name || '';
+                            const dishLabel = index === 0 ? (translations.dish || 'Dish') : '';
+                            return `
+                        <tr>
+                            <td class="fillable-label-cell">${dishLabel}</td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${dishName}${categoryName ? ' - ' + categoryName : ''}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space">${quantity}</div>
+                            </td>
+                            <td class="fillable-field-cell">
+                                <div class="fillable-space"></div>
+                            </td>
+                        </tr>
+                        `;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
