@@ -2945,12 +2945,24 @@ function printIngredients(orderNumberOrId) {
         '': ''
     };
     
-    // Collect all ingredients from all dishes in the order, grouped by category
-    let ingredientsByCategory = {};
+    // Collect all ingredients from all dishes in the order, grouped by dish first, then by category
+    let ingredientsByDish = {};
     
     order.dishes.forEach(function(dish) {
+        const dishName = dish.dish_name || 'Unknown Dish';
+        const dishId = dish.dish_id || 0;
         const orderQuantity = parseFloat(dish.quantity) || 0;
         const ingredients = dish.ingredients || [];
+        
+        // Initialize dish if not exists
+        if (!ingredientsByDish[dishId]) {
+            ingredientsByDish[dishId] = {
+                dish_name: dishName,
+                dish_id: dishId,
+                quantity: orderQuantity,
+                categories: {}
+            };
+        }
         
         ingredients.forEach(function(ing) {
             const key = ing.ingredient_id || ing.ingredient_name;
@@ -2959,18 +2971,18 @@ function printIngredients(orderNumberOrId) {
             const categoryId = ing.category_id || 'uncategorized';
             
             // Initialize category if not exists
-            if (!ingredientsByCategory[categoryId]) {
-                ingredientsByCategory[categoryId] = {
+            if (!ingredientsByDish[dishId].categories[categoryId]) {
+                ingredientsByDish[dishId].categories[categoryId] = {
                     category_name: categoryName,
                     ingredients: {}
                 };
             }
             
             // Add or update ingredient in category
-            if (ingredientsByCategory[categoryId].ingredients[key]) {
-                ingredientsByCategory[categoryId].ingredients[key].quantity += scaledQuantity;
+            if (ingredientsByDish[dishId].categories[categoryId].ingredients[key]) {
+                ingredientsByDish[dishId].categories[categoryId].ingredients[key].quantity += scaledQuantity;
             } else {
-                ingredientsByCategory[categoryId].ingredients[key] = {
+                ingredientsByDish[dishId].categories[categoryId].ingredients[key] = {
                     ingredient_name: ing.ingredient_name || 'N/A',
                     quantity: scaledQuantity,
                     unit: ing.unit || ''
@@ -3026,19 +3038,30 @@ function printIngredients(orderNumberOrId) {
                         
                         const key = ingredientId;
                         
+                        // Add extra ingredients to a special "extra" dish or create one
+                        const extraDishId = 'extra_ingredients_dish';
+                        if (!ingredientsByDish[extraDishId]) {
+                            ingredientsByDish[extraDishId] = {
+                                dish_name: translations.extra_ingredients || 'اضافی اجزاء',
+                                dish_id: extraDishId,
+                                quantity: 1,
+                                categories: {}
+                            };
+                        }
+                        
                         // Initialize category if not exists
-                        if (!ingredientsByCategory[categoryId]) {
-                            ingredientsByCategory[categoryId] = {
+                        if (!ingredientsByDish[extraDishId].categories[categoryId]) {
+                            ingredientsByDish[extraDishId].categories[categoryId] = {
                                 category_name: categoryName,
                                 ingredients: {}
                             };
                         }
                         
                         // Add or update ingredient in category
-                        if (ingredientsByCategory[categoryId].ingredients[key]) {
-                            ingredientsByCategory[categoryId].ingredients[key].quantity += quantity;
+                        if (ingredientsByDish[extraDishId].categories[categoryId].ingredients[key]) {
+                            ingredientsByDish[extraDishId].categories[categoryId].ingredients[key].quantity += quantity;
                         } else {
-                            ingredientsByCategory[categoryId].ingredients[key] = {
+                            ingredientsByDish[extraDishId].categories[categoryId].ingredients[key] = {
                                 ingredient_name: ingredientName,
                                 quantity: quantity,
                                 unit: unit
@@ -3060,9 +3083,20 @@ function printIngredients(orderNumberOrId) {
                 // Create a special category for additional items
                 const additionalItemsCategoryId = 'additional_items';
                 const additionalItemsCategoryName = translations.additional_items || 'اضافی اشیاء';
+                const additionalItemsDishId = 'additional_items_dish';
                 
-                if (!ingredientsByCategory[additionalItemsCategoryId]) {
-                    ingredientsByCategory[additionalItemsCategoryId] = {
+                if (!ingredientsByDish[additionalItemsDishId]) {
+                    ingredientsByDish[additionalItemsDishId] = {
+                        dish_name: translations.additional_items || 'اضافی اشیاء',
+                        dish_id: additionalItemsDishId,
+                        quantity: 1,
+                        categories: {}
+                    };
+                }
+                
+                // Initialize category if not exists
+                if (!ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId]) {
+                    ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId] = {
                         category_name: additionalItemsCategoryName,
                         ingredients: {}
                     };
@@ -3077,10 +3111,10 @@ function printIngredients(orderNumberOrId) {
                         const key = 'additional_' + itemKey;
                         
                         // Add or update additional item in category
-                        if (ingredientsByCategory[additionalItemsCategoryId].ingredients[key]) {
-                            ingredientsByCategory[additionalItemsCategoryId].ingredients[key].quantity += quantity;
+                        if (ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key]) {
+                            ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key].quantity += quantity;
                         } else {
-                            ingredientsByCategory[additionalItemsCategoryId].ingredients[key] = {
+                            ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key] = {
                                 ingredient_name: itemName,
                                 quantity: quantity,
                                 unit: translations.pieces || 'ٹکڑے'
@@ -3102,84 +3136,105 @@ function printIngredients(orderNumberOrId) {
     let ingredientsHtml = '<div style="direction: rtl;">';
     
     // Check if we have any ingredients
-    const categoryKeys = Object.keys(ingredientsByCategory);
-    if (categoryKeys.length === 0) {
-        ingredientsHtml += '<table class="ingredients-table" style="width: 100%; border-collapse: collapse; margin-top: 12px; direction: rtl; font-size: 11px;">';
-        ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.ingredient_label + '</th><th style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 11px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
+    const dishKeys = Object.keys(ingredientsByDish);
+    if (dishKeys.length === 0) {
+        ingredientsHtml += '<table class="ingredients-table" style="width: 100%; border-collapse: collapse; margin-top: 12px; direction: rtl; font-size: 13px;">';
+        ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.ingredient_label + '</th><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
         ingredientsHtml += '<tbody>';
-        ingredientsHtml += '<tr><td colspan="2" style="padding: 5px 8px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 11px; line-height: 1.3;">' + translations.no_ingredients_found + '</td></tr>';
+        ingredientsHtml += '<tr><td colspan="2" style="padding: 8px 10px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 13px; line-height: 1.5;">' + translations.no_ingredients_found + '</td></tr>';
         ingredientsHtml += '</tbody></table>';
     } else {
-        // Organize categories and their ingredients
-        const allCategories = [];
-        categoryKeys.forEach(function(categoryId) {
-            const category = ingredientsByCategory[categoryId];
-            allCategories.push({
-                id: categoryId,
-                name: category.category_name || 'بغیر زمرہ',
-                ingredients: Object.values(category.ingredients)
-            });
-        });
-        
-        // Sort categories by name
-        allCategories.sort((a, b) => {
-            return (a.name || '').localeCompare(b.name || '');
-        });
-        
-        // Display each category with its ingredients in a simple, clear format
-        allCategories.forEach(function(category) {
-            // Category header - larger and more prominent
-            ingredientsHtml += '<div class="category-section" style="margin-top: 20px; margin-bottom: 12px; page-break-inside: avoid;">';
-            ingredientsHtml += '<h3 class="category-header" style="font-size: 16px; font-weight: bold; color: #ffffff; padding: 10px 15px; background-color: #8b5cf6; border-radius: 6px; font-family: ' + fontFamily + '; text-align: right; margin: 0 0 12px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
-            ingredientsHtml += '📋 ' + category.name;
-            ingredientsHtml += '</h3>';
+        // Display each dish with its categories and ingredients
+        dishKeys.forEach(function(dishId) {
+            const dish = ingredientsByDish[dishId];
+            
+            // Dish header - very prominent
+            ingredientsHtml += '<div class="dish-section" style="margin-top: 25px; margin-bottom: 15px; page-break-inside: avoid; border-bottom: 3px solid #10b981; padding-bottom: 10px;">';
+            ingredientsHtml += '<h2 class="dish-header" style="font-size: 20px; font-weight: bold; color: #ffffff; padding: 12px 18px; background-color: #10b981; border-radius: 8px; font-family: ' + fontFamily + '; text-align: right; margin: 0 0 15px 0; box-shadow: 0 3px 6px rgba(0,0,0,0.15);">';
+            ingredientsHtml += '🍽️ ' + dish.dish_name;
+            if (dish.quantity && dish.quantity > 1) {
+                ingredientsHtml += ' (x' + dish.quantity + ')';
+            }
+            ingredientsHtml += '</h2>';
             ingredientsHtml += '</div>';
             
-            // Sort ingredients within category by name
-            const sortedIngredients = [...category.ingredients].sort((a, b) => {
-                const nameA = a.ingredient_name || '';
-                const nameB = b.ingredient_name || '';
-                return nameA.localeCompare(nameB);
-            });
-            
-            if (sortedIngredients.length > 0) {
-                // Use 6-column layout to save space
-                ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 15px; page-break-inside: avoid;">';
-                
-                sortedIngredients.forEach(function(ing) {
-                    let quantity = parseFloat(ing.quantity) || 0;
-                    let unit = ing.unit || '';
-                    
-                    // Convert large gram values to kg for better readability
-                    if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                        quantity = (quantity / 1000).toFixed(2);
-                        unit = 'kg';
-                    } else {
-                        // Format quantity based on unit type
-                        const unitLower = unit.toLowerCase();
-                        // For countable items (pieces, piece, serving, servings, etc.), show as whole number
-                        if (unitLower === 'piece' || unitLower === 'pieces' || 
-                            unitLower === 'serving' || unitLower === 'servings' ||
-                            unitLower === 'portion' || unitLower === 'portions' ||
-                            unitLower === 'item' || unitLower === 'items') {
-                            quantity = Math.round(quantity).toString();
-                        } else {
-                            // For weight/volume units, show 2 decimal places
-                            quantity = quantity.toFixed(2);
-                        }
-                    }
-                    
-                    const quantityUnit = quantity + (unit ? ' ' + unit : '');
-                    const ingredientName = ing.ingredient_name || 'N/A';
-                    
-                    // Compact format for 6-column layout: Ingredient Name - Quantity
-                    ingredientsHtml += '<div style="padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; background-color: #ffffff; page-break-inside: avoid; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">';
-                    ingredientsHtml += '<div style="font-size: 11px; font-weight: bold; color: #1e293b; margin-bottom: 3px; font-family: ' + fontFamily + '; line-height: 1.4;">' + ingredientName + '</div>';
-                    ingredientsHtml += '<div style="font-size: 10px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + translations.quantity_label + ': <span style="color: #1e293b;">' + quantityUnit + '</span></div>';
-                    ingredientsHtml += '</div>';
+            // Get all categories for this dish
+            const categoryKeys = Object.keys(dish.categories);
+            if (categoryKeys.length === 0) {
+                ingredientsHtml += '<p style="text-align: center; color: #64748b; font-size: 14px; margin: 10px 0; font-family: ' + fontFamily + ';">' + translations.no_ingredients_found + '</p>';
+            } else {
+                // Organize categories for this dish
+                const allCategories = [];
+                categoryKeys.forEach(function(categoryId) {
+                    const category = dish.categories[categoryId];
+                    allCategories.push({
+                        id: categoryId,
+                        name: category.category_name || 'بغیر زمرہ',
+                        ingredients: Object.values(category.ingredients)
+                    });
                 });
                 
-                ingredientsHtml += '</div>';
+                // Sort categories by name
+                allCategories.sort((a, b) => {
+                    return (a.name || '').localeCompare(b.name || '');
+                });
+                
+                // Display each category with its ingredients
+                allCategories.forEach(function(category) {
+                    // Category header
+                    ingredientsHtml += '<div class="category-section" style="margin-top: 18px; margin-bottom: 12px; page-break-inside: avoid;">';
+                    ingredientsHtml += '<h3 class="category-header" style="font-size: 18px; font-weight: bold; color: #ffffff; padding: 12px 18px; background-color: #8b5cf6; border-radius: 6px; font-family: ' + fontFamily + '; text-align: right; margin: 0 0 12px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
+                    ingredientsHtml += '📋 ' + category.name;
+                    ingredientsHtml += '</h3>';
+                    ingredientsHtml += '</div>';
+                    
+                    // Sort ingredients within category by name
+                    const sortedIngredients = [...category.ingredients].sort((a, b) => {
+                        const nameA = a.ingredient_name || '';
+                        const nameB = b.ingredient_name || '';
+                        return nameA.localeCompare(nameB);
+                    });
+                    
+                    if (sortedIngredients.length > 0) {
+                        // Use 4-column layout for larger display
+                        ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; page-break-inside: avoid;">';
+                        
+                        sortedIngredients.forEach(function(ing) {
+                            let quantity = parseFloat(ing.quantity) || 0;
+                            let unit = ing.unit || '';
+                            
+                            // Convert large gram values to kg for better readability
+                            if (unit.toLowerCase() === 'g' && quantity >= 1000) {
+                                quantity = (quantity / 1000).toFixed(2);
+                                unit = 'kg';
+                            } else {
+                                // Format quantity based on unit type
+                                const unitLower = unit.toLowerCase();
+                                // For countable items (pieces, piece, serving, servings, etc.), show as whole number
+                                if (unitLower === 'piece' || unitLower === 'pieces' || 
+                                    unitLower === 'serving' || unitLower === 'servings' ||
+                                    unitLower === 'portion' || unitLower === 'portions' ||
+                                    unitLower === 'item' || unitLower === 'items') {
+                                    quantity = Math.round(quantity).toString();
+                                } else {
+                                    // For weight/volume units, show 2 decimal places
+                                    quantity = quantity.toFixed(2);
+                                }
+                            }
+                            
+                            const quantityUnit = quantity + (unit ? ' ' + unit : '');
+                            const ingredientName = ing.ingredient_name || 'N/A';
+                            
+                            // Format for 4-column layout: Ingredient Name - Quantity
+                            ingredientsHtml += '<div style="padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 4px; background-color: #ffffff; page-break-inside: avoid; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">';
+                            ingredientsHtml += '<div style="font-size: 13px; font-weight: bold; color: #1e293b; margin-bottom: 4px; font-family: ' + fontFamily + '; line-height: 1.5;">' + ingredientName + '</div>';
+                            ingredientsHtml += '<div style="font-size: 12px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + translations.quantity_label + ': <span style="color: #1e293b;">' + quantityUnit + '</span></div>';
+                            ingredientsHtml += '</div>';
+                        });
+                        
+                        ingredientsHtml += '</div>';
+                    }
+                });
             }
         });
     }
@@ -3232,6 +3287,29 @@ function printIngredients(orderNumberOrId) {
                         padding: 8px !important;
                         page-break-inside: avoid !important;
                     }
+                    .dish-names-section {
+                        margin: 12px 0 !important;
+                        padding: 12px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .dish-names-section h2 {
+                        font-size: 16px !important;
+                        margin-bottom: 10px !important;
+                    }
+                    .dish-names-section [style*="grid-template-columns"] {
+                        grid-template-columns: repeat(2, 1fr) !important;
+                        gap: 8px !important;
+                    }
+                    .dish-section {
+                        margin-top: 20px !important;
+                        margin-bottom: 12px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .dish-header {
+                        font-size: 18px !important;
+                        padding: 10px 15px !important;
+                        margin: 0 0 12px 0 !important;
+                    }
                     .category-section {
                         margin-top: 15px !important;
                         margin-bottom: 10px !important;
@@ -3244,8 +3322,8 @@ function printIngredients(orderNumberOrId) {
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
-                        grid-template-columns: repeat(6, 1fr) !important;
-                        gap: 5px !important;
+                        grid-template-columns: repeat(4, 1fr) !important;
+                        gap: 6px !important;
                     }
                     [style*="grid-template-columns"] > div {
                         page-break-inside: avoid !important;
@@ -3264,20 +3342,29 @@ function printIngredients(orderNumberOrId) {
                         page-break-inside: avoid !important;
                     }
                     .category-header {
-                        font-size: 11px !important;
-                        padding: 4px 6px !important;
+                        font-size: 14px !important;
+                        padding: 8px 12px !important;
                         margin: 0 !important;
                     }
                     .ingredients-table {
-                        font-size: 10px !important;
+                        font-size: 12px !important;
                         margin-bottom: 6px !important;
                         page-break-inside: avoid !important;
                     }
                     .ingredients-table th,
                     .ingredients-table td {
-                        padding: 4px 6px !important;
-                        font-size: 10px !important;
-                        line-height: 1.3 !important;
+                        padding: 6px 8px !important;
+                        font-size: 12px !important;
+                        line-height: 1.4 !important;
+                    }
+                    [style*="grid-template-columns"] > div {
+                        padding: 6px 8px !important;
+                    }
+                    [style*="grid-template-columns"] > div > div:first-child {
+                        font-size: 12px !important;
+                    }
+                    [style*="grid-template-columns"] > div > div:last-child {
+                        font-size: 11px !important;
                     }
                     .ingredients-table thead {
                         display: table-header-group;
@@ -3358,11 +3445,14 @@ function printIngredients(orderNumberOrId) {
                     padding: 10px;
                     border: 2px dashed #ccc;
                     border-radius: 5px;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
                 }
                 .fillable-field {
                     display: flex;
                     align-items: center;
-                    margin-bottom: 12px;
+                    margin-bottom: 0;
                     direction: rtl;
                 }
                 .fillable-label {
@@ -3381,6 +3471,40 @@ function printIngredients(orderNumberOrId) {
                 
                 .content-wrapper {
                     padding: 12px;
+                }
+                .dish-names-section {
+                    margin: 8px 0;
+                    padding: 8px;
+                    background-color: #f8fafc;
+                    border: 1px solid #10b981;
+                    border-radius: 4px;
+                    page-break-inside: avoid;
+                }
+                .dish-names-section h2 {
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: #10b981;
+                    margin-bottom: 6px;
+                    text-align: center;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    padding: 2px 0;
+                }
+                .dish-section {
+                    margin-top: 25px;
+                    margin-bottom: 15px;
+                    border-bottom: 3px solid #10b981;
+                    padding-bottom: 10px;
+                }
+                .dish-header {
+                    font-size: 20px;
+                    font-weight: bold;
+                    color: #ffffff;
+                    padding: 12px 18px;
+                    background-color: #10b981;
+                    border-radius: 8px;
+                    margin: 0 0 15px 0;
+                    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
                 }
                 .category-section {
                     margin-top: 20px;
@@ -3433,8 +3557,18 @@ function printIngredients(orderNumberOrId) {
                 <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
             </div>
             
-            <!-- Customer Details Section -->
+            <!-- Customer Details Section with Dish Names -->
             <div class="fillable-section">
+                ${order.dishes.map(dish => {
+                    const dishName = dish.dish_name || 'N/A';
+                    const quantity = dish.quantity || 1;
+                    return `
+                    <div class="fillable-field">
+                        <span class="fillable-label">${translations.dish || 'Dish'}:</span>
+                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantity > 1 ? ' (x' + quantity + ')' : ''}</div>
+                    </div>
+                    `;
+                }).join('')}
                 ${order.customer_name || order.customer_cell ? `
                 <div class="fillable-field">
                     <span class="fillable-label">گاہک:</span>
@@ -3555,8 +3689,32 @@ function printOrder(orderNumberOrId) {
                     .banner-right-service.yellow { font-size: 14px !important; }
                     .banner-address-bar { padding: 6px 10px !important; margin-top: 6px !important; }
                     .banner-address-text { font-size: 10px !important; }
-                    .fillable-section { margin: 10px 0 !important; padding: 8px !important; }
-                    .fillable-field { margin-bottom: 8px !important; }
+                    .dish-names-section {
+                        margin: 6px 0 !important;
+                        padding: 6px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .dish-names-section h2 {
+                        font-size: 11px !important;
+                        margin-bottom: 4px !important;
+                        padding: 2px 0 !important;
+                    }
+                    .dish-names-section [style*="grid-template-columns"] {
+                        grid-template-columns: repeat(2, 1fr) !important;
+                        gap: 4px !important;
+                    }
+                    .dish-names-section [style*="grid-template-columns"] > div {
+                        padding: 4px 6px !important;
+                        font-size: 11px !important;
+                    }
+                    .fillable-section { 
+                        margin: 10px 0 !important; 
+                        padding: 8px !important;
+                        display: grid !important;
+                        grid-template-columns: repeat(2, 1fr) !important;
+                        gap: 6px !important;
+                    }
+                    .fillable-field { margin-bottom: 0 !important; }
                     .fillable-label { font-size: 13px !important; }
                     .fillable-space { height: 22px !important; }
                     .header { margin-bottom: 10px !important; padding-bottom: 8px !important; }
@@ -3686,11 +3844,14 @@ function printOrder(orderNumberOrId) {
                     padding: 10px;
                     border: 2px dashed #ccc;
                     border-radius: 5px;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 8px;
                 }
                 .fillable-field {
                     display: flex;
                     align-items: center;
-                    margin-bottom: 10px;
+                    margin-bottom: 0;
                     direction: rtl;
                 }
                 .fillable-label {
@@ -3740,8 +3901,18 @@ function printOrder(orderNumberOrId) {
                 <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
             </div>
             
-            <!-- Fillable Fields Section -->
+            <!-- Fillable Fields Section with Dish Names -->
             <div class="fillable-section">
+                ${order.dishes.map(dish => {
+                    const dishName = dish.dish_name || 'N/A';
+                    const quantity = dish.quantity || 1;
+                    return `
+                    <div class="fillable-field">
+                        <span class="fillable-label">${translations.dish || 'Dish'}:</span>
+                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantity > 1 ? ' (x' + quantity + ')' : ''}</div>
+                    </div>
+                    `;
+                }).join('')}
                 <div class="fillable-field">
                     <span class="fillable-label">تاریخ:</span>
                     <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatDateForPrint(order.order_date) : formatDateForPrint(new Date().toISOString())}</div>
@@ -3775,15 +3946,21 @@ function printOrder(orderNumberOrId) {
                     <span class="detail-label">${translations.email}:</span>
                     <span>${order.customer_email || 'N/A'}</span>
                 </div>
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
-                    <strong style="display: block; margin-bottom: 8px; font-size: 14px;">${translations.dish}:</strong>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
+                    <h3 style="font-size: 14px; font-weight: bold; color: #64748b; margin-bottom: 10px;">${translations.dish} ${translations.details || 'Details'}:</h3>
                     ${order.dishes.map(dish => {
                         const persons = parseInt(dish.number_of_persons) || 1;
+                        const dishName = dish.dish_name || 'N/A';
                         return `
-                        <div class="detail-row" style="margin-left: 15px;">
+                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 8px; padding: 8px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px;">
                             <div style="flex: 1;">
-                                <span class="detail-label">${dish.dish_name || 'N/A'}</span>
-                                <span style="margin-left: 12px; color: #64748b; font-size: 11px;">(${translations.quantity}: ${dish.quantity} - ${translations.persons}: ${persons}${dish.total_amount > 0 ? ' - Rs ' + parseFloat(dish.total_amount).toFixed(2) : ''})</span>
+                                <div style="font-size: 13px; font-weight: bold; color: #1e293b; margin-bottom: 4px;">${dishName}</div>
+                                <div style="color: #64748b; font-size: 11px; line-height: 1.5;">
+                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong></span>
+                                    <span style="margin: 0 8px;">|</span>
+                                    <span>${translations.persons}: <strong>${persons}</strong></span>
+                                    ${dish.total_amount > 0 ? '<span style="margin: 0 8px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}
+                                </div>
                             </div>
                         </div>
                     `;
