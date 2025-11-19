@@ -497,10 +497,12 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.t
     u.email as user_customer_email,
     COALESCE(u.name, o.customer_name) as customer_name, 
     COALESCE(u.email, o.customer_cell) as customer_email, 
-    d.name as dish_name, d.id as dish_id, d.number_of_persons
+    d.name as dish_name, d.id as dish_id, d.number_of_persons, d.category_id,
+    cat.name as dish_category_name
     FROM orders o
     LEFT JOIN users u ON o.customer_id = u.id
     LEFT JOIN dishes d ON o.dish_id = d.id
+    LEFT JOIN categories cat ON d.category_id = cat.id
     ORDER BY 
         COALESCE(o.order_date, NOW()) DESC, 
         COALESCE(o.order_number, ''), 
@@ -549,12 +551,16 @@ if ($result && $result->num_rows > 0) {
         foreach ($orders as &$order) {
             // Get dish info
             if (!empty($order['dish_id'])) {
-                $dish_result = $conn->query("SELECT id, name, number_of_persons FROM dishes WHERE id = " . intval($order['dish_id']));
+                $dish_result = $conn->query("SELECT d.id, d.name, d.number_of_persons, d.category_id, cat.name as dish_category_name 
+                    FROM dishes d 
+                    LEFT JOIN categories cat ON d.category_id = cat.id 
+                    WHERE d.id = " . intval($order['dish_id']));
                 if ($dish_result && $dish_result->num_rows > 0) {
                     $dish = $dish_result->fetch_assoc();
                     $order['dish_name'] = $dish['name'];
                     $order['dish_id'] = $dish['id'];
                     $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
+                    $order['dish_category_name'] = $dish['dish_category_name'] ?? 'Uncategorized';
                 }
             }
             
@@ -2913,6 +2919,7 @@ try {
                 'quantity' => $dish['quantity'] ?? 0,
                 'total_amount' => $dish['total_amount'] ?? 0,
                 'number_of_persons' => $dish['number_of_persons'] ?? 1,
+                'category_name' => $dish['dish_category_name'] ?? 'Uncategorized',
                 'ingredients' => $dish['ingredients'] ?? []
             ];
         }
@@ -3698,57 +3705,57 @@ function printOrder(orderNumberOrId) {
                         size: A4;
                         margin: 0.5cm;
                     }
-                    body { margin: 0; padding: 10px; position: relative; font-size: 12px !important; }
+                    body { margin: 0; padding: 15px; position: relative; font-size: 14px !important; }
                     .no-print { display: none; }
-                    .print-banner { min-height: 100px !important; margin-bottom: 10px !important; }
-                    .banner-left-name { font-size: 16px !important; margin-bottom: 4px !important; }
-                    .banner-left-phone { font-size: 11px !important; }
-                    .banner-right-service { font-size: 13px !important; }
-                    .banner-right-service.yellow { font-size: 14px !important; }
-                    .banner-address-bar { padding: 6px 10px !important; margin-top: 6px !important; }
-                    .banner-address-text { font-size: 10px !important; }
+                    .print-banner { min-height: 120px !important; margin-bottom: 15px !important; }
+                    .banner-left-name { font-size: 20px !important; margin-bottom: 6px !important; }
+                    .banner-left-phone { font-size: 13px !important; }
+                    .banner-right-service { font-size: 15px !important; }
+                    .banner-right-service.yellow { font-size: 17px !important; }
+                    .banner-address-bar { padding: 8px 12px !important; margin-top: 8px !important; }
+                    .banner-address-text { font-size: 12px !important; }
                     .dish-names-section {
-                        margin: 6px 0 !important;
-                        padding: 6px !important;
+                        margin: 8px 0 !important;
+                        padding: 8px !important;
                         page-break-inside: avoid !important;
                     }
                     .dish-names-section h2 {
-                        font-size: 11px !important;
-                        margin-bottom: 4px !important;
-                        padding: 2px 0 !important;
+                        font-size: 13px !important;
+                        margin-bottom: 6px !important;
+                        padding: 3px 0 !important;
                     }
                     .dish-names-section [style*="grid-template-columns"] {
                         grid-template-columns: repeat(2, 1fr) !important;
-                        gap: 4px !important;
-                    }
-                    .dish-names-section [style*="grid-template-columns"] > div {
-                        padding: 4px 6px !important;
-                        font-size: 11px !important;
-                    }
-                    .fillable-section { 
-                        margin: 10px 0 !important; 
-                        padding: 8px !important;
-                        display: grid !important;
-                        grid-template-columns: repeat(2, 1fr) !important;
                         gap: 6px !important;
                     }
+                    .dish-names-section [style*="grid-template-columns"] > div {
+                        padding: 6px 8px !important;
+                        font-size: 13px !important;
+                    }
+                    .fillable-section { 
+                        margin: 15px 0 !important; 
+                        padding: 12px !important;
+                        display: grid !important;
+                        grid-template-columns: repeat(2, 1fr) !important;
+                        gap: 10px !important;
+                    }
                     .fillable-field { margin-bottom: 0 !important; }
-                    .fillable-label { font-size: 13px !important; }
-                    .fillable-space { height: 22px !important; }
-                    .header { margin-bottom: 10px !important; padding-bottom: 8px !important; }
-                    .header h1 { font-size: 18px !important; }
-                    .header p { font-size: 12px !important; margin: 3px 0 !important; }
-                    .order-info { margin: 10px 0 !important; }
-                    .order-info p { margin: 5px 0 !important; font-size: 11px !important; }
-                    .order-details { padding: 12px !important; margin: 10px 0 !important; }
-                    .order-details h3 { font-size: 14px !important; margin-top: 0 !important; }
-                    .detail-row { margin: 6px 0 !important; padding: 5px 0 !important; font-size: 11px !important; }
-                    .total-section { margin-top: 12px !important; padding-top: 12px !important; }
-                    .total-row { font-size: 16px !important; margin: 8px 0 !important; }
-                    .notes { margin-top: 10px !important; padding: 8px !important; font-size: 11px !important; }
-                    .footer { margin-top: 12px !important; padding-top: 10px !important; font-size: 11px !important; }
+                    .fillable-label { font-size: 15px !important; }
+                    .fillable-space { height: 28px !important; }
+                    .header { margin-bottom: 15px !important; padding-bottom: 12px !important; }
+                    .header h1 { font-size: 22px !important; }
+                    .header p { font-size: 15px !important; margin: 5px 0 !important; }
+                    .order-info { margin: 15px 0 !important; }
+                    .order-info p { margin: 8px 0 !important; font-size: 13px !important; }
+                    .order-details { padding: 18px !important; margin: 15px 0 !important; }
+                    .order-details h3 { font-size: 18px !important; margin-top: 0 !important; }
+                    .detail-row { margin: 10px 0 !important; padding: 8px 0 !important; font-size: 13px !important; }
+                    .total-section { margin-top: 18px !important; padding-top: 18px !important; }
+                    .total-row { font-size: 20px !important; margin: 12px 0 !important; }
+                    .notes { margin-top: 15px !important; padding: 12px !important; font-size: 13px !important; }
+                    .footer { margin-top: 18px !important; padding-top: 15px !important; font-size: 13px !important; }
                 }
-                body { font-family: ${fontFamily}; padding: 12px; max-width: 600px; margin: 0 auto; position: relative; direction: ${langDir}; font-size: 12px; }
+                body { font-family: ${fontFamily}; padding: 18px; max-width: 800px; margin: 0 auto; position: relative; direction: ${langDir}; font-size: 14px; }
                 
                 /* Banner Header - Visible and readable */
                 .print-banner {
@@ -3773,18 +3780,18 @@ function printOrder(orderNumberOrId) {
                     border-right: 2px solid #000;
                 }
                 .banner-left-name {
-                    font-size: 18px;
+                    font-size: 22px;
                     font-weight: 900;
                     color: #000;
-                    margin-bottom: 6px;
+                    margin-bottom: 8px;
                     text-align: center;
                     font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
                     line-height: 1.4;
                 }
                 .banner-left-phone {
-                    font-size: 12px;
+                    font-size: 14px;
                     color: #000;
-                    margin: 2px 0;
+                    margin: 4px 0;
                     text-align: center;
                     direction: ltr;
                     font-weight: bold;
@@ -3803,9 +3810,9 @@ function printOrder(orderNumberOrId) {
                 }
                 .banner-right-service {
                     color: #666;
-                    font-size: 14px;
+                    font-size: 16px;
                     font-weight: 700;
-                    margin: 3px 0;
+                    margin: 4px 0;
                     text-align: center;
                     font-family: 'Arial', 'Noto Sans Arabic', 'Segoe UI', 'Tahoma', sans-serif;
                     line-height: 1.4;
@@ -3813,7 +3820,7 @@ function printOrder(orderNumberOrId) {
                 }
                 .banner-right-service.yellow {
                     color: #FFD700;
-                    font-size: 16px;
+                    font-size: 18px;
                     font-weight: 900;
                     text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
                 }
@@ -3874,43 +3881,44 @@ function printOrder(orderNumberOrId) {
                 }
                 .fillable-label {
                     font-weight: bold;
-                    font-size: 14px;
+                    font-size: 16px;
                     color: #333;
-                    min-width: 80px;
+                    min-width: 100px;
                     margin-left: 15px;
                 }
                 .fillable-space {
                     flex: 1;
                     border-bottom: 2px solid #000;
-                    height: 24px;
-                    margin: 0 10px;
+                    height: 30px;
+                    margin: 0 12px;
                 }
                 
-                .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #1e293b; padding-bottom: 12px; position: relative; z-index: 1; }
-                .header h1 { margin: 0; color: #1e293b; font-size: 20px; }
-                .header p { margin: 4px 0; color: #64748b; font-size: 14px; }
-                .order-info { margin: 12px 0; position: relative; z-index: 1; }
-                .order-info p { margin: 6px 0; font-size: 12px; }
-                .order-details { background: #f8fafc; padding: 15px; border-radius: 5px; margin: 12px 0; position: relative; z-index: 1; }
-                .order-details h3 { margin-top: 0; font-size: 16px; }
-                .detail-row { display: flex; justify-content: space-between; margin: 8px 0; padding: 6px 0; border-bottom: 1px solid #e2e8f0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; font-size: 12px; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1e293b; padding-bottom: 15px; position: relative; z-index: 1; }
+                .header h1 { margin: 0; color: #1e293b; font-size: 24px; }
+                .header p { margin: 6px 0; color: #64748b; font-size: 16px; }
+                .order-info { margin: 18px 0; position: relative; z-index: 1; }
+                .order-info p { margin: 8px 0; font-size: 14px; }
+                .order-details { background: #f8fafc; padding: 20px; border-radius: 5px; margin: 18px 0; position: relative; z-index: 1; }
+                .order-details h3 { margin-top: 0; font-size: 20px; }
+                .detail-row { display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #e2e8f0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; font-size: 14px; }
                 .detail-row:last-child { border-bottom: none; }
                 .detail-label { font-weight: bold; }
+                .category-badge { display: inline-block; padding: 4px 10px; background: #e0e7ff; color: #4338ca; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
                 ${langDir === 'rtl' ? '.notes { border-left: none; border-right: 4px solid #f59e0b; }' : ''}
-                .total-section { margin-top: 15px; padding-top: 15px; border-top: 2px solid #1e293b; position: relative; z-index: 1; }
-                .total-row { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; margin: 10px 0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; }
-                .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-weight: bold; margin-top: 8px; font-size: 11px; }
+                .total-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #1e293b; position: relative; z-index: 1; }
+                .total-row { display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; margin: 12px 0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; }
+                .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; margin-top: 10px; font-size: 13px; }
                 .status-pending { background: #f59e0b; color: #fff; }
                 .status-confirmed { background: #f97316; color: #fff; }
                 .status-preparing { background: #64748b; color: #fff; }
                 .status-ready { background: #10b981; color: #fff; }
                 .status-delivered { background: #10b981; color: #fff; }
                 .status-cancelled { background: #ef4444; color: #fff; }
-                .footer { margin-top: 15px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 12px; position: relative; z-index: 1; }
-                .print-btn { margin: 20px 0; text-align: center; }
-                button { padding: 10px 20px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 5px; font-size: 13px; }
+                .footer { margin-top: 20px; text-align: center; color: #64748b; font-size: 14px; border-top: 1px solid #e2e8f0; padding-top: 15px; position: relative; z-index: 1; }
+                .print-btn { margin: 25px 0; text-align: center; }
+                button { padding: 12px 24px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 8px; font-size: 15px; }
                 button:hover { background: #7c3aed; }
-                .notes { margin-top: 12px; padding: 10px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 12px; }
+                .notes { margin-top: 15px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 14px; }
             </style>
         </head>
         <body>
@@ -3923,11 +3931,12 @@ function printOrder(orderNumberOrId) {
             <div class="fillable-section">
                 ${order.dishes.map(dish => {
                     const dishName = dish.dish_name || 'N/A';
+                    const categoryName = dish.category_name || 'Uncategorized';
                     const quantity = dish.quantity || 1;
                     return `
                     <div class="fillable-field">
                         <span class="fillable-label">${translations.dish || 'Dish'}:</span>
-                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantity > 1 ? ' (x' + quantity + ')' : ''}</div>
+                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantity > 1 ? ' (x' + quantity + ')' : ''} <span class="category-badge">${categoryName}</span></div>
                     </div>
                     `;
                 }).join('')}
@@ -3969,15 +3978,16 @@ function printOrder(orderNumberOrId) {
                     ${order.dishes.map(dish => {
                         const persons = parseInt(dish.number_of_persons) || 1;
                         const dishName = dish.dish_name || 'N/A';
+                        const categoryName = dish.category_name || 'Uncategorized';
                         return `
-                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 8px; padding: 8px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px;">
+                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 10px; padding: 12px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px;">
                             <div style="flex: 1;">
-                                <div style="font-size: 13px; font-weight: bold; color: #1e293b; margin-bottom: 4px;">${dishName}</div>
-                                <div style="color: #64748b; font-size: 11px; line-height: 1.5;">
+                                <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
+                                <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
                                     <span>${translations.quantity}: <strong>${dish.quantity}</strong></span>
-                                    <span style="margin: 0 8px;">|</span>
+                                    <span style="margin: 0 10px;">|</span>
                                     <span>${translations.persons}: <strong>${persons}</strong></span>
-                                    ${dish.total_amount > 0 ? '<span style="margin: 0 8px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}
+                                    ${dish.total_amount > 0 ? '<span style="margin: 0 10px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}
                                 </div>
                             </div>
                         </div>
