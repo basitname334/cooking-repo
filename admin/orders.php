@@ -3179,32 +3179,40 @@ function printIngredients(orderNumberOrId) {
         ingredientsHtml += '<tr><td colspan="2" style="padding: 8px 10px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 13px; line-height: 1.5;">' + translations.no_ingredients_found + '</td></tr>';
         ingredientsHtml += '</tbody></table>';
     } else {
-        // Collect all ingredients from all dishes into a single combined list
-        // No dish or category headers - just a clean aligned grid
-        const allIngredientsMap = {};
+        // Collect all ingredients grouped by category from all dishes
+        const ingredientsByCategory = {};
         
-        // Loop through all dishes and collect ingredients
+        // Loop through all dishes and collect ingredients by category
         dishKeys.forEach(function(dishKey) {
             const dish = ingredientsByDish[dishKey];
             const categoryKeys = Object.keys(dish.categories);
             
             categoryKeys.forEach(function(categoryId) {
                 const category = dish.categories[categoryId];
+                const categoryName = category.category_name || 'بغیر زمرہ';
                 const categoryIngredients = Object.values(category.ingredients);
                 
-                // Add each ingredient to the combined map
+                // Initialize category if not exists
+                if (!ingredientsByCategory[categoryId]) {
+                    ingredientsByCategory[categoryId] = {
+                        category_name: categoryName,
+                        ingredients: {}
+                    };
+                }
+                
+                // Add each ingredient to the category map
                 categoryIngredients.forEach(function(ing) {
                     const ingredientId = ing.ingredient_id || 0;
                     const ingredientName = ing.ingredient_name || 'N/A';
                     const key = ingredientId > 0 ? ingredientId : ingredientName.toLowerCase().trim();
                     
-                    // Combine ingredients with same name/ID
-                    if (allIngredientsMap[key]) {
+                    // Combine ingredients with same name/ID within the category
+                    if (ingredientsByCategory[categoryId].ingredients[key]) {
                         // Add quantities if same ingredient
-                        allIngredientsMap[key].quantity += parseFloat(ing.quantity) || 0;
+                        ingredientsByCategory[categoryId].ingredients[key].quantity += parseFloat(ing.quantity) || 0;
                     } else {
                         // Add new ingredient
-                        allIngredientsMap[key] = {
+                        ingredientsByCategory[categoryId].ingredients[key] = {
                             ingredient_id: ingredientId,
                             ingredient_name: ingredientName,
                             quantity: parseFloat(ing.quantity) || 0,
@@ -3215,51 +3223,68 @@ function printIngredients(orderNumberOrId) {
             });
         });
         
-        // Convert map to array and sort alphabetically by name
-        const allIngredients = Object.values(allIngredientsMap).sort((a, b) => {
-            const nameA = a.ingredient_name || '';
-            const nameB = b.ingredient_name || '';
-            return nameA.localeCompare(nameB);
-        });
+        // Get category IDs and sort them
+        const categoryIds = Object.keys(ingredientsByCategory);
         
-        if (allIngredients.length > 0) {
-            // Display all ingredients in a single 6-column grid - clean and aligned
-            ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 8px; page-break-inside: avoid;">';
-            
-            allIngredients.forEach(function(ing) {
-                let quantity = parseFloat(ing.quantity) || 0;
-                let unit = ing.unit || '';
+        if (categoryIds.length > 0) {
+            // Display ingredients grouped by category
+            categoryIds.forEach(function(categoryId) {
+                const category = ingredientsByCategory[categoryId];
+                const categoryName = category.category_name || 'بغیر زمرہ';
+                const ingredients = Object.values(category.ingredients);
                 
-                // Convert large gram values to kg for better readability
-                if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                    quantity = (quantity / 1000).toFixed(2);
-                    unit = 'kg';
-                } else {
-                    // Format quantity based on unit type
-                    const unitLower = unit.toLowerCase();
-                    // For countable items (pieces, piece, serving, servings, etc.), show as whole number
-                    if (unitLower === 'piece' || unitLower === 'pieces' || 
-                        unitLower === 'serving' || unitLower === 'servings' ||
-                        unitLower === 'portion' || unitLower === 'portions' ||
-                        unitLower === 'item' || unitLower === 'items') {
-                        quantity = Math.round(quantity).toString();
-                    } else {
-                        // For weight/volume units, show 2 decimal places
-                        quantity = quantity.toFixed(2);
-                    }
+                // Sort ingredients alphabetically by name
+                ingredients.sort((a, b) => {
+                    const nameA = a.ingredient_name || '';
+                    const nameB = b.ingredient_name || '';
+                    return nameA.localeCompare(nameB);
+                });
+                
+                if (ingredients.length > 0) {
+                    // Category header
+                    ingredientsHtml += '<div class="category-section" style="margin-top: 15px; margin-bottom: 10px; page-break-inside: avoid;">';
+                    ingredientsHtml += '<div class="category-header" style="font-size: 16px; font-weight: bold; color: #ffffff; padding: 8px 12px; background-color: #8b5cf6; border-radius: 4px; margin: 0 0 8px 0; font-family: ' + fontFamily + ';">' + categoryName + '</div>';
+                    
+                    // Ingredients grid for this category
+                    ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 12px; page-break-inside: avoid;">';
+                    
+                    ingredients.forEach(function(ing) {
+                        let quantity = parseFloat(ing.quantity) || 0;
+                        let unit = ing.unit || '';
+                        
+                        // Convert large gram values to kg for better readability
+                        if (unit.toLowerCase() === 'g' && quantity >= 1000) {
+                            quantity = (quantity / 1000).toFixed(2);
+                            unit = 'kg';
+                        } else {
+                            // Format quantity based on unit type
+                            const unitLower = unit.toLowerCase();
+                            // For countable items (pieces, piece, serving, servings, etc.), show as whole number
+                            if (unitLower === 'piece' || unitLower === 'pieces' || 
+                                unitLower === 'serving' || unitLower === 'servings' ||
+                                unitLower === 'portion' || unitLower === 'portions' ||
+                                unitLower === 'item' || unitLower === 'items') {
+                                quantity = Math.round(quantity).toString();
+                            } else {
+                                // For weight/volume units, show 2 decimal places
+                                quantity = quantity.toFixed(2);
+                            }
+                        }
+                        
+                        const quantityUnit = quantity + (unit ? ' ' + unit : '');
+                        const ingredientName = ing.ingredient_name || 'N/A';
+                        
+                        // Format for 6-column layout: Clean aligned display
+                        ingredientsHtml += '<div style="padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; background-color: #ffffff; page-break-inside: avoid;">';
+                        ingredientsHtml += '<div style="font-size: 12px; font-weight: bold; color: #1e293b; margin-bottom: 3px; font-family: ' + fontFamily + '; line-height: 1.4;">' + ingredientName + '</div>';
+                        ingredientsHtml += '<div style="font-size: 11px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + quantityUnit + '</div>';
+                        ingredientsHtml += '</div>';
+                    });
+                    
+                    ingredientsHtml += '</div>'; // Close grid
+                    ingredientsHtml += '</div>'; // Close category section
                 }
-                
-                const quantityUnit = quantity + (unit ? ' ' + unit : '');
-                const ingredientName = ing.ingredient_name || 'N/A';
-                
-                // Format for 6-column layout: Clean aligned display
-                ingredientsHtml += '<div style="padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 3px; background-color: #ffffff; page-break-inside: avoid;">';
-                ingredientsHtml += '<div style="font-size: 11px; font-weight: bold; color: #1e293b; margin-bottom: 2px; font-family: ' + fontFamily + '; line-height: 1.3;">' + ingredientName + '</div>';
-                ingredientsHtml += '<div style="font-size: 10px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + quantityUnit + '</div>';
-                ingredientsHtml += '</div>';
             });
-            
-            ingredientsHtml += '</div>';
         } else {
             ingredientsHtml += '<p style="text-align: center; color: #64748b; font-size: 14px; margin: 10px 0; font-family: ' + fontFamily + ';">' + translations.no_ingredients_found + '</p>';
         }
@@ -3337,23 +3362,23 @@ function printIngredients(orderNumberOrId) {
                         margin: 0 0 6px 0 !important;
                     }
                     .category-section {
-                        margin-top: 8px !important;
-                        margin-bottom: 4px !important;
+                        margin-top: 12px !important;
+                        margin-bottom: 8px !important;
                         page-break-inside: avoid !important;
                     }
                     .category-header {
-                        font-size: 12px !important;
-                        padding: 4px 8px !important;
-                        margin: 0 !important;
+                        font-size: 14px !important;
+                        padding: 6px 10px !important;
+                        margin: 0 0 6px 0 !important;
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
                         grid-template-columns: repeat(6, 1fr) !important;
-                        gap: 3px !important;
+                        gap: 4px !important;
                     }
                     [style*="grid-template-columns"] > div {
                         page-break-inside: avoid !important;
-                        padding: 3px 5px !important;
+                        padding: 4px 6px !important;
                     }
                     .header {
                         margin-bottom: 8px !important;
