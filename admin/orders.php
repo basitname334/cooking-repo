@@ -3252,6 +3252,37 @@ function printIngredients(orderNumberOrId) {
                         let quantity = parseFloat(ing.quantity) || 0;
                         let unit = ing.unit || '';
                         
+                        // Function to translate unit to Urdu
+                        function translateUnitToUrdu(unit) {
+                            if (!unit) return '';
+                            const unitLower = unit.toLowerCase().trim();
+                            const unitTranslations = {
+                                'kg': 'کلو',
+                                'kilogram': 'کلو',
+                                'kilograms': 'کلو',
+                                'g': 'گرام',
+                                'gram': 'گرام',
+                                'grams': 'گرام',
+                                'piece': 'ٹکڑا',
+                                'pieces': 'ٹکڑے',
+                                'serving': 'حصہ',
+                                'servings': 'حصے',
+                                'portion': 'حصہ',
+                                'portions': 'حصے',
+                                'item': 'شے',
+                                'items': 'اشیاء',
+                                'ml': 'ملی لیٹر',
+                                'milliliter': 'ملی لیٹر',
+                                'milliliters': 'ملی لیٹر',
+                                'l': 'لیٹر',
+                                'liter': 'لیٹر',
+                                'liters': 'لیٹر',
+                                'litre': 'لیٹر',
+                                'litres': 'لیٹر'
+                            };
+                            return unitTranslations[unitLower] || unit;
+                        }
+                        
                         // Convert large gram values to kg for better readability
                         if (unit.toLowerCase() === 'g' && quantity >= 1000) {
                             quantity = (quantity / 1000).toFixed(2);
@@ -3271,7 +3302,9 @@ function printIngredients(orderNumberOrId) {
                             }
                         }
                         
-                        const quantityUnit = quantity + (unit ? ' ' + unit : '');
+                        // Translate unit to Urdu
+                        const unitUrdu = translateUnitToUrdu(unit);
+                        const quantityUnit = quantity + (unitUrdu ? ' ' + unitUrdu : '');
                         const ingredientName = ing.ingredient_name || 'N/A';
                         
                         // Format for 6-column layout: Clean aligned display
@@ -3367,10 +3400,22 @@ function printIngredients(orderNumberOrId) {
                     .fillable-table td.fillable-field-cell {
                         width: 25% !important;
                     }
+                    .fillable-table tbody tr td:nth-child(2).fillable-field-cell {
+                        text-align: left !important;
+                    }
+                    .fillable-table tbody tr td:nth-child(3).fillable-field-cell {
+                        text-align: left !important;
+                    }
                     .fillable-space {
                         height: 20px !important;
                         min-height: 20px !important;
                         font-size: 11px !important;
+                    }
+                    .fillable-table tbody tr td:nth-child(2).fillable-field-cell .fillable-space {
+                        text-align: left !important;
+                    }
+                    .fillable-table tbody tr td:nth-child(3).fillable-field-cell .fillable-space {
+                        text-align: left !important;
                     }
                     .content-wrapper {
                         padding: 5px !important;
@@ -3567,6 +3612,12 @@ function printIngredients(orderNumberOrId) {
                     width: 25%;
                     text-align: center;
                 }
+                .fillable-table tbody tr td:nth-child(2).fillable-field-cell {
+                    text-align: left;
+                }
+                .fillable-table tbody tr td:nth-child(3).fillable-field-cell {
+                    text-align: left;
+                }
                 .fillable-space {
                     border-bottom: 2px solid #000;
                     height: 20px;
@@ -3576,6 +3627,12 @@ function printIngredients(orderNumberOrId) {
                     text-align: center;
                     font-weight: bold;
                     font-size: 11px;
+                }
+                .fillable-table tbody tr td:nth-child(2).fillable-field-cell .fillable-space {
+                    text-align: left;
+                }
+                .fillable-table tbody tr td:nth-child(3).fillable-field-cell .fillable-space {
+                    text-align: left;
                 }
                 
                 .content-wrapper {
@@ -3676,86 +3733,39 @@ function printIngredients(orderNumberOrId) {
                         </tr>
                     </thead>
                     <tbody>
+                        ${(() => {
+                            const dishes = order.dishes && order.dishes.length > 0 ? order.dishes : [];
+                            const infoRows = [
+                                { label: 'گاہک', value: (order.customer_name || '') + (order.customer_cell ? (order.customer_name ? ' - ' : '') + order.customer_cell : '') },
+                                { label: 'افراد کی تعداد', value: totalPersons > 0 ? totalPersons : '' },
+                                { label: 'ڈیلیوری تاریخ', value: order.delivery_date ? formatDateForPrint(order.delivery_date) : '' },
+                                { label: 'شفت', value: order.shift ? (shiftTranslations[order.shift] || order.shift) : '' },
+                                { label: 'ڈیلیوری وقت', value: order.delivery_time || '' }
+                            ];
+                            
+                            let rows = '';
+                            for (let i = 0; i < 5; i++) {
+                                const dish = dishes[i];
+                                const dishName = dish ? (dish.dish_name || 'N/A') + ' ' + (parseFloat(dish.quantity) || 1).toFixed(2) : '';
+                                const info = infoRows[i] || { label: '', value: '' };
+                                
+                                rows += `
                         <tr>
-                            <td class="fillable-label-cell">گاہک</td>
+                            <td class="fillable-label-cell">${info.label}</td>
                             <td class="fillable-field-cell">
-                                <div class="fillable-space">${order.customer_name || ''}${order.customer_cell ? (order.customer_name ? ' - ' : '') + order.customer_cell : ''}</div>
+                                <div class="fillable-space">${info.value}</div>
                             </td>
                             <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
+                                <div class="fillable-space">${dishName}</div>
                             </td>
                             <td class="fillable-field-cell">
                                 <div class="fillable-space"></div>
                             </td>
                         </tr>
-                        <tr>
-                            <td class="fillable-label-cell">افراد کی تعداد</td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${totalPersons > 0 ? totalPersons : ''}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="fillable-label-cell">ڈیلیوری تاریخ</td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${order.delivery_date ? formatDateForPrint(order.delivery_date) : ''}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="fillable-label-cell">شفت</td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${order.shift ? (shiftTranslations[order.shift] || order.shift) : ''}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="fillable-label-cell">ڈیلیوری وقت</td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${order.delivery_time || ''}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                        </tr>
-                        ${order.dishes.map((dish, index) => {
-                            const dishName = dish.dish_name || 'N/A';
-                            const quantity = dish.quantity || 1;
-                            const categoryName = dish.category_name || '';
-                            const dishLabel = index === 0 ? (translations.dish || 'Dish') : '';
-                            return `
-                        <tr>
-                            <td class="fillable-label-cell">${dishLabel}</td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${dishName}${categoryName ? ' - ' + categoryName : ''}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${quantity}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                        </tr>
-                        `;
-                        }).join('')}
+                                `;
+                            }
+                            return rows;
+                        })()}
                     </tbody>
                 </table>
             </div>
