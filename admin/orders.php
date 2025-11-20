@@ -13,77 +13,103 @@ $conn = getDBConnection();
 $error = '';
 $success = '';
 
-// Check and add order_number column if it doesn't exist
-$result = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_number'");
-if (!$result || $result->num_rows == 0) {
-    $conn->query("ALTER TABLE `orders` ADD COLUMN `order_number` VARCHAR(50) DEFAULT NULL AFTER `id`");
-    $conn->query("ALTER TABLE `orders` ADD INDEX `idx_order_number` (`order_number`)");
-    // Generate order numbers for existing orders
-    $conn->query("UPDATE `orders` SET `order_number` = CONCAT('ORD-', LPAD(`id`, 6, '0')) WHERE `order_number` IS NULL");
-}
+// Set execution time limit for Render (30 seconds)
+@set_time_limit(30);
 
-// Update orders table schema if needed - add required columns for order form
-$required_columns = [
-    'customer_name' => "VARCHAR(100) DEFAULT NULL",
-    'customer_cell' => "VARCHAR(20) DEFAULT NULL",
-    'delivery_date' => "DATE DEFAULT NULL",
-    'delivery_time' => "TIME DEFAULT NULL",
-    'shift' => "ENUM('afternoon', 'evening') DEFAULT NULL",
-    'number_of_persons' => "INT DEFAULT NULL"
-];
-
-foreach ($required_columns as $column => $definition) {
-    $result = $conn->query("SHOW COLUMNS FROM `orders` LIKE '$column'");
-    if (!$result || $result->num_rows == 0) {
-        $conn->query("ALTER TABLE `orders` ADD COLUMN `$column` $definition");
+// Wrap schema modifications in try-catch to prevent crashes
+try {
+    // Check and add order_number column if it doesn't exist
+    $result = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_number'");
+    if ($result && $result->num_rows == 0) {
+        @$conn->query("ALTER TABLE `orders` ADD COLUMN `order_number` VARCHAR(50) DEFAULT NULL AFTER `id`");
+        @$conn->query("ALTER TABLE `orders` ADD INDEX `idx_order_number` (`order_number`)");
+        // Generate order numbers for existing orders (limit to prevent timeout)
+        @$conn->query("UPDATE `orders` SET `order_number` = CONCAT('ORD-', LPAD(`id`, 6, '0')) WHERE `order_number` IS NULL LIMIT 1000");
     }
-}
-
-// Check if order_date column exists, if not add it
-$check_order_date = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_date'");
-if (!$check_order_date || $check_order_date->num_rows == 0) {
-    $conn->query("ALTER TABLE `orders` ADD COLUMN `order_date` DATETIME DEFAULT NULL AFTER `customer_cell`");
-}
-
-// Check if extra_ingredients column exists, if not add it
-$check_extra_ingredients = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'extra_ingredients'");
-if (!$check_extra_ingredients || $check_extra_ingredients->num_rows == 0) {
-    $conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
-}
-
-// Make customer_id nullable to support orders without registered customers
-$check_customer_id = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
-if ($check_customer_id && $check_customer_id->num_rows > 0) {
-    $column_info = $check_customer_id->fetch_assoc();
-    if ($column_info['Null'] === 'NO') {
-        // Try to drop the foreign key constraint first, then modify the column
-        try {
-            $conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `orders_ibfk_1`");
-        } catch (Exception $e) {
-            // Constraint might not exist or have different name, try alternative
-            $fk_result = $conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE 
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' 
-                AND COLUMN_NAME = 'customer_id' AND REFERENCED_TABLE_NAME IS NOT NULL");
-            if ($fk_result && $fk_result->num_rows > 0) {
-                $fk_row = $fk_result->fetch_assoc();
-                $fk_name = $fk_row['CONSTRAINT_NAME'];
-                $conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `$fk_name`");
+    
+    // Update orders table schema if needed - add required columns for order form
+    $required_columns = [
+        'customer_name' => "VARCHAR(100) DEFAULT NULL",
+        'customer_cell' => "VARCHAR(20) DEFAULT NULL",
+        'delivery_date' => "DATE DEFAULT NULL",
+        'delivery_time' => "TIME DEFAULT NULL",
+        'shift' => "ENUM('afternoon', 'evening') DEFAULT NULL",
+        'number_of_persons' => "INT DEFAULT NULL"
+    ];
+    
+    foreach ($required_columns as $column => $definition) {
+        $result = @$conn->query("SHOW COLUMNS FROM `orders` LIKE '$column'");
+        if ($result && $result->num_rows == 0) {
+            @$conn->query("ALTER TABLE `orders` ADD COLUMN `$column` $definition");
+        }
+    }
+    
+    // Check if order_date column exists, if not add it
+    $check_order_date = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_date'");
+    if ($check_order_date && $check_order_date->num_rows == 0) {
+        @$conn->query("ALTER TABLE `orders` ADD COLUMN `order_date` DATETIME DEFAULT NULL AFTER `customer_cell`");
+    }
+    
+    // Check if extra_ingredients column exists, if not add it
+    $check_extra_ingredients = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'extra_ingredients'");
+    if ($check_extra_ingredients && $check_extra_ingredients->num_rows == 0) {
+        @$conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
+    }
+    
+    // Make customer_id nullable to support orders without registered customers
+    $check_customer_id = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
+    if ($check_customer_id && $check_customer_id->num_rows > 0) {
+        $column_info = $check_customer_id->fetch_assoc();
+        if (isset($column_info['Null']) && $column_info['Null'] === 'NO') {
+            // Try to drop the foreign key constraint first, then modify the column
+            try {
+                @$conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `orders_ibfk_1`");
+            } catch (Exception $e) {
+                // Constraint might not exist or have different name, try alternative
+                try {
+                    $fk_result = @$conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE 
+                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' 
+                        AND COLUMN_NAME = 'customer_id' AND REFERENCED_TABLE_NAME IS NOT NULL
+                        LIMIT 1");
+                    if ($fk_result && $fk_result->num_rows > 0) {
+                        $fk_row = $fk_result->fetch_assoc();
+                        $fk_name = $fk_row['CONSTRAINT_NAME'];
+                        @$conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `$fk_name`");
+                    }
+                } catch (Exception $e2) {
+                    // Ignore errors
+                }
+            }
+            // Make column nullable
+            try {
+                @$conn->query("ALTER TABLE `orders` MODIFY `customer_id` INT(11) NULL");
+                // Re-add foreign key constraint with ON DELETE SET NULL
+                try {
+                    @$conn->query("ALTER TABLE `orders` ADD CONSTRAINT `orders_ibfk_1` 
+                        FOREIGN KEY (`customer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL");
+                } catch (Exception $e) {
+                    // If it fails, we'll continue without the constraint for now
+                }
+            } catch (Exception $e) {
+                // Ignore errors
             }
         }
-        // Make column nullable
-        $conn->query("ALTER TABLE `orders` MODIFY `customer_id` INT(11) NULL");
-        // Re-add foreign key constraint with ON DELETE SET NULL
-        try {
-            $conn->query("ALTER TABLE `orders` ADD CONSTRAINT `orders_ibfk_1` 
-                FOREIGN KEY (`customer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL");
-        } catch (Exception $e) {
-            // If it fails, we'll continue without the constraint for now
-        }
     }
+} catch (Exception $e) {
+    // Log error but don't crash the page
+    error_log("Schema modification error: " . $e->getMessage());
 }
 
 // Handle create order
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
+    // Set execution time limit for order creation
+    @set_time_limit(60);
+    
+    // Check database connection
+    if (!$conn || $conn->connect_error) {
+        $error = 'Database connection failed. Please try again.';
+        error_log("Database connection error: " . ($conn ? $conn->connect_error : 'Connection is null'));
+    } else {
     $customer_id = intval($_POST['customer_id'] ?? 0);
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_cell = trim($_POST['customer_cell'] ?? '');
@@ -258,21 +284,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                 }
                 
                 if ($stmt) {
-                    if ($stmt->execute()) {
-                        if ($order_id === null) {
-                            $order_id = $conn->insert_id;
+                    try {
+                        if ($stmt->execute()) {
+                            if ($order_id === null) {
+                                $order_id = $conn->insert_id;
+                            }
+                            $orders_created++;
+                        } else {
+                            $errors[] = 'Failed to create order for dish ID ' . $dish_info['dish_id'] . ': ' . $stmt->error;
+                            error_log("Order creation error: " . $stmt->error);
+                            error_log("Order number: " . $order_number);
+                            error_log("Dish ID: " . $dish_info['dish_id']);
                         }
-                        $orders_created++;
-                    } else {
-                        $errors[] = 'Failed to create order for dish ID ' . $dish_info['dish_id'] . ': ' . $stmt->error;
-                        error_log("Order creation error: " . $stmt->error);
-                        error_log("Order number: " . $order_number);
-                        error_log("Dish ID: " . $dish_info['dish_id']);
+                    } catch (Exception $e) {
+                        $errors[] = 'Exception creating order for dish ID ' . $dish_info['dish_id'] . ': ' . $e->getMessage();
+                        error_log("Order creation exception: " . $e->getMessage());
                     }
                     $stmt->close();
                 } else {
-                    $errors[] = 'Failed to prepare insert query for dish ID ' . $dish_info['dish_id'] . ': ' . $conn->error;
-                    error_log("Prepare error: " . $conn->error);
+                    $errors[] = 'Failed to prepare insert query for dish ID ' . $dish_info['dish_id'] . ': ' . ($conn->error ?? 'Unknown error');
+                    error_log("Prepare error: " . ($conn->error ?? 'Unknown error'));
                 }
             }
             
@@ -286,6 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             }
         }
     }
+    } // End of database connection check
 }
 
 // Handle order status update - update all items in the same order
@@ -497,7 +529,7 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.t
     u.email as user_customer_email,
     COALESCE(u.name, o.customer_name) as customer_name, 
     COALESCE(u.email, o.customer_cell) as customer_email, 
-    d.name as dish_name, d.id as dish_id, d.number_of_persons, d.category_id,
+    d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
     cat.name as dish_category_name
     FROM orders o
     LEFT JOIN users u ON o.customer_id = u.id
@@ -559,8 +591,13 @@ if ($result && $result->num_rows > 0) {
                     $dish = $dish_result->fetch_assoc();
                     $order['dish_name'] = $dish['name'];
                     $order['dish_id'] = $dish['id'];
-                    $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
+                    // Preserve order's number_of_persons, don't overwrite with dish's default
+                    // Only set if order's number_of_persons is not set
+                    if (empty($order['number_of_persons']) || $order['number_of_persons'] == 0) {
+                        $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
+                    }
                     $order['dish_category_name'] = $dish['dish_category_name'] ?? 'Uncategorized';
+                    $order['dish_number_of_persons'] = $dish['number_of_persons'] ?? 0;
                 }
             }
             
@@ -2918,7 +2955,7 @@ try {
                 'dish_id' => $dish['dish_id'] ?? 0,
                 'quantity' => $dish['quantity'] ?? 0,
                 'total_amount' => $dish['total_amount'] ?? 0,
-                'number_of_persons' => $dish['number_of_persons'] ?? 1,
+                'number_of_persons' => $orderData['number_of_persons'] ?? ($dish['number_of_persons'] ?? 1),
                 'category_name' => $dish['dish_category_name'] ?? 'Uncategorized',
                 'ingredients' => $dish['ingredients'] ?? []
             ];
@@ -3399,23 +3436,13 @@ function printIngredients(orderNumberOrId) {
                     }
                     .fillable-table td.fillable-field-cell {
                         width: 25% !important;
-                    }
-                    .fillable-table tbody tr td:nth-child(2).fillable-field-cell {
-                        text-align: left !important;
-                    }
-                    .fillable-table tbody tr td:nth-child(3).fillable-field-cell {
-                        text-align: left !important;
+                        text-align: center !important;
                     }
                     .fillable-space {
                         height: 20px !important;
                         min-height: 20px !important;
                         font-size: 11px !important;
-                    }
-                    .fillable-table tbody tr td:nth-child(2).fillable-field-cell .fillable-space {
-                        text-align: left !important;
-                    }
-                    .fillable-table tbody tr td:nth-child(3).fillable-field-cell .fillable-space {
-                        text-align: left !important;
+                        text-align: center !important;
                     }
                     .content-wrapper {
                         padding: 5px !important;
@@ -3612,12 +3639,6 @@ function printIngredients(orderNumberOrId) {
                     width: 25%;
                     text-align: center;
                 }
-                .fillable-table tbody tr td:nth-child(2).fillable-field-cell {
-                    text-align: left;
-                }
-                .fillable-table tbody tr td:nth-child(3).fillable-field-cell {
-                    text-align: left;
-                }
                 .fillable-space {
                     border-bottom: 2px solid #000;
                     height: 20px;
@@ -3627,12 +3648,6 @@ function printIngredients(orderNumberOrId) {
                     text-align: center;
                     font-weight: bold;
                     font-size: 11px;
-                }
-                .fillable-table tbody tr td:nth-child(2).fillable-field-cell .fillable-space {
-                    text-align: left;
-                }
-                .fillable-table tbody tr td:nth-child(3).fillable-field-cell .fillable-space {
-                    text-align: left;
                 }
                 
                 .content-wrapper {
@@ -3746,7 +3761,11 @@ function printIngredients(orderNumberOrId) {
                             let rows = '';
                             for (let i = 0; i < 5; i++) {
                                 const dish = dishes[i];
-                                const dishName = dish ? (dish.dish_name || 'N/A') + ' ' + (parseFloat(dish.quantity) || 1).toFixed(2) : '';
+                                const dishNameOnly = dish ? (dish.dish_name || 'N/A') : '';
+                                const quantity = dish ? (parseFloat(dish.quantity) || 1).toFixed(2) : '';
+                                // Format: dish name, then quantity, then "دیگ" after the quantity
+                                // Build string to ensure "دیگ" appears after the quantity number
+                                const dishName = dish && quantity ? dishNameOnly + ' ' + quantity + ' دیگ' : dishNameOnly;
                                 const info = infoRows[i] || { label: '', value: '' };
                                 
                                 rows += `
@@ -3828,12 +3847,8 @@ function printOrder(orderNumberOrId) {
     const fontFamily = langDir === 'rtl' ? 'Arial, "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif' : 'Arial, sans-serif';
     const orderStatus = statusTranslations[order.status] || order.status;
     
-    // Calculate total persons for the order
-    let totalPersons = 0;
-    order.dishes.forEach(function(dish) {
-        const persons = parseInt(dish.number_of_persons) || 1;
-        totalPersons = Math.max(totalPersons, persons);
-    });
+    // Get number of persons from order level (not from dish)
+    const totalPersons = parseInt(order.number_of_persons) || 0;
     
     const printWindow = window.open('', '_blank');
     // Get base URL for images
@@ -4078,11 +4093,12 @@ function printOrder(orderNumberOrId) {
                 ${order.dishes.map(dish => {
                     const dishName = dish.dish_name || 'N/A';
                     const categoryName = dish.category_name || 'Uncategorized';
-                    const quantity = dish.quantity || 1;
+                    const quantity = parseFloat(dish.quantity) || 1;
+                    const quantityText = ' ' + quantity.toFixed(2) + ' دیگ';
                     return `
                     <div class="fillable-field">
                         <span class="fillable-label">${translations.dish || 'Dish'}:</span>
-                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantity > 1 ? ' (x' + quantity + ')' : ''} <span class="category-badge">${categoryName}</span></div>
+                        <div class="fillable-space" style="text-align: center; font-weight: bold;">${dishName}${quantityText} <span class="category-badge">${categoryName}</span></div>
                     </div>
                     `;
                 }).join('')}
