@@ -19,7 +19,7 @@
 
 // Set to true to block site access (payment not made)
 // Set to false to enable site access (payment received)
-define('PAYMENT_REQUIRED', true);
+define('PAYMENT_REQUIRED', false);
 
 // Custom message to display (optional - can be customized)
 define('PAYMENT_MESSAGE', 'This site has been stopped because payment is not made. Please contact the administrator for assistance.');

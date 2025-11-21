@@ -5,12 +5,27 @@
  */
 
 // Check payment status before allowing access
-require_once __DIR__ . '/payment_status.php';
+// Only block if payment_status.php exists and payment is required
+$payment_status_file = __DIR__ . '/payment_status.php';
+if (file_exists($payment_status_file)) {
+    try {
+        require_once $payment_status_file;
+    } catch (Exception $e) {
+        // If payment status file has an error, allow site to load
+        error_log('Payment status check failed: ' . $e->getMessage());
+    }
+}
 
+// Only block if PAYMENT_REQUIRED is explicitly set to true
 if (defined('PAYMENT_REQUIRED') && PAYMENT_REQUIRED === true) {
     // Prevent any output before this
-    if (ob_get_level()) {
-        ob_clean();
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    // Ensure no headers are sent yet
+    if (!headers_sent()) {
+        http_response_code(503); // Service Unavailable
     }
     
     // Display payment required message
