@@ -219,6 +219,51 @@ include __DIR__ . '/../includes/header.php';
     padding: 2rem;
     margin-bottom: 2rem;
     border: 1px solid rgba(99, 102, 241, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.page-header-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+
+.ingredients-hero-image {
+    background: linear-gradient(135deg, rgba(67, 233, 123, 0.2) 0%, rgba(56, 249, 215, 0.2) 100%);
+    border-radius: 50%;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 15px 40px rgba(67, 233, 123, 0.25);
+}
+
+.ingredients-hero-image i {
+    font-size: 3rem;
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.page-header-details .search-modern {
+    width: 100%;
+}
+
+.page-header-details .actions-dropdown {
+    display: flex;
+    justify-content: flex-end;
+}
+
+@media (max-width: 767px) {
+    .page-header-details .actions-dropdown {
+        justify-content: flex-start;
+    }
 }
 
 #ingredientsTable tbody tr {
@@ -245,8 +290,8 @@ include __DIR__ . '/../includes/header.php';
 </style>
 
 <div class="page-header-modern">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-        <div>
+    <div class="page-header-hero">
+        <div class="flex-grow-1">
             <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
                 <i class="bi bi-basket-fill me-3"></i>Manage Ingredients
             </h1>
@@ -255,29 +300,37 @@ include __DIR__ . '/../includes/header.php';
                 <?php echo count($ingredients); ?> <?php echo count($ingredients) == 1 ? 'ingredient' : 'ingredients'; ?> in your inventory
             </p>
         </div>
-        <div class="d-flex align-items-center gap-3">
-            <!-- Search Box -->
-            <div class="search-modern" style="max-width: 350px;">
-                <div class="input-group border-0">
-                    <span class="input-group-text bg-transparent border-0" style="color: #6366f1;">
-                        <i class="bi bi-search"></i>
-                    </span>
-                    <input type="text" class="form-control border-0 bg-transparent" id="searchIngredients" 
-                           placeholder="Search ingredients..." 
-                           autocomplete="off"
-                           style="box-shadow: none;">
-                    <button class="btn btn-link border-0 text-muted p-2" type="button" id="clearSearchIngredients" style="display: none;">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
+        <div class="ingredients-hero-image">
+            <i class="bi bi-basket2-fill"></i>
+        </div>
+    </div>
+    <div class="page-header-details">
+        <div class="row g-3 align-items-center">
+            <div class="col-lg-9">
+                <div class="search-modern">
+                    <div class="input-group border-0">
+                        <span class="input-group-text bg-transparent border-0" style="color: #6366f1;">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" class="form-control border-0 bg-transparent" id="searchIngredients" 
+                               placeholder="Search ingredients..." 
+                               autocomplete="off"
+                               style="box-shadow: none;">
+                        <button class="btn btn-link border-0 text-muted p-2" type="button" id="clearSearchIngredients" style="display: none;">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="dropdown">
-                <button class="btn btn-outline-primary rounded-pill px-3" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-three-dots-vertical"></i>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px;">
-                    <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2 text-danger"></i>Delete All</a></li>
-                </ul>
+            <div class="col-lg-3 actions-dropdown">
+                <div class="dropdown">
+                    <button class="btn btn-outline-primary rounded-pill px-3 w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-three-dots-vertical me-2"></i>Actions
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0" style="border-radius: 12px;">
+                        <li><a class="dropdown-item" href="?delete_all=1"><i class="bi bi-trash me-2 text-danger"></i>Delete All</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
