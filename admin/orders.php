@@ -413,7 +413,7 @@ $currentLang = getCurrentLanguage();
 
 // Get all customers for dropdown
 $customers = [];
-$result = $conn->query("SELECT id, name, email FROM users WHERE role = 'user' ORDER BY name");
+$result = $conn->query("SELECT id, name, email, phone FROM users WHERE role = 'user' ORDER BY name");
 if ($result && $result->num_rows > 0) {
     $customers = $result->fetch_all(MYSQLI_ASSOC);
     // Translate customer names if needed (though names usually don't need translation)
@@ -527,8 +527,10 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.t
     o.customer_cell as order_customer_cell,
     u.name as user_customer_name,
     u.email as user_customer_email,
+    u.phone as user_customer_phone,
     COALESCE(u.name, o.customer_name) as customer_name, 
-    COALESCE(u.email, o.customer_cell) as customer_email, 
+    COALESCE(u.email, o.customer_cell) as customer_email,
+    COALESCE(u.phone, o.customer_cell) as customer_phone,
     d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
     cat.name as dish_category_name
     FROM orders o
@@ -603,18 +605,22 @@ if ($result && $result->num_rows > 0) {
             
             // Get customer info if customer_id exists
             if (!empty($order['customer_id'])) {
-                $cust_result = $conn->query("SELECT name, email FROM users WHERE id = " . intval($order['customer_id']));
+                $cust_result = $conn->query("SELECT name, email, phone FROM users WHERE id = " . intval($order['customer_id']));
                 if ($cust_result && $cust_result->num_rows > 0) {
                     $cust = $cust_result->fetch_assoc();
                     // Prioritize customer name from users table
                     $order['user_customer_name'] = $cust['name'];
                     $order['user_customer_email'] = $cust['email'];
+                    $order['user_customer_phone'] = $cust['phone'] ?? '';
                     // Keep order_customer_name as fallback
                     if (empty($order['customer_name'])) {
                         $order['customer_name'] = $cust['name'];
                     }
                     if (empty($order['customer_email']) && empty($order['customer_cell'])) {
                         $order['customer_email'] = $cust['email'];
+                    }
+                    if (empty($order['customer_phone']) && empty($order['customer_cell'])) {
+                        $order['customer_phone'] = $cust['phone'] ?? '';
                     }
                 }
             }
@@ -689,6 +695,10 @@ if ($result && $result->num_rows > 0) {
             $customer_email = !empty($order['user_customer_email']) ? $order['user_customer_email'] : 
                              (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] : 
                              (!empty($order['customer_email']) ? $order['customer_email'] : ''));
+            // Prioritize customer phone from users table, then customer_cell from orders table
+            $customer_phone = !empty($order['user_customer_phone']) ? $order['user_customer_phone'] : 
+                             (!empty($order['customer_phone']) ? $order['customer_phone'] : 
+                             (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] : ''));
             
             $grouped_orders[$order_num] = [
                 'order_number' => $order_num,
@@ -696,6 +706,7 @@ if ($result && $result->num_rows > 0) {
                 'customer_name' => $customer_name,
                 'customer_email' => $customer_email,
                 'customer_cell' => $order['customer_cell'] ?? '',
+                'customer_phone' => $customer_phone,
                 'order_date' => !empty($order['order_date']) ? $order['order_date'] : date('Y-m-d H:i:s'),
                 'delivery_date' => $order['delivery_date'] ?? '',
                 'delivery_time' => $order['delivery_time'] ?? '',
@@ -2937,6 +2948,7 @@ try {
             'customer_name' => $grouped_order['customer_name'] ?? '',
             'customer_email' => $grouped_order['customer_email'] ?? '',
             'customer_cell' => $grouped_order['customer_cell'] ?? '',
+            'customer_phone' => $grouped_order['customer_phone'] ?? '',
             'order_date' => $grouped_order['order_date'] ?? '',
             'delivery_date' => $grouped_order['delivery_date'] ?? '',
             'delivery_time' => $grouped_order['delivery_time'] ?? '',
@@ -3638,7 +3650,7 @@ function printIngredients(orderNumberOrId) {
                 <tbody>
                     <!-- First row with header and value in same cell -->
                     <tr>
-                        <td><strong>گایک:</strong> ${order.customer_name || ''}</td>
+                        <td><strong>گایک:</strong> ${order.customer_name || ''} ${order.customer_phone ? '(' + order.customer_phone + ')' : (order.customer_cell ? '(' + order.customer_cell + ')' : '')}</td>
                         <td><strong>افراد:</strong> ${totalPersons > 0 ? totalPersons : ''}</td>
                         <td><strong>تاريخ:</strong> ${deliveryDate}</td>
                         <td><strong>شفت:</strong> ${shiftText}</td>
