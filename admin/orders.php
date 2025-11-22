@@ -3468,14 +3468,14 @@ function printIngredients(orderNumberOrId) {
                         padding: 3px 4px !important;
                     }
                     .ingredient-item {
-                        padding: 3px 4px !important;
+                        padding: 5px 6px !important;
                     }
                     .ingredient-item .name {
-                        font-size: 10px !important;
-                        margin-bottom: 2px !important;
+                        font-size: 13px !important;
+                        margin-bottom: 3px !important;
                     }
                     .ingredient-item .quantity {
-                        font-size: 9px !important;
+                        font-size: 11px !important;
                     }
                 }
                 body { 
@@ -3570,20 +3570,20 @@ function printIngredients(orderNumberOrId) {
                     margin-bottom: 8px;
                 }
                 .ingredient-item {
-                    padding: 4px 6px;
+                    padding: 6px 8px;
                     border: 1px solid #e2e8f0;
                     border-radius: 3px;
                     background-color: #ffffff;
                 }
                 .ingredient-item .name {
-                    font-size: 11px;
+                    font-size: 14px;
                     font-weight: bold;
                     color: #1e293b;
-                    margin-bottom: 2px;
-                    line-height: 1.3;
+                    margin-bottom: 3px;
+                    line-height: 1.4;
                 }
                 .ingredient-item .quantity {
-                    font-size: 10px;
+                    font-size: 12px;
                     color: #8b5cf6;
                     font-weight: 600;
                 }
