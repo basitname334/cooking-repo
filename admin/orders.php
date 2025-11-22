@@ -3324,9 +3324,29 @@ function printIngredients(orderNumberOrId) {
                         if (unit.toLowerCase() === 'g' && quantity >= 1000) {
                             quantity = (quantity / 1000).toFixed(2);
                             unit = 'kg';
+                        }
+                        
+                        // Format quantity based on unit type
+                        const unitLower = unit.toLowerCase();
+                        let quantityUnit = '';
+                        
+                        // Special handling for kg/kilogram: split into kilos and grams
+                        if (unitLower === 'kg' || unitLower === 'kilogram' || unitLower === 'kilograms') {
+                            const totalKilos = parseFloat(quantity);
+                            const wholeKilos = Math.floor(totalKilos);
+                            const decimalPart = totalKilos - wholeKilos;
+                            const grams = Math.round(decimalPart * 1000);
+                            
+                            if (wholeKilos > 0 && grams > 0) {
+                                quantityUnit = wholeKilos + ' کلو اور ' + grams + ' گرام';
+                            } else if (wholeKilos > 0) {
+                                quantityUnit = wholeKilos + ' کلو';
+                            } else if (grams > 0) {
+                                quantityUnit = grams + ' گرام';
+                            } else {
+                                quantityUnit = '0 کلو';
+                            }
                         } else {
-                            // Format quantity based on unit type
-                            const unitLower = unit.toLowerCase();
                             // For countable items (pieces, piece, serving, servings, etc.), show as whole number
                             if (unitLower === 'piece' || unitLower === 'pieces' || 
                                 unitLower === 'serving' || unitLower === 'servings' ||
@@ -3337,11 +3357,11 @@ function printIngredients(orderNumberOrId) {
                                 // For weight/volume units, show 2 decimal places
                                 quantity = quantity.toFixed(2);
                             }
+                            
+                            // Translate unit to Urdu
+                            const unitUrdu = translateUnitToUrdu(unit);
+                            quantityUnit = quantity + (unitUrdu ? ' ' + unitUrdu : '');
                         }
-                        
-                        // Translate unit to Urdu
-                        const unitUrdu = translateUnitToUrdu(unit);
-                        const quantityUnit = quantity + (unitUrdu ? ' ' + unitUrdu : '');
                         const ingredientName = ing.ingredient_name || 'N/A';
                         
                         // Format for 6-column layout: Clean aligned display
