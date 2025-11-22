@@ -3212,6 +3212,14 @@ function printIngredients(orderNumberOrId) {
     
     let ingredientsHtml = '<div style="direction: rtl;">';
     
+    // Display notes before ingredients if they exist
+    if (order.notes && order.notes.trim()) {
+        ingredientsHtml += '<div class="notes-section" style="margin: 15px 0; padding: 12px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; font-family: ' + fontFamily + '; direction: rtl;">';
+        ingredientsHtml += '<div style="font-weight: bold; font-size: 14px; color: #92400e; margin-bottom: 5px;">نوٹ:</div>';
+        ingredientsHtml += '<div style="font-size: 13px; color: #78350f; line-height: 1.6;">' + order.notes + '</div>';
+        ingredientsHtml += '</div>';
+    }
+    
     // Check if we have any ingredients
     const dishKeys = Object.keys(ingredientsByDish);
     if (dishKeys.length === 0) {
@@ -3267,14 +3275,6 @@ function printIngredients(orderNumberOrId) {
         
         // Get category IDs and sort them
         const categoryIds = Object.keys(ingredientsByCategory);
-        
-        // Display notes before categories if they exist
-        if (order.notes && order.notes.trim()) {
-            ingredientsHtml += '<div class="notes-section" style="margin: 15px 0; padding: 12px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; font-family: ' + fontFamily + '; direction: rtl;">';
-            ingredientsHtml += '<div style="font-weight: bold; font-size: 14px; color: #92400e; margin-bottom: 5px;">نوٹ:</div>';
-            ingredientsHtml += '<div style="font-size: 13px; color: #78350f; line-height: 1.6;">' + order.notes + '</div>';
-            ingredientsHtml += '</div>';
-        }
         
         if (categoryIds.length > 0) {
             // Display ingredients grouped by category
