@@ -2870,7 +2870,7 @@ try {
         'match_box' => $urduTranslations['match_box'] ?? 'میچ باکس',
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
         'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
-        'pieces' => $urduTranslations['pieces'] ?? 'ٹکڑے'
+        'pieces' => $urduTranslations['pieces'] ?? 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     
     // Restore original language
@@ -2908,7 +2908,7 @@ try {
         'match_box' => 'میچ باکس',
         'surrf' => 'سرف',
         'sponjis_iron' => 'اسپنجز (آئرن)',
-        'pieces' => 'ٹکڑے'
+        'pieces' => 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 }
 ?>;
@@ -3189,7 +3189,7 @@ function printIngredients(orderNumberOrId) {
                             ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key] = {
                                 ingredient_name: itemName,
                                 quantity: quantity,
-                                unit: translations.pieces || 'ٹکڑے'
+                                unit: translations.pieces || 'عدد'
                             };
                         }
                     }
@@ -3300,8 +3300,8 @@ function printIngredients(orderNumberOrId) {
                                 'g': 'گرام',
                                 'gram': 'گرام',
                                 'grams': 'گرام',
-                                'piece': 'ٹکڑا',
-                                'pieces': 'ٹکڑے',
+                                'piece': 'عدد',
+                                'pieces': 'عدد',
                                 'serving': 'حصہ',
                                 'servings': 'حصے',
                                 'portion': 'حصہ',
@@ -3403,7 +3403,7 @@ function printIngredients(orderNumberOrId) {
                 @media print {
                     @page {
                         size: A4;
-                        margin: 0.5cm;
+                        margin: 0.3cm;
                     }
                     * {
                         page-break-inside: avoid !important;
@@ -3412,7 +3412,7 @@ function printIngredients(orderNumberOrId) {
                         margin: 0 !important; 
                         padding: 0 !important; 
                         position: relative; 
-                        font-size: 11px !important;
+                        font-size: 10px !important;
                         page-break-inside: avoid !important;
                     }
                     .no-print { display: none !important; }
@@ -3421,37 +3421,61 @@ function printIngredients(orderNumberOrId) {
                         page-break-inside: avoid !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
+                        margin-bottom: 5px !important;
+                        max-height: 80px !important;
+                    }
+                    .header-image img {
+                        max-height: 80px !important;
+                        object-fit: contain !important;
                     }
                     .order-details-table {
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
-                        margin: 8px 0 !important;
+                        margin: 5px 0 !important;
                     }
-                    .header-image {
-                        margin-bottom: 8px !important;
+                    .order-details-table td {
+                        padding: 6px 4px !important;
+                        font-size: 10px !important;
+                        min-height: 20px !important;
                     }
                     .ingredients-section {
                         page-break-inside: avoid !important;
                         page-break-before: avoid !important;
-                        margin-top: 10px !important;
+                        margin-top: 5px !important;
                     }
                     .ingredients-title {
-                        font-size: 20px !important;
-                        margin-bottom: 10px !important;
-                        margin-top: 5px !important;
+                        font-size: 18px !important;
+                        margin-bottom: 6px !important;
+                        margin-top: 3px !important;
+                        line-height: 1.2 !important;
                     }
                     .category-section {
                         page-break-inside: avoid !important;
-                        margin: 8px 0 !important;
+                        margin: 4px 0 !important;
+                    }
+                    .category-header {
+                        font-size: 12px !important;
+                        padding: 4px 8px !important;
+                        margin: 0 0 4px 0 !important;
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
                         grid-template-columns: repeat(6, 1fr) !important;
-                        gap: 4px !important;
+                        gap: 3px !important;
                     }
                     [style*="grid-template-columns"] > div {
                         page-break-inside: avoid !important;
-                        padding: 4px 6px !important;
+                        padding: 3px 4px !important;
+                    }
+                    .ingredient-item {
+                        padding: 3px 4px !important;
+                    }
+                    .ingredient-item .name {
+                        font-size: 10px !important;
+                        margin-bottom: 2px !important;
+                    }
+                    .ingredient-item .quantity {
+                        font-size: 9px !important;
                     }
                 }
                 body { 
@@ -3466,16 +3490,20 @@ function printIngredients(orderNumberOrId) {
                 /* Header Image */
                 .header-image {
                     width: 100%;
-                    margin-bottom: 10px;
+                    margin-bottom: 8px;
                     display: block;
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                     color-adjust: exact !important;
+                    max-height: 100px;
+                    overflow: hidden;
                 }
                 .header-image img {
                     width: 100%;
                     height: auto;
                     display: block;
+                    max-height: 100px;
+                    object-fit: contain;
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                     color-adjust: exact !important;
@@ -3485,23 +3513,24 @@ function printIngredients(orderNumberOrId) {
                 .order-details-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin: 10px 0;
+                    margin: 8px 0;
                     border: 1px solid #ddd;
                     background-color: #fff;
                 }
                 .order-details-table td {
-                    padding: 10px 8px;
+                    padding: 8px 6px;
                     border-left: 1px solid #ddd;
                     border-right: 1px solid #ddd;
                     text-align: center;
                     border-bottom: 1px dotted #999;
-                    min-height: 30px;
+                    min-height: 25px;
                     background-color: #fff;
+                    font-size: 11px;
                 }
                 .order-details-table tbody tr:first-child td {
                     background-color: #e9ecef;
                     font-weight: normal;
-                    font-size: 13px;
+                    font-size: 12px;
                 }
                 .order-details-table tbody tr:first-child td strong {
                     font-weight: bold;
@@ -3513,51 +3542,52 @@ function printIngredients(orderNumberOrId) {
                 
                 /* Ingredients Section */
                 .ingredients-section {
-                    margin-top: 15px;
+                    margin-top: 10px;
                     page-break-before: avoid;
                 }
                 .ingredients-title {
-                    font-size: 22px;
+                    font-size: 20px;
                     font-weight: bold;
                     text-align: center;
-                    margin-bottom: 15px;
-                    margin-top: 10px;
+                    margin-bottom: 10px;
+                    margin-top: 5px;
                     color: #1e293b;
+                    line-height: 1.3;
                 }
                 .category-section {
-                    margin-top: 15px;
-                    margin-bottom: 10px;
+                    margin-top: 10px;
+                    margin-bottom: 8px;
                 }
                 .category-header {
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: bold;
                     color: #ffffff;
-                    padding: 8px 12px;
+                    padding: 6px 10px;
                     background-color: #8b5cf6;
                     border-radius: 4px;
-                    margin: 0 0 8px 0;
+                    margin: 0 0 6px 0;
                 }
                 .ingredients-grid {
                     display: grid;
                     grid-template-columns: repeat(6, 1fr);
-                    gap: 6px;
-                    margin-bottom: 12px;
+                    gap: 4px;
+                    margin-bottom: 8px;
                 }
                 .ingredient-item {
-                    padding: 6px 8px;
+                    padding: 4px 6px;
                     border: 1px solid #e2e8f0;
-                    border-radius: 4px;
+                    border-radius: 3px;
                     background-color: #ffffff;
                 }
                 .ingredient-item .name {
-                    font-size: 12px;
+                    font-size: 11px;
                     font-weight: bold;
                     color: #1e293b;
-                    margin-bottom: 3px;
-                    line-height: 1.4;
+                    margin-bottom: 2px;
+                    line-height: 1.3;
                 }
                 .ingredient-item .quantity {
-                    font-size: 11px;
+                    font-size: 10px;
                     color: #8b5cf6;
                     font-weight: 600;
                 }
