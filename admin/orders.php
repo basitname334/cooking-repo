@@ -56,6 +56,12 @@ try {
         @$conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
     }
     
+    // Check if unit column exists in orders table, if not add it
+    $check_unit = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'unit'");
+    if ($check_unit && $check_unit->num_rows == 0) {
+        @$conn->query("ALTER TABLE `orders` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`");
+    }
+    
     // Make customer_id nullable to support orders without registered customers
     $check_customer_id = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
     if ($check_customer_id && $check_customer_id->num_rows > 0) {
@@ -209,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         foreach ($dishes_data as $dish_data) {
             $dish_id = intval($dish_data['dish_id'] ?? 0);
             $quantity = floatval($dish_data['quantity'] ?? 0);
+            $unit = trim($dish_data['unit'] ?? 'deg'); // Default to 'deg' if not provided
             $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
             $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
             
@@ -229,6 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             $valid_dishes[] = [
                 'dish_id' => $dish_id,
                 'quantity' => $quantity,
+                'unit' => $unit,
                 'total_amount' => $total_amount
             ];
         }
@@ -253,15 +261,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                 if ($use_new_form) {
                     // New form with all required fields - use NULL for customer_id since customer info is in separate fields
                     // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
                         customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
-                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     if ($stmt) {
                         // Skip customer_id in bind_param since we're using NULL directly in the query
-                        $stmt->bind_param("siidsssssssiss", 
+                        $stmt->bind_param("siisdsssssssiss", 
                             $order_number, 
                             $dish_info['dish_id'], 
-                            $dish_info['quantity'], 
+                            $dish_info['quantity'],
+                            $dish_info['unit'],
                             $dish_info['total_amount'], 
                             $status,
                             $customer_name,
@@ -277,9 +286,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                     }
                 } else {
                     // Old form (backward compatibility)
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     if ($stmt) {
-                        $stmt->bind_param("siiddsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
+                        $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
                     }
                 }
                 
@@ -520,7 +529,7 @@ $orders = [];
 // Also explicitly select o.customer_name and o.customer_cell to ensure they're available
 // Show all orders - removed WHERE clause to ensure all orders are displayed
 // Simplified query to ensure it works
-$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.total_amount, 
+$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount, 
     o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
     o.delivery_time, o.shift, o.number_of_persons,
     o.customer_name as order_customer_name,
@@ -1370,6 +1379,17 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small">
+                                                <?php e('unit_label'); ?> <span class="text-danger">*</span>
+                                            </label>
+                                            <select class="form-select dish-unit" name="dishes[0][unit]" required>
+                                                <option value="deg" selected>دیگ (deg)</option>
+                                                <option value="kg">کلو (kg)</option>
+                                                <option value="piece">عدد (piece)</option>
+                                                <option value="liter">لیٹر (liter)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label fw-semibold small">
                                                 <?php e('unit_price'); ?> (Rs)
                                             </label>
                                             <input type="number" class="form-control dish-unit-price" name="dishes[0][unit_price]" 
@@ -1382,10 +1402,10 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             <input type="number" class="form-control dish-total-amount" name="dishes[0][total_amount]" 
                                                    placeholder="0.00" step="0.01" min="0">
                                         </div>
-                                        <div class="col-md-2">
+                                        <div class="col-md-1">
                                             <label class="form-label fw-semibold small d-block">&nbsp;</label>
                                             <button type="button" class="btn btn-sm btn-danger remove-dish-btn" style="display: none;">
-                                                <i class="bi bi-trash"></i> Remove
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -2235,6 +2255,7 @@ function updateReview() {
         dishRows.forEach(function(row) {
             const dishSelect = row.querySelector('.dish-select');
             const quantityInput = row.querySelector('.dish-quantity');
+            const unitSelect = row.querySelector('.dish-unit');
             const unitPriceInput = row.querySelector('.dish-unit-price');
             const totalAmountInput = row.querySelector('.dish-total-amount');
             
@@ -2242,6 +2263,8 @@ function updateReview() {
                 const dishId = dishSelect.value;
                 const dish = dishesData.find(d => d.id == dishId);
                 const quantity = parseFloat(quantityInput.value) || 0;
+                const unit = unitSelect ? unitSelect.value : 'deg';
+                const unitText = unit === 'deg' ? 'دیگ' : (unit === 'kg' ? 'کلو' : (unit === 'piece' ? 'عدد' : 'لیٹر'));
                 const unitPrice = parseFloat(unitPriceInput.value) || 0;
                 const total = parseFloat(totalAmountInput.value) || (quantity * unitPrice);
                 
@@ -2250,7 +2273,7 @@ function updateReview() {
                         <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: white; border-radius: 6px;">
                             <div>
                                 <strong>${escapeHtml(dish.name)}</strong><br>
-                                <small class="text-muted">Quantity: ${quantity} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
+                                <small class="text-muted">Quantity: ${quantity} ${unitText} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
                             </div>
                             <div class="text-end">
                                 <strong class="text-primary">Rs ${total.toFixed(2)}</strong>
@@ -2613,6 +2636,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold small">
+                        <?php e('unit_label'); ?> <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select dish-unit" name="dishes[${dishRowCount}][unit]" required>
+                        <option value="deg" selected>دیگ (deg)</option>
+                        <option value="kg">کلو (kg)</option>
+                        <option value="piece">عدد (piece)</option>
+                        <option value="liter">لیٹر (liter)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small">
                         <?php e('unit_price'); ?> (Rs)
                     </label>
                     <input type="number" class="form-control dish-unit-price" name="dishes[${dishRowCount}][unit_price]" 
@@ -2625,10 +2659,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="number" class="form-control dish-total-amount" name="dishes[${dishRowCount}][total_amount]" 
                            placeholder="0.00" step="0.01" min="0">
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-1">
                     <label class="form-label fw-semibold small d-block">&nbsp;</label>
                     <button type="button" class="btn btn-sm btn-danger remove-dish-btn">
-                        <i class="bi bi-trash"></i> Remove
+                        <i class="bi bi-trash"></i>
                     </button>
                 </div>
             </div>
@@ -2959,6 +2993,7 @@ try {
                 'dish_name' => $dish['dish_name'] ?? '',
                 'dish_id' => $dish['dish_id'] ?? 0,
                 'quantity' => $dish['quantity'] ?? 0,
+                'unit' => $dish['unit'] ?? 'deg',
                 'total_amount' => $dish['total_amount'] ?? 0,
                 'number_of_persons' => $orderData['number_of_persons'] ?? ($dish['number_of_persons'] ?? 1),
                 'category_name' => $dish['dish_category_name'] ?? 'Uncategorized',
@@ -3709,7 +3744,9 @@ function printIngredients(orderNumberOrId) {
                                     const dish = dishes[dishIndex];
                                     const dishName = dish ? (dish.dish_name || '') : '';
                                     const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
-                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ' دیگ)' : '');
+                                    const dishUnit = dish ? (dish.unit || 'deg') : 'deg';
+                                    const unitText = dishUnit === 'deg' ? 'دیگ' : (dishUnit === 'kg' ? 'کلو' : (dishUnit === 'piece' ? 'عدد' : 'لیٹر'));
+                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ' ' + unitText + ')' : '');
                                     cells += `<td>${displayText}</td>`;
                                 } else {
                                     cells += `<td></td>`;
@@ -4023,7 +4060,9 @@ function printOrder(orderNumberOrId) {
                     const dishName = dish.dish_name || 'N/A';
                     const categoryName = dish.category_name || 'Uncategorized';
                     const quantity = parseFloat(dish.quantity) || 1;
-                    const quantityText = ' ' + quantity.toFixed(2) + ' دیگ';
+                    const dishUnit = dish.unit || 'deg';
+                    const unitText = dishUnit === 'deg' ? 'دیگ' : (dishUnit === 'kg' ? 'کلو' : (dishUnit === 'piece' ? 'عدد' : 'لیٹر'));
+                    const quantityText = ' ' + quantity.toFixed(2) + ' ' + unitText;
                     return `
                     <div class="fillable-field">
                         <span class="fillable-label">${translations.dish || 'Dish'}:</span>
@@ -4075,7 +4114,7 @@ function printOrder(orderNumberOrId) {
                             <div style="flex: 1;">
                                 <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
                                 <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
-                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong></span>
+                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong> ${dish.unit === 'deg' ? 'دیگ' : (dish.unit === 'kg' ? 'کلو' : (dish.unit === 'piece' ? 'عدد' : (dish.unit === 'liter' ? 'لیٹر' : '')))}</span>
                                     <span style="margin: 0 10px;">|</span>
                                     <span>${translations.persons}: <strong>${persons}</strong></span>
                                     ${dish.total_amount > 0 ? '<span style="margin: 0 10px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}
