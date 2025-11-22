@@ -3249,9 +3249,11 @@ function printIngredients(orderNumberOrId) {
     
     // Display notes before ingredients if they exist
     if (order.notes && order.notes.trim()) {
-        ingredientsHtml += '<div class="notes-section" style="margin: 15px 0; padding: 12px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; font-family: ' + fontFamily + '; direction: rtl;">';
-        ingredientsHtml += '<div style="font-weight: bold; font-size: 14px; color: #92400e; margin-bottom: 5px;">نوٹ:</div>';
-        ingredientsHtml += '<div style="font-size: 13px; color: #78350f; line-height: 1.6;">' + order.notes + '</div>';
+        ingredientsHtml += '<div class="notes-section" style="margin: 15px 0; padding: 15px; background: #d1fae5; border: 3px solid #10b981; border-radius: 12px; font-family: ' + fontFamily + '; direction: rtl; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);">';
+        ingredientsHtml += '<div style="font-weight: bold; font-size: 16px; color: #065f46; margin-bottom: 8px; display: flex; align-items: center;">';
+        ingredientsHtml += '<span style="display: inline-block; width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-left: 8px;"></span>';
+        ingredientsHtml += 'نوٹ:</div>';
+        ingredientsHtml += '<div style="font-size: 14px; color: #047857; line-height: 1.8; font-weight: 500;">' + order.notes + '</div>';
         ingredientsHtml += '</div>';
     }
     
@@ -3545,9 +3547,15 @@ function printIngredients(orderNumberOrId) {
                     .notes-section {
                         page-break-inside: avoid !important;
                         page-break-after: avoid !important;
-                        margin: 8px 0 !important;
-                        padding: 8px !important;
-                        font-size: 11px !important;
+                        margin: 10px 0 !important;
+                        padding: 12px !important;
+                        font-size: 12px !important;
+                        background: #d1fae5 !important;
+                        border: 3px solid #10b981 !important;
+                        border-radius: 12px !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
                     }
                     .category-section {
                         page-break-inside: avoid !important;
@@ -3686,6 +3694,33 @@ function printIngredients(orderNumberOrId) {
                     font-size: 12px;
                     color: #8b5cf6;
                     font-weight: 600;
+                }
+                
+                .notes-section {
+                    margin: 15px 0;
+                    padding: 15px;
+                    background: #d1fae5;
+                    border: 3px solid #10b981;
+                    border-radius: 12px;
+                    direction: rtl;
+                    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
+                }
+                .notes-section > div:first-child {
+                    font-weight: bold;
+                    font-size: 16px;
+                    color: #065f46;
+                    margin-bottom: 8px;
+                    display: flex;
+                    align-items: center;
+                }
+                .notes-section > div:last-child {
+                    font-size: 14px;
+                    color: #047857;
+                    line-height: 1.8;
+                    font-weight: 500;
                 }
                 
                 .print-btn { 
