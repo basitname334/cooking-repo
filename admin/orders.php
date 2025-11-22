@@ -3279,11 +3279,11 @@ function printIngredients(orderNumberOrId) {
                 
                 if (ingredients.length > 0) {
                     // Category header
-                    ingredientsHtml += '<div class="category-section" style="margin-top: 15px; margin-bottom: 10px; page-break-inside: avoid;">';
-                    ingredientsHtml += '<div class="category-header" style="font-size: 16px; font-weight: bold; color: #ffffff; padding: 8px 12px; background-color: #8b5cf6; border-radius: 4px; margin: 0 0 8px 0; font-family: ' + fontFamily + ';">' + categoryName + '</div>';
+                    ingredientsHtml += '<div class="category-section">';
+                    ingredientsHtml += '<div class="category-header">' + categoryName + '</div>';
                     
                     // Ingredients grid for this category
-                    ingredientsHtml += '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 12px; page-break-inside: avoid;">';
+                    ingredientsHtml += '<div class="ingredients-grid">';
                     
                     ingredients.forEach(function(ing) {
                         let quantity = parseFloat(ing.quantity) || 0;
@@ -3345,9 +3345,9 @@ function printIngredients(orderNumberOrId) {
                         const ingredientName = ing.ingredient_name || 'N/A';
                         
                         // Format for 6-column layout: Clean aligned display
-                        ingredientsHtml += '<div style="padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; background-color: #ffffff; page-break-inside: avoid;">';
-                        ingredientsHtml += '<div style="font-size: 12px; font-weight: bold; color: #1e293b; margin-bottom: 3px; font-family: ' + fontFamily + '; line-height: 1.4;">' + ingredientName + '</div>';
-                        ingredientsHtml += '<div style="font-size: 11px; color: #8b5cf6; font-weight: 600; font-family: ' + fontFamily + ';">' + quantityUnit + '</div>';
+                        ingredientsHtml += '<div class="ingredient-item">';
+                        ingredientsHtml += '<div class="name">' + ingredientName + '</div>';
+                        ingredientsHtml += '<div class="quantity">' + quantityUnit + '</div>';
                         ingredientsHtml += '</div>';
                     });
                     
@@ -3361,6 +3361,33 @@ function printIngredients(orderNumberOrId) {
     }
     
     ingredientsHtml += '</div>';
+    
+    // Format date and time for display
+    function formatDateForPrint(dateString) {
+        if (!dateString) return '';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('ur-PK', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        } catch (e) {
+            return dateString;
+        }
+    }
+    
+    function formatTimeForPrint(dateString) {
+        if (!dateString) return '';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('ur-PK', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return dateString;
+        }
+    }
+    
+    // Get order date and time
+    const orderDate = order.order_date ? formatDateForPrint(order.order_date) : '';
+    const orderTime = order.order_date ? formatTimeForPrint(order.order_date) : '';
+    const deliveryDate = order.delivery_date ? formatDateForPrint(order.delivery_date) : '';
+    const shiftText = order.shift ? (shiftTranslations[order.shift] || order.shift) : '';
     
     const printWindow = window.open('', '_blank');
     // Get base URL for images
@@ -3376,7 +3403,7 @@ function printIngredients(orderNumberOrId) {
                 @media print {
                     @page {
                         size: A4;
-                        margin: 0.4cm 0.6cm;
+                        margin: 0.5cm;
                     }
                     * {
                         page-break-inside: avoid !important;
@@ -3389,97 +3416,23 @@ function printIngredients(orderNumberOrId) {
                         page-break-inside: avoid !important;
                     }
                     .no-print { display: none !important; }
-                    .print-banner { 
+                    .header-image {
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
-                        display: block !important;
-                        visibility: visible !important;
-                        padding: 3px 5px !important;
-                        margin-bottom: 5px !important;
-                        min-height: 80px !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
                     }
-                    .fillable-section {
+                    .order-details-table {
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
-                        margin: 5px 0 !important;
-                        padding: 6px !important;
+                        margin: 10px 0 !important;
                     }
-                    .dishes-list-section {
+                    .ingredients-section {
                         page-break-inside: avoid !important;
-                        margin: 8px 0 !important;
-                        padding: 8px !important;
-                    }
-                    .dishes-list-section > div:first-child {
-                        font-size: 12px !important;
-                        margin-bottom: 6px !important;
-                    }
-                    .dishes-list-section > div:last-child > div {
-                        padding: 6px 10px !important;
-                        font-size: 11px !important;
-                    }
-                    .fillable-table {
-                        width: 100% !important;
-                        border-collapse: collapse !important;
-                    }
-                    .fillable-table th {
-                        padding: 6px 4px !important;
-                        border: 1px solid #ddd !important;
-                        font-size: 11px !important;
-                    }
-                    .fillable-table td {
-                        padding: 6px 8px !important;
-                        border: 1px solid #ddd !important;
-                    }
-                    .fillable-table td.fillable-label-cell {
-                        font-size: 12px !important;
-                        width: 25% !important;
-                    }
-                    .fillable-table td.fillable-field-cell {
-                        width: 25% !important;
-                        text-align: center !important;
-                    }
-                    .fillable-space {
-                        height: 20px !important;
-                        min-height: 20px !important;
-                        font-size: 11px !important;
-                        text-align: center !important;
-                    }
-                    .content-wrapper {
-                        padding: 5px !important;
-                        page-break-inside: avoid !important;
-                    }
-                    .dish-names-section {
-                        margin: 12px 0 !important;
-                        padding: 12px !important;
-                        page-break-inside: avoid !important;
-                    }
-                    .dish-names-section h2 {
-                        font-size: 16px !important;
-                        margin-bottom: 10px !important;
-                    }
-                    .dish-names-section [style*="grid-template-columns"] {
-                        grid-template-columns: repeat(2, 1fr) !important;
-                        gap: 8px !important;
-                    }
-                    .dish-section {
-                        margin-top: 10px !important;
-                        margin-bottom: 6px !important;
-                        page-break-inside: avoid !important;
-                    }
-                    .dish-header {
-                        font-size: 14px !important;
-                        padding: 5px 10px !important;
-                        margin: 0 0 6px 0 !important;
                     }
                     .category-section {
-                        margin-top: 12px !important;
-                        margin-bottom: 8px !important;
                         page-break-inside: avoid !important;
-                    }
-                    .category-header {
-                        font-size: 14px !important;
-                        padding: 6px 10px !important;
-                        margin: 0 0 6px 0 !important;
+                        margin: 8px 0 !important;
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
@@ -3489,92 +3442,6 @@ function printIngredients(orderNumberOrId) {
                     [style*="grid-template-columns"] > div {
                         page-break-inside: avoid !important;
                         padding: 4px 6px !important;
-                    }
-                    .header {
-                        margin-bottom: 8px !important;
-                        page-break-after: avoid !important;
-                    }
-                    .header h1 {
-                        font-size: 14px !important;
-                        margin-bottom: 5px !important;
-                    }
-                    .category-section {
-                        margin-top: 8px !important;
-                        margin-bottom: 4px !important;
-                        page-break-inside: avoid !important;
-                    }
-                    .category-header {
-                        font-size: 14px !important;
-                        padding: 8px 12px !important;
-                        margin: 0 !important;
-                    }
-                    .ingredients-table {
-                        font-size: 12px !important;
-                        margin-bottom: 6px !important;
-                        page-break-inside: avoid !important;
-                    }
-                    .ingredients-table th,
-                    .ingredients-table td {
-                        padding: 6px 8px !important;
-                        font-size: 12px !important;
-                        line-height: 1.4 !important;
-                    }
-                    [style*="grid-template-columns"] > div {
-                        padding: 3px 5px !important;
-                    }
-                    [style*="grid-template-columns"] > div > div:first-child {
-                        font-size: 10px !important;
-                    }
-                    [style*="grid-template-columns"] > div > div:last-child {
-                        font-size: 9px !important;
-                    }
-                    .ingredients-table thead {
-                        display: table-header-group;
-                    }
-                    .ingredients-table tbody {
-                        display: table-row-group;
-                    }
-                    .footer {
-                        margin-top: 8px !important;
-                        font-size: 9px !important;
-                        page-break-inside: avoid !important;
-                    }
-                    .banner-logo {
-                        width: 40px !important;
-                        height: 40px !important;
-                    }
-                    .banner-text-center h1 {
-                        font-size: 11px !important;
-                    }
-                    .banner-text-center h2,
-                    .banner-text-center h3 {
-                        font-size: 9px !important;
-                    }
-                    .banner-order-info {
-                        padding: 3px 6px !important;
-                        min-width: 120px !important;
-                    }
-                    .banner-order-info p {
-                        font-size: 8px !important;
-                        margin: 1px 0 !important;
-                    }
-                    .banner-contact {
-                        display: block !important;
-                        visibility: visible !important;
-                    }
-                    .contact-center {
-                        font-size: 8px !important;
-                        padding: 3px 6px !important;
-                    }
-                    .contact-center span {
-                        font-size: 9px !important;
-                        font-weight: bold !important;
-                        letter-spacing: 0.5px !important;
-                        white-space: nowrap !important;
-                        margin-top: 2px !important;
-                    }
-                    .contact-center span[dir="ltr"] {
-                        display: inline !important;
                     }
                 }
                 body { 
@@ -3586,221 +3453,175 @@ function printIngredients(orderNumberOrId) {
                     background: #fff;
                 }
                 
-                /* Banner Header - Using Colorful Image */
-                .print-banner {
-                    display: block !important;
+                /* Header Image */
+                .header-image {
                     width: 100%;
                     margin-bottom: 15px;
-                    overflow: visible;
-                    box-sizing: border-box;
-                }
-                .print-banner-image {
-                    width: 100% !important;
-                    height: auto !important;
-                    display: block !important;
+                    display: block;
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                     color-adjust: exact !important;
                 }
-                .fillable-section {
-                    margin: 8px 0;
-                    padding: 6px;
-                    border: 2px dashed #ccc;
-                    border-radius: 4px;
+                .header-image img {
                     width: 100%;
-                }
-                .fillable-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
-                .fillable-table th {
-                    padding: 8px 6px;
-                    border: 1px solid #ddd;
-                    background-color: #f8f9fa;
-                    font-weight: bold;
-                    font-size: 12px;
-                    text-align: center;
-                    color: #333;
-                }
-                .fillable-table td {
-                    padding: 6px 8px;
-                    border: 1px solid #ddd;
-                    vertical-align: middle;
-                }
-                .fillable-table td.fillable-label-cell {
-                    font-weight: bold;
-                    font-size: 12px;
-                    color: #333;
-                    text-align: right;
-                    width: 25%;
-                    background-color: #f8f9fa;
-                }
-                .fillable-table td.fillable-field-cell {
-                    width: 25%;
-                    text-align: center;
-                }
-                .fillable-space {
-                    border-bottom: 2px solid #000;
-                    height: 20px;
-                    min-height: 20px;
-                    display: inline-block;
-                    width: 100%;
-                    text-align: center;
-                    font-weight: bold;
-                    font-size: 11px;
+                    height: auto;
+                    display: block;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 
-                .content-wrapper {
-                    padding: 8px;
+                /* Order Details Table */
+                .order-details-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 15px 0;
+                    border: 1px solid #ddd;
+                    background-color: #fff;
                 }
-                .dish-names-section {
-                    margin: 8px 0;
-                    padding: 8px;
-                    background-color: #f8fafc;
-                    border: 1px solid #10b981;
-                    border-radius: 4px;
-                    page-break-inside: avoid;
-                }
-                .dish-names-section h2 {
-                    font-size: 12px;
-                    font-weight: bold;
-                    color: #10b981;
-                    margin-bottom: 6px;
+                .order-details-table td {
+                    padding: 10px 8px;
+                    border-left: 1px solid #ddd;
+                    border-right: 1px solid #ddd;
                     text-align: center;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    padding: 2px 0;
+                    border-bottom: 1px dotted #999;
+                    min-height: 30px;
+                    background-color: #fff;
                 }
-                .dish-section {
-                    margin-top: 12px;
-                    margin-bottom: 8px;
-                    border-bottom: 2px solid #10b981;
-                    padding-bottom: 5px;
+                .order-details-table tbody tr:first-child td {
+                    background-color: #e9ecef;
+                    font-weight: normal;
+                    font-size: 13px;
                 }
-                .dish-header {
+                .order-details-table tbody tr:first-child td strong {
+                    font-weight: bold;
+                    margin-left: 5px;
+                }
+                .order-details-table tbody tr:last-child td {
+                    border-bottom: 1px solid #ddd;
+                }
+                
+                /* Ingredients Section */
+                .ingredients-section {
+                    margin-top: 20px;
+                }
+                .ingredients-title {
                     font-size: 16px;
                     font-weight: bold;
-                    color: #ffffff;
-                    padding: 6px 12px;
-                    background-color: #10b981;
-                    border-radius: 4px;
-                    margin: 0 0 8px 0;
+                    text-align: center;
+                    margin-bottom: 15px;
+                    color: #1e293b;
                 }
                 .category-section {
-                    margin-top: 10px;
-                    margin-bottom: 6px;
+                    margin-top: 15px;
+                    margin-bottom: 10px;
                 }
                 .category-header {
                     font-size: 14px;
                     font-weight: bold;
                     color: #ffffff;
-                    padding: 5px 10px;
+                    padding: 8px 12px;
                     background-color: #8b5cf6;
                     border-radius: 4px;
-                    margin: 0 0 6px 0;
+                    margin: 0 0 8px 0;
                 }
-                .header { text-align: center; margin-bottom: 8px; position: relative; z-index: 1; }
-                .header h1 { margin: 0; color: #1e293b; font-size: 14px; font-weight: bold; }
-                .header p { margin: 2px 0; color: #64748b; font-size: 10px; }
-                .ingredients-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 10px;
-                    font-size: 12px;
+                .ingredients-grid {
+                    display: grid;
+                    grid-template-columns: repeat(6, 1fr);
+                    gap: 6px;
+                    margin-bottom: 12px;
                 }
-                .ingredients-table th,
-                .ingredients-table td {
-                    padding: 6px 10px;
+                .ingredient-item {
+                    padding: 6px 8px;
                     border: 1px solid #e2e8f0;
+                    border-radius: 4px;
+                    background-color: #ffffff;
+                }
+                .ingredient-item .name {
                     font-size: 12px;
-                    line-height: 1.5;
-                }
-                .ingredients-table th {
-                    background-color: #f8fafc;
                     font-weight: bold;
+                    color: #1e293b;
+                    margin-bottom: 3px;
+                    line-height: 1.4;
                 }
-                .info-section { margin-bottom: 12px; position: relative; z-index: 1; background: #f8f9fa; padding: 10px; border-radius: 5px; }
-                .info-section p { margin: 3px 0; font-size: 11px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; position: relative; z-index: 1; }
-                th, td { padding: 6px 8px; border: 1px solid #e2e8f0; font-size: 11px; }
-                th { background-color: #f8fafc; font-weight: bold; }
-                .footer { margin-top: 15px; text-align: center; color: #64748b; font-size: 12px; position: relative; z-index: 1; }
-                .print-btn { margin: 15px 0; text-align: center; }
-                button { padding: 8px 16px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 12px; }
-                button:hover { background: #7c3aed; }
+                .ingredient-item .quantity {
+                    font-size: 11px;
+                    color: #8b5cf6;
+                    font-weight: 600;
+                }
+                
+                .print-btn { 
+                    margin: 15px 0; 
+                    text-align: center; 
+                }
+                button { 
+                    padding: 8px 16px; 
+                    background: #8b5cf6; 
+                    color: white; 
+                    border: none; 
+                    cursor: pointer; 
+                    border-radius: 5px; 
+                    font-size: 12px; 
+                    margin: 0 5px;
+                }
+                button:hover { 
+                    background: #7c3aed; 
+                }
             </style>
         </head>
         <body>
-            <!-- Print Banner -->
-            <div class="print-banner">
-                <img src="${bannerImagePath}" alt="Advertisement Banner" class="print-banner-image" style="width: 100%; height: auto; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;" onerror="console.error('Failed to load banner image:', this.src);">
+            <!-- Header Image -->
+            <div class="header-image">
+                <img src="images/newimage.png" alt="Header Banner" onerror="console.error('Failed to load header image:', this.src);">
             </div>
             
-            <!-- Customer Details Section with Table Layout -->
-            <div class="fillable-section">
-                <table class="fillable-table">
-                    <thead>
-                        <tr>
-                            <th></th>
-                            <th></th>
-                            <th></th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${(() => {
-                            const dishes = order.dishes && order.dishes.length > 0 ? order.dishes : [];
-                            const infoRows = [
-                                { label: 'گاہک', value: (order.customer_name || '') + (order.customer_cell ? (order.customer_name ? ' - ' : '') + order.customer_cell : '') },
-                                { label: 'افراد کی تعداد', value: totalPersons > 0 ? totalPersons : '' },
-                                { label: 'ڈیلیوری تاریخ', value: order.delivery_date ? formatDateForPrint(order.delivery_date) : '' },
-                                { label: 'شفت', value: order.shift ? (shiftTranslations[order.shift] || order.shift) : '' },
-                                { label: 'ڈیلیوری وقت', value: order.delivery_time || '' }
-                            ];
+            <!-- Order Details Table -->
+            <table class="order-details-table">
+                <tbody>
+                    <!-- First row with header and value in same cell -->
+                    <tr>
+                        <td><strong>گایک:</strong> ${order.customer_name || ''}</td>
+                        <td><strong>افراد:</strong> ${totalPersons > 0 ? totalPersons : ''}</td>
+                        <td><strong>تاريخ:</strong> ${deliveryDate}</td>
+                        <td><strong>شفت:</strong> ${shiftText}</td>
+                        <td><strong>وقت:</strong> ${orderTime}</td>
+                    </tr>
+                    <!-- Additional rows with dish names -->
+                    ${(() => {
+                        const dishes = order.dishes && order.dishes.length > 0 ? order.dishes : [];
+                        let rows = '';
+                        // Show up to 4 dishes in the remaining rows
+                        for (let i = 0; i < 4; i++) {
+                            const dish = dishes[i];
+                            const dishName = dish ? (dish.dish_name || '') : '';
+                            const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
+                            // Format: dish name with quantity if available
+                            const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ')' : '');
                             
-                            let rows = '';
-                            for (let i = 0; i < 5; i++) {
-                                const dish = dishes[i];
-                                const dishNameOnly = dish ? (dish.dish_name || 'N/A') : '';
-                                const quantity = dish ? (parseFloat(dish.quantity) || 1).toFixed(2) : '';
-                                // Format: dish name, then quantity, then "دیگ" after the quantity
-                                // Build string to ensure "دیگ" appears after the quantity number
-                                const dishName = dish && quantity ? dishNameOnly + ' ' + quantity + ' دیگ' : dishNameOnly;
-                                const info = infoRows[i] || { label: '', value: '' };
-                                
-                                rows += `
-                        <tr>
-                            <td class="fillable-label-cell">${info.label}</td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${info.value}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space">${dishName}</div>
-                            </td>
-                            <td class="fillable-field-cell">
-                                <div class="fillable-space"></div>
-                            </td>
-                        </tr>
-                                `;
-                            }
-                            return rows;
-                        })()}
-                    </tbody>
-                </table>
+                            rows += `
+                    <tr>
+                        <td>${displayText}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                            `;
+                        }
+                        return rows;
+                    })()}
+                </tbody>
+            </table>
+            
+            <!-- Ingredients List Section -->
+            <div class="ingredients-section">
+                <div class="ingredients-title">آرڈر کے لیے اجزاء کی فہرست</div>
+                ${ingredientsHtml}
             </div>
             
-            <div class="content-wrapper">
-                <div class="header">
-                    <h1 style="font-size: 14px; font-weight: bold; color: #1e293b; text-align: center; margin-bottom: 6px;">${translations.ingredients_list}</h1>
-                </div>
-                ${ingredientsHtml}
-                <div class="footer">
-                    <p style="text-align: center; color: #64748b; font-size: 10px; margin-top: 12px;">${translations.printed_on}: ${new Date().toLocaleDateString('ur-PK')} ${new Date().toLocaleTimeString('ur-PK')}</p>
-                </div>
-                <div class="print-btn no-print">
-                    <button onclick="window.print()">${translations.print}</button>
-                    <button onclick="window.close()">${translations.close}</button>
-                </div>
+            <div class="print-btn no-print">
+                <button onclick="window.print()">${translations.print}</button>
+                <button onclick="window.close()">${translations.close}</button>
             </div>
         </body>
         </html>
@@ -4321,5 +4142,6 @@ function addNewDishRow() {
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
+
 
 
