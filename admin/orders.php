@@ -3628,23 +3628,29 @@ function printIngredients(orderNumberOrId) {
                     ${(() => {
                         const dishes = order.dishes && order.dishes.length > 0 ? order.dishes : [];
                         let rows = '';
-                        // Show up to 4 dishes in the remaining rows
-                        for (let i = 0; i < 4; i++) {
-                            const dish = dishes[i];
-                            const dishName = dish ? (dish.dish_name || '') : '';
-                            const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
-                            // Format: dish name with quantity if available
-                            const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ')' : '');
-                            
-                            rows += `
-                    <tr>
-                        <td>${displayText}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                            `;
+                        
+                        // Fill columns sequentially: 4 dishes per column
+                        // Column 1: dishes 0-3, Column 2: dishes 4-7, Column 3: dishes 8-11, etc.
+                        const dishesPerColumn = 4;
+                        const numColumns = 5;
+                        const numRows = dishesPerColumn;
+                        
+                        // Create rows, filling columns sequentially
+                        for (let row = 0; row < numRows; row++) {
+                            let cells = '';
+                            for (let col = 0; col < numColumns; col++) {
+                                const dishIndex = col * dishesPerColumn + row; // Column 0: 0-3, Column 1: 4-7, etc.
+                                if (dishIndex < dishes.length) {
+                                    const dish = dishes[dishIndex];
+                                    const dishName = dish ? (dish.dish_name || '') : '';
+                                    const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
+                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ')' : '');
+                                    cells += `<td>${displayText}</td>`;
+                                } else {
+                                    cells += `<td></td>`;
+                                }
+                            }
+                            rows += `<tr>${cells}</tr>`;
                         }
                         return rows;
                     })()}
@@ -3653,7 +3659,6 @@ function printIngredients(orderNumberOrId) {
             
             <!-- Ingredients List Section -->
             <div class="ingredients-section">
-                <div class="ingredients-title">آرڈر کے لیے اجزاء کی فہرست</div>
                 ${ingredientsHtml}
             </div>
             
