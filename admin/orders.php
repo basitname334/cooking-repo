@@ -3644,7 +3644,7 @@ function printIngredients(orderNumberOrId) {
                                     const dish = dishes[dishIndex];
                                     const dishName = dish ? (dish.dish_name || '') : '';
                                     const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
-                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ')' : '');
+                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ' دیگ)' : '');
                                     cells += `<td>${displayText}</td>`;
                                 } else {
                                     cells += `<td></td>`;
