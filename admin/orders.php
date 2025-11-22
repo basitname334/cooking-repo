@@ -3425,10 +3425,20 @@ function printIngredients(orderNumberOrId) {
                     .order-details-table {
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
-                        margin: 10px 0 !important;
+                        margin: 8px 0 !important;
+                    }
+                    .header-image {
+                        margin-bottom: 8px !important;
                     }
                     .ingredients-section {
                         page-break-inside: avoid !important;
+                        page-break-before: avoid !important;
+                        margin-top: 10px !important;
+                    }
+                    .ingredients-title {
+                        font-size: 20px !important;
+                        margin-bottom: 10px !important;
+                        margin-top: 5px !important;
                     }
                     .category-section {
                         page-break-inside: avoid !important;
@@ -3456,7 +3466,7 @@ function printIngredients(orderNumberOrId) {
                 /* Header Image */
                 .header-image {
                     width: 100%;
-                    margin-bottom: 15px;
+                    margin-bottom: 10px;
                     display: block;
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
@@ -3475,7 +3485,7 @@ function printIngredients(orderNumberOrId) {
                 .order-details-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin: 15px 0;
+                    margin: 10px 0;
                     border: 1px solid #ddd;
                     background-color: #fff;
                 }
@@ -3503,13 +3513,15 @@ function printIngredients(orderNumberOrId) {
                 
                 /* Ingredients Section */
                 .ingredients-section {
-                    margin-top: 20px;
+                    margin-top: 15px;
+                    page-break-before: avoid;
                 }
                 .ingredients-title {
-                    font-size: 16px;
+                    font-size: 22px;
                     font-weight: bold;
                     text-align: center;
                     margin-bottom: 15px;
+                    margin-top: 10px;
                     color: #1e293b;
                 }
                 .category-section {
