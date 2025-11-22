@@ -3268,6 +3268,14 @@ function printIngredients(orderNumberOrId) {
         // Get category IDs and sort them
         const categoryIds = Object.keys(ingredientsByCategory);
         
+        // Display notes before categories if they exist
+        if (order.notes && order.notes.trim()) {
+            ingredientsHtml += '<div class="notes-section" style="margin: 15px 0; padding: 12px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; font-family: ' + fontFamily + '; direction: rtl;">';
+            ingredientsHtml += '<div style="font-weight: bold; font-size: 14px; color: #92400e; margin-bottom: 5px;">نوٹ:</div>';
+            ingredientsHtml += '<div style="font-size: 13px; color: #78350f; line-height: 1.6;">' + order.notes + '</div>';
+            ingredientsHtml += '</div>';
+        }
+        
         if (categoryIds.length > 0) {
             // Display ingredients grouped by category
             categoryIds.forEach(function(categoryId) {
@@ -3498,6 +3506,13 @@ function printIngredients(orderNumberOrId) {
                         margin-bottom: 6px !important;
                         margin-top: 3px !important;
                         line-height: 1.2 !important;
+                    }
+                    .notes-section {
+                        page-break-inside: avoid !important;
+                        page-break-after: avoid !important;
+                        margin: 8px 0 !important;
+                        padding: 8px !important;
+                        font-size: 11px !important;
                     }
                     .category-section {
                         page-break-inside: avoid !important;
