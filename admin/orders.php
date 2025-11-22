@@ -3325,9 +3325,29 @@ function printIngredients(orderNumberOrId) {
                             return unitTranslations[unitLower] || unit;
                         }
                         
+                        // Function to remove trailing zeros from decimal numbers
+                        function removeTrailingZeros(num) {
+                            if (typeof num === 'number') {
+                                // If it's a whole number, return as integer string
+                                if (num % 1 === 0) {
+                                    return num.toString();
+                                }
+                                // Otherwise, convert to string and remove trailing zeros
+                                return num.toString().replace(/\.?0+$/, '');
+                            }
+                            // If it's already a string, parse and format
+                            const parsed = parseFloat(num);
+                            if (isNaN(parsed)) return num;
+                            if (parsed % 1 === 0) {
+                                return parsed.toString();
+                            }
+                            return parsed.toString().replace(/\.?0+$/, '');
+                        }
+                        
                         // Convert large gram values to kg for better readability
                         if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                            quantity = (quantity / 1000).toFixed(2);
+                            const kgValue = quantity / 1000;
+                            quantity = removeTrailingZeros(kgValue);
                             unit = 'kg';
                         }
                         
@@ -3352,15 +3372,20 @@ function printIngredients(orderNumberOrId) {
                                 quantityUnit = '0 کلو';
                             }
                         } else {
+                            // For grams (g, gram, grams), show exact value without decimals
+                            if (unitLower === 'g' || unitLower === 'gram' || unitLower === 'grams') {
+                                quantity = Math.round(quantity).toString();
+                            }
                             // For countable items (pieces, piece, serving, servings, etc.), show as whole number
-                            if (unitLower === 'piece' || unitLower === 'pieces' || 
+                            else if (unitLower === 'piece' || unitLower === 'pieces' || 
                                 unitLower === 'serving' || unitLower === 'servings' ||
                                 unitLower === 'portion' || unitLower === 'portions' ||
                                 unitLower === 'item' || unitLower === 'items') {
                                 quantity = Math.round(quantity).toString();
                             } else {
-                                // For weight/volume units, show 2 decimal places
-                                quantity = quantity.toFixed(2);
+                                // For other weight/volume units, remove trailing zeros
+                                const formatted = parseFloat(quantity);
+                                quantity = removeTrailingZeros(formatted);
                             }
                             
                             // Translate unit to Urdu
