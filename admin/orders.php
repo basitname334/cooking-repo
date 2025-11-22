@@ -3402,7 +3402,7 @@ function printIngredients(orderNumberOrId) {
             <style>
                 @media print {
                     @page {
-                        size: A4;
+                        size: Legal;
                         margin: 0.3cm;
                     }
                     * {
@@ -3421,11 +3421,11 @@ function printIngredients(orderNumberOrId) {
                         page-break-inside: avoid !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
-                        margin-bottom: 5px !important;
-                        max-height: 80px !important;
+                        margin-bottom: 10px !important;
                     }
                     .header-image img {
-                        max-height: 80px !important;
+                        width: 100% !important;
+                        height: auto !important;
                         object-fit: contain !important;
                     }
                     .order-details-table {
@@ -3460,7 +3460,7 @@ function printIngredients(orderNumberOrId) {
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
-                        grid-template-columns: repeat(6, 1fr) !important;
+                        grid-template-columns: repeat(5, 1fr) !important;
                         gap: 3px !important;
                     }
                     [style*="grid-template-columns"] > div {
@@ -3490,20 +3490,16 @@ function printIngredients(orderNumberOrId) {
                 /* Header Image */
                 .header-image {
                     width: 100%;
-                    margin-bottom: 8px;
+                    margin-bottom: 12px;
                     display: block;
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                     color-adjust: exact !important;
-                    max-height: 100px;
-                    overflow: hidden;
                 }
                 .header-image img {
                     width: 100%;
                     height: auto;
                     display: block;
-                    max-height: 100px;
-                    object-fit: contain;
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
                     color-adjust: exact !important;
@@ -3569,7 +3565,7 @@ function printIngredients(orderNumberOrId) {
                 }
                 .ingredients-grid {
                     display: grid;
-                    grid-template-columns: repeat(6, 1fr);
+                    grid-template-columns: repeat(5, 1fr);
                     gap: 4px;
                     margin-bottom: 8px;
                 }
@@ -3726,7 +3722,7 @@ function printOrder(orderNumberOrId) {
             <style>
                 @media print {
                     @page {
-                        size: A4;
+                        size: Legal;
                         margin: 0.5cm;
                     }
                     body { margin: 0; padding: 15px; position: relative; font-size: 14px !important; }
