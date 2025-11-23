@@ -3945,7 +3945,7 @@ function printIngredients(orderNumberOrId) {
                 <tbody>
                     <!-- First row with header and value in same cell -->
                     <tr>
-                        <td><strong>گایک:</strong> ${order.customer_name || ''}</td>
+                        <td><strong>گایک:</strong> ${order.customer_name || ''}${order.customer_cell ? ' (' + order.customer_cell + ')' : ''}</td>
                         <td><strong>افراد:</strong> ${totalPersons > 0 ? totalPersons : ''}</td>
                         <td><strong>تاريخ:</strong> ${deliveryDate}</td>
                         <td><strong>شفت:</strong> ${shiftText}</td>
