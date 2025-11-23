@@ -7,7 +7,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/language.php';
 
-requireAdmin();
+// Allow both admin and regular users to view order previews
+requireLogin();
 
 $conn = getDBConnection();
 $order_number = $_GET['order_number'] ?? '';

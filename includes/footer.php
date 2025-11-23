@@ -52,6 +52,12 @@
                                         <?php echo t('dashboard', 'Dashboard'); ?>
                                     </a>
                                 </li>
+                                <li class="mb-2">
+                                    <a href="<?php echo $basePath; ?>admin/orders.php" class="footer-link">
+                                        <i class="bi bi-cart-check me-2"></i>
+                                        <?php echo t('orders_title', 'Orders'); ?>
+                                    </a>
+                                </li>
                             <?php endif; ?>
                         <?php else: ?>
                             <li class="mb-2">

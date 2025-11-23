@@ -104,13 +104,15 @@ $available_langs = getAvailableLanguages();
                             $navItems = [
                                 ['url' => 'dashboard.php', 'icon' => 'speedometer2', 'text' => 'Dashboard'],
                                 ['url' => 'categories.php', 'icon' => 'folder2-open', 'text' => 'Categories'],
-                                ['url' => 'dishes.php', 'icon' => 'egg-fried', 'text' => 'Dishes']
+                                ['url' => 'dishes.php', 'icon' => 'egg-fried', 'text' => 'Dishes'],
+                                ['url' => 'orders.php', 'icon' => 'cart-check', 'text' => 'Orders', 'path' => 'admin']
                             ];
                             foreach ($navItems as $item):
                                 $isActive = ($currentPage === $item['url']);
+                                $itemPath = isset($item['path']) ? $item['path'] : 'user';
                             ?>
                             <li class="nav-item">
-                                <a class="nav-link nav-link-modern <?php echo $isActive ? 'active' : ''; ?>" href="<?php echo $basePath; ?>user/<?php echo $item['url']; ?>">
+                                <a class="nav-link nav-link-modern <?php echo $isActive ? 'active' : ''; ?>" href="<?php echo $basePath; ?><?php echo $itemPath; ?>/<?php echo $item['url']; ?>">
                                     <i class="bi bi-<?php echo $item['icon']; ?> me-2"></i>
                                     <span style="display: inline-block !important; visibility: visible !important;"><?php echo $item['text']; ?></span>
                                 </a>
