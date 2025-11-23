@@ -268,13 +268,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                                 customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
                                 VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                             if ($stmt) {
+                                // Extract values to variables for bind_param (must be variables, not expressions)
+                                $dish_id = $dish_info['dish_id'];
+                                $quantity = $dish_info['quantity'];
+                                $unit = $dish_info['unit'] ?? null;
+                                $total_amount = $dish_info['total_amount'];
+                                
                                 // Skip customer_id in bind_param since we're using NULL directly in the query
                                 $stmt->bind_param("siisdsssssssiss", 
                                     $order_number, 
-                                    $dish_info['dish_id'], 
-                                    $dish_info['quantity'],
-                                    $dish_info['unit'] ?? null,
-                                    $dish_info['total_amount'], 
+                                    $dish_id, 
+                                    $quantity,
+                                    $unit,
+                                    $total_amount, 
                                     $status,
                                     $customer_name,
                                     $customer_cell,
@@ -291,7 +297,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                             // Old form (backward compatibility)
                             $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                             if ($stmt) {
-                                $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'] ?? null, $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
+                                // Extract values to variables for bind_param (must be variables, not expressions)
+                                $dish_id = $dish_info['dish_id'];
+                                $quantity = $dish_info['quantity'];
+                                $unit = $dish_info['unit'] ?? null;
+                                $total_amount = $dish_info['total_amount'];
+                                
+                                $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $status, $notes, $extra_ingredients_json);
                             }
                         }
                         
