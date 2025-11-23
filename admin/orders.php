@@ -3400,7 +3400,7 @@ function printIngredients(orderNumberOrId) {
     const dishKeys = Object.keys(ingredientsByDish);
     if (dishKeys.length === 0) {
         ingredientsHtml += '<table class="ingredients-table" style="width: 100%; border-collapse: collapse; margin-top: 12px; direction: rtl; font-size: 13px;">';
-        ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.ingredient_label + '</th><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
+        ingredientsHtml += '<thead><tr style="background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;"><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.ingredient_label + '</th><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
         ingredientsHtml += '<tbody>';
         ingredientsHtml += '<tr><td colspan="2" style="padding: 8px 10px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 13px; line-height: 1.5;">' + translations.no_ingredients_found + '</td></tr>';
         ingredientsHtml += '</tbody></table>';
@@ -3625,6 +3625,9 @@ function printIngredients(orderNumberOrId) {
                     }
                     * {
                         page-break-inside: avoid !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
                     }
                     body { 
                         margin: 0 !important; 
@@ -3799,6 +3802,9 @@ function printIngredients(orderNumberOrId) {
                     background-color: #e9ecef;
                     font-weight: normal;
                     font-size: 12px;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 .order-details-table tbody tr:first-child td strong {
                     font-weight: bold;
@@ -3821,6 +3827,9 @@ function printIngredients(orderNumberOrId) {
                     margin-top: 5px;
                     color: #1e293b;
                     line-height: 1.3;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 .category-section {
                     margin-top: 10px;
@@ -3834,6 +3843,9 @@ function printIngredients(orderNumberOrId) {
                     background-color: #8b5cf6;
                     border-radius: 4px;
                     margin: 0 0 6px 0;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 .ingredients-grid {
                     display: grid;
@@ -3846,6 +3858,9 @@ function printIngredients(orderNumberOrId) {
                     border: 1px solid #e2e8f0;
                     border-radius: 3px;
                     background-color: #ffffff;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 .ingredient-item .name {
                     font-size: 14px;
@@ -3881,6 +3896,9 @@ function printIngredients(orderNumberOrId) {
                     border-radius: 5px; 
                     font-size: 12px; 
                     margin: 0 5px;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    color-adjust: exact !important;
                 }
                 button:hover { 
                     background: #7c3aed; 
@@ -4014,6 +4032,11 @@ function printOrder(orderNumberOrId) {
                     @page {
                         size: Legal;
                         margin: 0.5cm;
+                    }
+                    * {
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
                     }
                     body { margin: 0; padding: 15px; position: relative; font-size: 14px !important; }
                     .no-print { display: none; }
@@ -4208,27 +4231,27 @@ function printOrder(orderNumberOrId) {
                 .header p { margin: 6px 0; color: #64748b; font-size: 16px; }
                 .order-info { margin: 18px 0; position: relative; z-index: 1; }
                 .order-info p { margin: 8px 0; font-size: 14px; }
-                .order-details { background: #f8fafc; padding: 20px; border-radius: 5px; margin: 18px 0; position: relative; z-index: 1; }
                 .order-details h3 { margin-top: 0; font-size: 20px; }
                 .detail-row { display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #e2e8f0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; font-size: 14px; }
                 .detail-row:last-child { border-bottom: none; }
                 .detail-label { font-weight: bold; }
-                .category-badge { display: inline-block; padding: 4px 10px; background: #e0e7ff; color: #4338ca; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
+                .category-badge { display: inline-block; padding: 4px 10px; background: #e0e7ff; color: #4338ca; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
                 ${langDir === 'rtl' ? '.notes { border-left: none; border-right: 4px solid #f59e0b; }' : ''}
                 .total-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #1e293b; position: relative; z-index: 1; }
                 .total-row { display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; margin: 12px 0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; }
-                .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; margin-top: 10px; font-size: 13px; }
-                .status-pending { background: #f59e0b; color: #fff; }
-                .status-confirmed { background: #f97316; color: #fff; }
-                .status-preparing { background: #64748b; color: #fff; }
-                .status-ready { background: #10b981; color: #fff; }
-                .status-delivered { background: #10b981; color: #fff; }
-                .status-cancelled { background: #ef4444; color: #fff; }
+                .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; margin-top: 10px; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-pending { background: #f59e0b; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-confirmed { background: #f97316; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-preparing { background: #64748b; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-ready { background: #10b981; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-delivered { background: #10b981; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-cancelled { background: #ef4444; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
                 .footer { margin-top: 20px; text-align: center; color: #64748b; font-size: 14px; border-top: 1px solid #e2e8f0; padding-top: 15px; position: relative; z-index: 1; }
                 .print-btn { margin: 25px 0; text-align: center; }
-                button { padding: 12px 24px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 8px; font-size: 15px; }
+                button { padding: 12px 24px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 8px; font-size: 15px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
                 button:hover { background: #7c3aed; }
-                .notes { margin-top: 15px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 14px; }
+                .notes { margin-top: 15px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .order-details { background: #f8fafc; padding: 20px; border-radius: 5px; margin: 18px 0; position: relative; z-index: 1; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
             </style>
         </head>
         <body>
@@ -4291,7 +4314,7 @@ function printOrder(orderNumberOrId) {
                         const dishName = dish.dish_name || 'N/A';
                         const categoryName = dish.category_name || 'Uncategorized';
                         return `
-                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 10px; padding: 12px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px;">
+                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 10px; padding: 12px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;">
                             <div style="flex: 1;">
                                 <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
                                 <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
