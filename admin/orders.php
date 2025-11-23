@@ -56,6 +56,12 @@ try {
         @$conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
     }
     
+    // Check if unit column exists, if not add it
+    $check_unit = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'unit'");
+    if ($check_unit && $check_unit->num_rows == 0) {
+        @$conn->query("ALTER TABLE `orders` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`");
+    }
+    
     // Make customer_id nullable to support orders without registered customers
     $check_customer_id = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
     if ($check_customer_id && $check_customer_id->num_rows > 0) {
@@ -209,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         foreach ($dishes_data as $dish_data) {
             $dish_id = intval($dish_data['dish_id'] ?? 0);
             $quantity = floatval($dish_data['quantity'] ?? 0);
+            $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
             $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
             $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
             
@@ -229,6 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             $valid_dishes[] = [
                 'dish_id' => $dish_id,
                 'quantity' => $quantity,
+                'unit' => $unit,
                 'total_amount' => $total_amount
             ];
         }
@@ -253,15 +261,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                 if ($use_new_form) {
                     // New form with all required fields - use NULL for customer_id since customer info is in separate fields
                     // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
                         customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
-                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     if ($stmt) {
                         // Skip customer_id in bind_param since we're using NULL directly in the query
-                        $stmt->bind_param("siidsssssssiss", 
+                        $stmt->bind_param("siisdsssssssiss", 
                             $order_number, 
                             $dish_info['dish_id'], 
-                            $dish_info['quantity'], 
+                            $dish_info['quantity'],
+                            $dish_info['unit'] ?? null,
                             $dish_info['total_amount'], 
                             $status,
                             $customer_name,
@@ -277,9 +286,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                     }
                 } else {
                     // Old form (backward compatibility)
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     if ($stmt) {
-                        $stmt->bind_param("siiddsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
+                        $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'] ?? null, $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
                     }
                 }
                 
@@ -520,7 +529,7 @@ $orders = [];
 // Also explicitly select o.customer_name and o.customer_cell to ensure they're available
 // Show all orders - removed WHERE clause to ensure all orders are displayed
 // Simplified query to ensure it works
-$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.total_amount, 
+$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount, 
     o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
     o.delivery_time, o.shift, o.number_of_persons,
     o.customer_name as order_customer_name,
@@ -1356,6 +1365,24 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                                     <i class="bi bi-grid-3x3-gap"></i>
                                                 </button>
                                             </div>
+                                        </div>
+                                        <div class="col-md-1">
+                                            <label class="form-label fw-semibold small">
+                                                <?php echo t('unit', 'Unit'); ?> <span class="text-danger">*</span>
+                                            </label>
+                                            <select class="form-select dish-unit" name="dishes[0][unit]" required>
+                                                <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
+                                                <option value="عدد">عدد</option>
+                                                <option value="کلو">کلو</option>
+                                                <option value="گرام">گرام</option>
+                                                <option value="لیٹر">لیٹر</option>
+                                                <option value="ڈیگ">ڈیگ</option>
+                                                <option value="پورشن">پورشن</option>
+                                                <option value="سروینگ">سروینگ</option>
+                                                <option value="پلیٹ">پلیٹ</option>
+                                                <option value="بوتل">بوتل</option>
+                                                <option value="پیکٹ">پیکٹ</option>
+                                            </select>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small">
@@ -2329,6 +2356,7 @@ function updateReview() {
     if (dishRows && dishesData) {
         dishRows.forEach(function(row) {
             const dishSelect = row.querySelector('.dish-select');
+            const unitSelect = row.querySelector('.dish-unit');
             const quantityInput = row.querySelector('.dish-quantity');
             const unitPriceInput = row.querySelector('.dish-unit-price');
             const totalAmountInput = row.querySelector('.dish-total-amount');
@@ -2337,15 +2365,17 @@ function updateReview() {
                 const dishId = dishSelect.value;
                 const dish = dishesData.find(d => d.id == dishId);
                 const quantity = parseFloat(quantityInput.value) || 0;
+                const unit = unitSelect ? unitSelect.value : '';
                 const unitPrice = parseFloat(unitPriceInput.value) || 0;
                 const total = parseFloat(totalAmountInput.value) || (quantity * unitPrice);
                 
                 if (dish && quantity > 0) {
+                    const unitText = unit ? ` ${unit}` : '';
                     dishesHTML += `
                         <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: white; border-radius: 6px;">
                             <div>
                                 <strong>${escapeHtml(dish.name)}</strong><br>
-                                <small class="text-muted">Quantity: ${quantity} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
+                                <small class="text-muted">Quantity: ${quantity}${unitText} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
                             </div>
                             <div class="text-end">
                                 <strong class="text-primary">Rs ${total.toFixed(2)}</strong>
@@ -2573,8 +2603,15 @@ document.addEventListener('DOMContentLoaded', function() {
         dishesContainer.addEventListener('input', function(e) {
             if (currentStep === 3 && (e.target.classList.contains('dish-select') || 
                 e.target.classList.contains('dish-quantity') || 
+                e.target.classList.contains('dish-unit') ||
                 e.target.classList.contains('dish-unit-price') || 
                 e.target.classList.contains('dish-total-amount'))) {
+                updateReview();
+            }
+        });
+        dishesContainer.addEventListener('change', function(e) {
+            if (currentStep === 3 && (e.target.classList.contains('dish-select') || 
+                e.target.classList.contains('dish-unit'))) {
                 updateReview();
             }
         });
@@ -2743,6 +2780,24 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="bi bi-grid-3x3-gap"></i>
                         </button>
                     </div>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label fw-semibold small">
+                        <?php echo t('unit', 'Unit'); ?> <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select dish-unit" name="dishes[${dishRowCount}][unit]" required>
+                        <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
+                        <option value="عدد">عدد</option>
+                        <option value="کلو">کلو</option>
+                        <option value="گرام">گرام</option>
+                        <option value="لیٹر">لیٹر</option>
+                        <option value="ڈیگ">ڈیگ</option>
+                        <option value="پورشن">پورشن</option>
+                        <option value="سروینگ">سروینگ</option>
+                        <option value="پلیٹ">پلیٹ</option>
+                        <option value="بوتل">بوتل</option>
+                        <option value="پیکٹ">پیکٹ</option>
+                    </select>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold small">
@@ -3400,7 +3455,7 @@ function printIngredients(orderNumberOrId) {
     const dishKeys = Object.keys(ingredientsByDish);
     if (dishKeys.length === 0) {
         ingredientsHtml += '<table class="ingredients-table" style="width: 100%; border-collapse: collapse; margin-top: 12px; direction: rtl; font-size: 13px;">';
-        ingredientsHtml += '<thead><tr style="background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;"><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.ingredient_label + '</th><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
+        ingredientsHtml += '<thead><tr style="background-color: #f8fafc;"><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.ingredient_label + '</th><th style="padding: 8px 10px; border: 1px solid #e2e8f0; text-align: right; font-family: ' + fontFamily + '; font-size: 13px;">' + translations.quantity_label + ' / ' + translations.unit_label + '</th></tr></thead>';
         ingredientsHtml += '<tbody>';
         ingredientsHtml += '<tr><td colspan="2" style="padding: 8px 10px; border: 1px solid #ddd; text-align: center; font-family: ' + fontFamily + '; font-size: 13px; line-height: 1.5;">' + translations.no_ingredients_found + '</td></tr>';
         ingredientsHtml += '</tbody></table>';
@@ -3520,7 +3575,7 @@ function printIngredients(orderNumberOrId) {
                         
                         // Convert large gram values to kg for better readability
                         if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                            quantity = (quantity / 1000).toFixed(2);
+                            quantity = Math.round(quantity / 1000);
                             unit = 'kg';
                         }
                         
@@ -3545,16 +3600,8 @@ function printIngredients(orderNumberOrId) {
                                 quantityUnit = '0 کلو';
                             }
                         } else {
-                            // For countable items (pieces, piece, serving, servings, etc.), show as whole number
-                            if (unitLower === 'piece' || unitLower === 'pieces' || 
-                                unitLower === 'serving' || unitLower === 'servings' ||
-                                unitLower === 'portion' || unitLower === 'portions' ||
-                                unitLower === 'item' || unitLower === 'items') {
-                                quantity = Math.round(quantity).toString();
-                            } else {
-                                // For weight/volume units, show 2 decimal places
-                                quantity = quantity.toFixed(2);
-                            }
+                            // For all units, show as whole number without decimal points
+                            quantity = Math.round(quantity).toString();
                             
                             // Translate unit to Urdu
                             const unitUrdu = translateUnitToUrdu(unit);
@@ -3625,9 +3672,6 @@ function printIngredients(orderNumberOrId) {
                     }
                     * {
                         page-break-inside: avoid !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                        color-adjust: exact !important;
                     }
                     body { 
                         margin: 0 !important; 
@@ -3802,9 +3846,6 @@ function printIngredients(orderNumberOrId) {
                     background-color: #e9ecef;
                     font-weight: normal;
                     font-size: 12px;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    color-adjust: exact !important;
                 }
                 .order-details-table tbody tr:first-child td strong {
                     font-weight: bold;
@@ -3827,9 +3868,6 @@ function printIngredients(orderNumberOrId) {
                     margin-top: 5px;
                     color: #1e293b;
                     line-height: 1.3;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    color-adjust: exact !important;
                 }
                 .category-section {
                     margin-top: 10px;
@@ -3843,9 +3881,6 @@ function printIngredients(orderNumberOrId) {
                     background-color: #8b5cf6;
                     border-radius: 4px;
                     margin: 0 0 6px 0;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    color-adjust: exact !important;
                 }
                 .ingredients-grid {
                     display: grid;
@@ -3858,9 +3893,6 @@ function printIngredients(orderNumberOrId) {
                     border: 1px solid #e2e8f0;
                     border-radius: 3px;
                     background-color: #ffffff;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    color-adjust: exact !important;
                 }
                 .ingredient-item .name {
                     font-size: 14px;
@@ -3896,9 +3928,6 @@ function printIngredients(orderNumberOrId) {
                     border-radius: 5px; 
                     font-size: 12px; 
                     margin: 0 5px;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    color-adjust: exact !important;
                 }
                 button:hover { 
                     background: #7c3aed; 
@@ -4032,11 +4061,6 @@ function printOrder(orderNumberOrId) {
                     @page {
                         size: Legal;
                         margin: 0.5cm;
-                    }
-                    * {
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                        color-adjust: exact !important;
                     }
                     body { margin: 0; padding: 15px; position: relative; font-size: 14px !important; }
                     .no-print { display: none; }
@@ -4231,27 +4255,27 @@ function printOrder(orderNumberOrId) {
                 .header p { margin: 6px 0; color: #64748b; font-size: 16px; }
                 .order-info { margin: 18px 0; position: relative; z-index: 1; }
                 .order-info p { margin: 8px 0; font-size: 14px; }
+                .order-details { background: #f8fafc; padding: 20px; border-radius: 5px; margin: 18px 0; position: relative; z-index: 1; }
                 .order-details h3 { margin-top: 0; font-size: 20px; }
                 .detail-row { display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #e2e8f0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; font-size: 14px; }
                 .detail-row:last-child { border-bottom: none; }
                 .detail-label { font-weight: bold; }
-                .category-badge { display: inline-block; padding: 4px 10px; background: #e0e7ff; color: #4338ca; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .category-badge { display: inline-block; padding: 4px 10px; background: #e0e7ff; color: #4338ca; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
                 ${langDir === 'rtl' ? '.notes { border-left: none; border-right: 4px solid #f59e0b; }' : ''}
                 .total-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #1e293b; position: relative; z-index: 1; }
                 .total-row { display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; margin: 12px 0; flex-direction: ${langDir === 'rtl' ? 'row-reverse' : 'row'}; }
-                .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; margin-top: 10px; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .status-pending { background: #f59e0b; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .status-confirmed { background: #f97316; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .status-preparing { background: #64748b; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .status-ready { background: #10b981; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .status-delivered { background: #10b981; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .status-cancelled { background: #ef4444; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; margin-top: 10px; font-size: 13px; }
+                .status-pending { background: #f59e0b; color: #fff; }
+                .status-confirmed { background: #f97316; color: #fff; }
+                .status-preparing { background: #64748b; color: #fff; }
+                .status-ready { background: #10b981; color: #fff; }
+                .status-delivered { background: #10b981; color: #fff; }
+                .status-cancelled { background: #ef4444; color: #fff; }
                 .footer { margin-top: 20px; text-align: center; color: #64748b; font-size: 14px; border-top: 1px solid #e2e8f0; padding-top: 15px; position: relative; z-index: 1; }
                 .print-btn { margin: 25px 0; text-align: center; }
-                button { padding: 12px 24px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 8px; font-size: 15px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                button { padding: 12px 24px; background: #8b5cf6; color: white; border: none; cursor: pointer; border-radius: 5px; margin: 0 8px; font-size: 15px; }
                 button:hover { background: #7c3aed; }
-                .notes { margin-top: 15px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-                .order-details { background: #f8fafc; padding: 20px; border-radius: 5px; margin: 18px 0; position: relative; z-index: 1; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+                .notes { margin-top: 15px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 14px; }
             </style>
         </head>
         <body>
@@ -4314,7 +4338,7 @@ function printOrder(orderNumberOrId) {
                         const dishName = dish.dish_name || 'N/A';
                         const categoryName = dish.category_name || 'Uncategorized';
                         return `
-                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 10px; padding: 12px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;">
+                        <div class="detail-row" style="margin-left: 20px; margin-bottom: 10px; padding: 12px; background-color: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px;">
                             <div style="flex: 1;">
                                 <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
                                 <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
