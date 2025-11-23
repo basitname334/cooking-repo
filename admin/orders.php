@@ -7,7 +7,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/language.php';
 
-requireAdmin();
+// Allow both admin and regular users to access orders page
+requireLogin();
 
 $conn = getDBConnection();
 $error = '';
@@ -106,301 +107,316 @@ try {
     error_log("Schema modification error: " . $e->getMessage());
 }
 
-// Handle create order
+// Handle create order (Admin only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
-    // Set execution time limit for order creation
-    @set_time_limit(60);
-    
-    // Check database connection
-    if (!$conn || $conn->connect_error) {
-        $error = 'Database connection failed. Please try again.';
-        error_log("Database connection error: " . ($conn ? $conn->connect_error : 'Connection is null'));
+    // Only admins can create orders
+    if (!isAdmin()) {
+        $error = 'You do not have permission to create orders.';
     } else {
-    $customer_id = intval($_POST['customer_id'] ?? 0);
-    $customer_name = trim($_POST['customer_name'] ?? '');
-    $customer_cell = trim($_POST['customer_cell'] ?? '');
-    $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
-    $shift = trim($_POST['shift'] ?? '');
-    $delivery_date = trim($_POST['delivery_date'] ?? '');
-    $delivery_time = trim($_POST['delivery_time'] ?? '');
-    $notes = trim($_POST['notes'] ?? '');
-    
-    // Translate notes to Urdu if current language is Urdu
-    $notes = translateForDatabase($notes);
-    
-    // Use current datetime for order_date
-    $order_datetime = date('Y-m-d H:i:s');
-    
-    // Get dishes array - can be single or multiple
-    $dishes_data = [];
-    if (isset($_POST['dishes']) && is_array($_POST['dishes'])) {
-        // Multiple dishes format
-        $dishes_data = $_POST['dishes'];
-    } else {
-        // Single dish format (backward compatibility)
-        $dish_id = intval($_POST['dish_id'] ?? 0);
-        $quantity = floatval($_POST['quantity'] ?? 0);
-        $unit_price = !empty($_POST['unit_price']) ? floatval($_POST['unit_price']) : null;
-        $total_amount_input = !empty($_POST['total_amount']) ? floatval($_POST['total_amount']) : null;
+        // Set execution time limit for order creation
+        @set_time_limit(60);
         
-        if ($dish_id > 0 && $quantity > 0) {
-            $dishes_data[] = [
-                'dish_id' => $dish_id,
-                'quantity' => $quantity,
-                'unit_price' => $unit_price,
-                'total_amount' => $total_amount_input
-            ];
-        }
-    }
-    
-    // Get extra ingredients array
-    $extra_ingredients_data = [];
-    if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
-        foreach ($_POST['extra_ingredients'] as $ingredient_data) {
-            $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
-            $quantity = floatval($ingredient_data['quantity'] ?? 0);
-            $unit = trim($ingredient_data['unit'] ?? '');
-            
-            if ($ingredient_id > 0 && $quantity > 0) {
-                $extra_ingredients_data[] = [
-                    'ingredient_id' => $ingredient_id,
-                    'quantity' => $quantity,
-                    'unit' => $unit
-                ];
-            }
-        }
-    }
-    
-    // Get additional items
-    $additional_items_data = [];
-    if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
-        foreach ($_POST['additional_items'] as $item_key => $quantity) {
-            $quantity = intval($quantity);
-            if ($quantity > 0) {
-                $additional_items_data[$item_key] = $quantity;
-            }
-        }
-    }
-    
-    // Validation - check if using new form fields or old customer selection
-    $use_new_form = !empty($customer_name) || !empty($customer_cell);
-    
-    if ($use_new_form) {
-        // New form validation
-        if (empty($customer_cell) || 
-            $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
-            $error = 'Please fill all required fields in Step 1.';
-        } elseif (empty($dishes_data)) {
-            $error = 'Please select at least one dish in Step 2.';
-        }
-    } else {
-        // Old form validation (backward compatibility)
-        if ($customer_id <= 0 || empty($dishes_data)) {
-            $error = t('fill_all_required_fields');
-        }
-    }
-    
-    if (empty($error)) {
-        $status = 'pending';
-        $orders_created = 0;
-        $errors = [];
-        
-        // Generate a single order number for all dishes in this order
-        $order_number = 'ORD-' . date('Ymd') . '-' . str_pad(time() % 1000000, 6, '0', STR_PAD_LEFT);
-        
-        // Calculate grand total
-        $grand_total = 0;
-        $valid_dishes = [];
-        
-        foreach ($dishes_data as $dish_data) {
-            $dish_id = intval($dish_data['dish_id'] ?? 0);
-            $quantity = floatval($dish_data['quantity'] ?? 0);
-            $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
-            $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
-            $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
-            
-            if ($dish_id <= 0 || $quantity <= 0) {
-                continue; // Skip invalid dishes
-            }
-            
-            // Calculate total_amount: use direct input if provided, otherwise calculate from unit_price
-            if ($total_amount_input !== null && $total_amount_input >= 0) {
-                $total_amount = $total_amount_input;
-            } elseif ($unit_price !== null && $unit_price > 0) {
-                $total_amount = $quantity * $unit_price;
-            } else {
-                $total_amount = 0; // Default to 0 if neither is provided
-            }
-            
-            $grand_total += $total_amount;
-            $valid_dishes[] = [
-                'dish_id' => $dish_id,
-                'quantity' => $quantity,
-                'unit' => $unit,
-                'total_amount' => $total_amount
-            ];
-        }
-        
-        if (empty($valid_dishes)) {
-            $error = t('fill_all_required_fields');
+        // Check database connection
+        if (!$conn || $conn->connect_error) {
+            $error = 'Database connection failed. Please try again.';
+            error_log("Database connection error: " . ($conn ? $conn->connect_error : 'Connection is null'));
         } else {
-            // Create order records for each dish with the same order_number
-            $order_id = null;
-            foreach ($valid_dishes as $dish_info) {
-                // Prepare extra ingredients JSON (same for all dishes in the order)
-                // Include both extra ingredients and additional items
-                $combined_data = [];
-                if (!empty($extra_ingredients_data)) {
-                    $combined_data['extra_ingredients'] = $extra_ingredients_data;
-                }
-                if (!empty($additional_items_data)) {
-                    $combined_data['additional_items'] = $additional_items_data;
-                }
-                $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
+            $customer_id = intval($_POST['customer_id'] ?? 0);
+            $customer_name = trim($_POST['customer_name'] ?? '');
+            $customer_cell = trim($_POST['customer_cell'] ?? '');
+            $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
+            $shift = trim($_POST['shift'] ?? '');
+            $delivery_date = trim($_POST['delivery_date'] ?? '');
+            $delivery_time = trim($_POST['delivery_time'] ?? '');
+            $notes = trim($_POST['notes'] ?? '');
+            
+            // Translate notes to Urdu if current language is Urdu
+            $notes = translateForDatabase($notes);
+            
+            // Use current datetime for order_date
+            $order_datetime = date('Y-m-d H:i:s');
+            
+            // Get dishes array - can be single or multiple
+            $dishes_data = [];
+            if (isset($_POST['dishes']) && is_array($_POST['dishes'])) {
+                // Multiple dishes format
+                $dishes_data = $_POST['dishes'];
+            } else {
+                // Single dish format (backward compatibility)
+                $dish_id = intval($_POST['dish_id'] ?? 0);
+                $quantity = floatval($_POST['quantity'] ?? 0);
+                $unit_price = !empty($_POST['unit_price']) ? floatval($_POST['unit_price']) : null;
+                $total_amount_input = !empty($_POST['total_amount']) ? floatval($_POST['total_amount']) : null;
                 
-                if ($use_new_form) {
-                    // New form with all required fields - use NULL for customer_id since customer info is in separate fields
-                    // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
-                        customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
-                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                    if ($stmt) {
-                        // Skip customer_id in bind_param since we're using NULL directly in the query
-                        $stmt->bind_param("siisdsssssssiss", 
-                            $order_number, 
-                            $dish_info['dish_id'], 
-                            $dish_info['quantity'],
-                            $dish_info['unit'] ?? null,
-                            $dish_info['total_amount'], 
-                            $status,
-                            $customer_name,
-                            $customer_cell,
-                            $order_datetime,
-                            $delivery_date,
-                            $delivery_time,
-                            $shift,
-                            $number_of_persons,
-                            $notes,
-                            $extra_ingredients_json
-                        );
+                if ($dish_id > 0 && $quantity > 0) {
+                    $dishes_data[] = [
+                        'dish_id' => $dish_id,
+                        'quantity' => $quantity,
+                        'unit_price' => $unit_price,
+                        'total_amount' => $total_amount_input
+                    ];
+                }
+            }
+            
+            // Get extra ingredients array
+            $extra_ingredients_data = [];
+            if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
+                foreach ($_POST['extra_ingredients'] as $ingredient_data) {
+                    $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
+                    $quantity = floatval($ingredient_data['quantity'] ?? 0);
+                    $unit = trim($ingredient_data['unit'] ?? '');
+                    
+                    if ($ingredient_id > 0 && $quantity > 0) {
+                        $extra_ingredients_data[] = [
+                            'ingredient_id' => $ingredient_id,
+                            'quantity' => $quantity,
+                            'unit' => $unit
+                        ];
                     }
+                }
+            }
+            
+            // Get additional items
+            $additional_items_data = [];
+            if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
+                foreach ($_POST['additional_items'] as $item_key => $quantity) {
+                    $quantity = intval($quantity);
+                    if ($quantity > 0) {
+                        $additional_items_data[$item_key] = $quantity;
+                    }
+                }
+            }
+            
+            // Validation - check if using new form fields or old customer selection
+            $use_new_form = !empty($customer_name) || !empty($customer_cell);
+            
+            if ($use_new_form) {
+                // New form validation
+                if (empty($customer_cell) || 
+                    $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
+                    $error = 'Please fill all required fields in Step 1.';
+                } elseif (empty($dishes_data)) {
+                    $error = 'Please select at least one dish in Step 2.';
+                }
+            } else {
+                // Old form validation (backward compatibility)
+                if ($customer_id <= 0 || empty($dishes_data)) {
+                    $error = t('fill_all_required_fields');
+                }
+            }
+            
+            if (empty($error)) {
+                $status = 'pending';
+                $orders_created = 0;
+                $errors = [];
+                
+                // Generate a single order number for all dishes in this order
+                $order_number = 'ORD-' . date('Ymd') . '-' . str_pad(time() % 1000000, 6, '0', STR_PAD_LEFT);
+                
+                // Calculate grand total
+                $grand_total = 0;
+                $valid_dishes = [];
+                
+                foreach ($dishes_data as $dish_data) {
+                    $dish_id = intval($dish_data['dish_id'] ?? 0);
+                    $quantity = floatval($dish_data['quantity'] ?? 0);
+                    $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
+                    $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
+                    $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
+                    
+                    if ($dish_id <= 0 || $quantity <= 0) {
+                        continue; // Skip invalid dishes
+                    }
+                    
+                    // Calculate total_amount: use direct input if provided, otherwise calculate from unit_price
+                    if ($total_amount_input !== null && $total_amount_input >= 0) {
+                        $total_amount = $total_amount_input;
+                    } elseif ($unit_price !== null && $unit_price > 0) {
+                        $total_amount = $quantity * $unit_price;
+                    } else {
+                        $total_amount = 0; // Default to 0 if neither is provided
+                    }
+                    
+                    $grand_total += $total_amount;
+                    $valid_dishes[] = [
+                        'dish_id' => $dish_id,
+                        'quantity' => $quantity,
+                        'unit' => $unit,
+                        'total_amount' => $total_amount
+                    ];
+                }
+                
+                if (empty($valid_dishes)) {
+                    $error = t('fill_all_required_fields');
                 } else {
-                    // Old form (backward compatibility)
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                    if ($stmt) {
-                        $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'] ?? null, $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
-                    }
-                }
-                
-                if ($stmt) {
-                    try {
-                        if ($stmt->execute()) {
-                            if ($order_id === null) {
-                                $order_id = $conn->insert_id;
-                            }
-                            $orders_created++;
-                        } else {
-                            $errors[] = 'Failed to create order for dish ID ' . $dish_info['dish_id'] . ': ' . $stmt->error;
-                            error_log("Order creation error: " . $stmt->error);
-                            error_log("Order number: " . $order_number);
-                            error_log("Dish ID: " . $dish_info['dish_id']);
+                    // Create order records for each dish with the same order_number
+                    $order_id = null;
+                    foreach ($valid_dishes as $dish_info) {
+                        // Prepare extra ingredients JSON (same for all dishes in the order)
+                        // Include both extra ingredients and additional items
+                        $combined_data = [];
+                        if (!empty($extra_ingredients_data)) {
+                            $combined_data['extra_ingredients'] = $extra_ingredients_data;
                         }
-                    } catch (Exception $e) {
-                        $errors[] = 'Exception creating order for dish ID ' . $dish_info['dish_id'] . ': ' . $e->getMessage();
-                        error_log("Order creation exception: " . $e->getMessage());
+                        if (!empty($additional_items_data)) {
+                            $combined_data['additional_items'] = $additional_items_data;
+                        }
+                        $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
+                        
+                        if ($use_new_form) {
+                            // New form with all required fields - use NULL for customer_id since customer info is in separate fields
+                            // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
+                            $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
+                                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
+                                VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                            if ($stmt) {
+                                // Skip customer_id in bind_param since we're using NULL directly in the query
+                                $stmt->bind_param("siisdsssssssiss", 
+                                    $order_number, 
+                                    $dish_info['dish_id'], 
+                                    $dish_info['quantity'],
+                                    $dish_info['unit'] ?? null,
+                                    $dish_info['total_amount'], 
+                                    $status,
+                                    $customer_name,
+                                    $customer_cell,
+                                    $order_datetime,
+                                    $delivery_date,
+                                    $delivery_time,
+                                    $shift,
+                                    $number_of_persons,
+                                    $notes,
+                                    $extra_ingredients_json
+                                );
+                            }
+                        } else {
+                            // Old form (backward compatibility)
+                            $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                            if ($stmt) {
+                                $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'] ?? null, $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
+                            }
+                        }
+                        
+                        if ($stmt) {
+                            try {
+                                if ($stmt->execute()) {
+                                    if ($order_id === null) {
+                                        $order_id = $conn->insert_id;
+                                    }
+                                    $orders_created++;
+                                } else {
+                                    $errors[] = 'Failed to create order for dish ID ' . $dish_info['dish_id'] . ': ' . $stmt->error;
+                                    error_log("Order creation error: " . $stmt->error);
+                                    error_log("Order number: " . $order_number);
+                                    error_log("Dish ID: " . $dish_info['dish_id']);
+                                }
+                            } catch (Exception $e) {
+                                $errors[] = 'Exception creating order for dish ID ' . $dish_info['dish_id'] . ': ' . $e->getMessage();
+                                error_log("Order creation exception: " . $e->getMessage());
+                            }
+                            $stmt->close();
+                        } else {
+                            $errors[] = 'Failed to prepare insert query for dish ID ' . $dish_info['dish_id'] . ': ' . ($conn->error ?? 'Unknown error');
+                            error_log("Prepare error: " . ($conn->error ?? 'Unknown error'));
+                        }
+                    }
+                    
+                    if ($orders_created > 0) {
+                        $dish_count = count($valid_dishes);
+                        $success = $dish_count > 1 ? "Order #{$order_number} created successfully with {$dish_count} dishes!" : 'Order created successfully!';
+                        header('Location: orders.php?success=1&created=1&order_number=' . urlencode($order_number));
+                        exit();
+                    } else {
+                        $error = !empty($errors) ? implode(', ', $errors) : t('failed_to_create') . ' ' . t('orders_title');
+                    }
+                } // End of empty($valid_dishes) else block
+            } // End of empty($error) check
+        } // End of database connection else block
+    } // End of isAdmin else block
+}
+
+// Handle order status update - update all items in the same order (Admin only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
+    // Only admins can update order status
+    if (!isAdmin()) {
+        $error = 'You do not have permission to update order status.';
+    } else {
+        $order_id = intval($_POST['order_id'] ?? 0);
+        $order_number = trim($_POST['order_number'] ?? '');
+        $status = trim($_POST['status'] ?? '');
+        
+        $valid_statuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
+        
+        if (in_array($status, $valid_statuses)) {
+            // Update all orders with the same order_number
+            if (!empty($order_number)) {
+                $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE order_number = ?");
+                if ($stmt) {
+                    $stmt->bind_param("ss", $status, $order_number);
+                    if ($stmt->execute()) {
+                        $success = 'Order status updated successfully!';
+                        header('Location: orders.php?success=1');
+                        exit();
+                    } else {
+                        $error = 'Failed to update order status: ' . $stmt->error;
                     }
                     $stmt->close();
-                } else {
-                    $errors[] = 'Failed to prepare insert query for dish ID ' . $dish_info['dish_id'] . ': ' . ($conn->error ?? 'Unknown error');
-                    error_log("Prepare error: " . ($conn->error ?? 'Unknown error'));
                 }
-            }
-            
-            if ($orders_created > 0) {
-                $dish_count = count($valid_dishes);
-                $success = $dish_count > 1 ? "Order #{$order_number} created successfully with {$dish_count} dishes!" : 'Order created successfully!';
-                header('Location: orders.php?success=1&created=1&order_number=' . urlencode($order_number));
-                exit();
+            } elseif ($order_id > 0) {
+                // Fallback: update by order_id if order_number not provided
+                $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE id = ?");
+                if ($stmt) {
+                    $stmt->bind_param("si", $status, $order_id);
+                    if ($stmt->execute()) {
+                        $success = 'Order status updated successfully!';
+                        header('Location: orders.php?success=1');
+                        exit();
+                    } else {
+                        $error = 'Failed to update order status: ' . $stmt->error;
+                    }
+                    $stmt->close();
+                }
             } else {
-                $error = !empty($errors) ? implode(', ', $errors) : t('failed_to_create') . ' ' . t('orders_title');
+                $error = 'Invalid order or status.';
             }
-        }
-    }
-    } // End of database connection check
+        } // End of in_array check
+    } // End of isAdmin else block
 }
 
-// Handle order status update - update all items in the same order
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
-    $order_id = intval($_POST['order_id'] ?? 0);
-    $order_number = trim($_POST['order_number'] ?? '');
-    $status = trim($_POST['status'] ?? '');
-    
-    $valid_statuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
-    
-    if (in_array($status, $valid_statuses)) {
-        // Update all orders with the same order_number
-        if (!empty($order_number)) {
-            $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE order_number = ?");
-            if ($stmt) {
-                $stmt->bind_param("ss", $status, $order_number);
-                if ($stmt->execute()) {
-                    $success = 'Order status updated successfully!';
-                    header('Location: orders.php?success=1');
-                    exit();
-                } else {
-                    $error = 'Failed to update order status: ' . $stmt->error;
-                }
-                $stmt->close();
-            }
-        } elseif ($order_id > 0) {
-            // Fallback: update by order_id if order_number not provided
-            $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE id = ?");
-            if ($stmt) {
-                $stmt->bind_param("si", $status, $order_id);
-                if ($stmt->execute()) {
-                    $success = 'Order status updated successfully!';
-                    header('Location: orders.php?success=1');
-                    exit();
-                } else {
-                    $error = 'Failed to update order status: ' . $stmt->error;
-                }
-                $stmt->close();
-            }
-        }
-    } else {
-        $error = 'Invalid order or status.';
-    }
-}
-
-// Handle delete order - delete all items in the same order
+// Handle delete order - delete all items in the same order (Admin only)
 if (isset($_GET['delete'])) {
-    $id = intval($_GET['delete']);
-    // Get order_number first
-    $stmt = $conn->prepare("SELECT order_number FROM orders WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result && $row = $result->fetch_assoc()) {
-            $order_number = $row['order_number'];
-            $stmt->close();
-            
-            // Delete all orders with the same order_number
-            $stmt = $conn->prepare("DELETE FROM orders WHERE order_number = ?");
-            if ($stmt) {
-                $stmt->bind_param("s", $order_number);
-                if ($stmt->execute()) {
-                    $success = 'Order deleted successfully!';
-                    header('Location: orders.php?success=1&deleted=1');
-                    exit();
-                } else {
-                    $error = 'Failed to delete order: ' . $stmt->error;
-                }
+    // Only admins can delete orders
+    if (!isAdmin()) {
+        $error = 'You do not have permission to delete orders.';
+    } else {
+        $id = intval($_GET['delete']);
+        // Get order_number first
+        $stmt = $conn->prepare("SELECT order_number FROM orders WHERE id = ?");
+        if ($stmt) {
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result && $row = $result->fetch_assoc()) {
+                $order_number = $row['order_number'];
                 $stmt->close();
+                
+                // Delete all orders with the same order_number
+                $stmt = $conn->prepare("DELETE FROM orders WHERE order_number = ?");
+                if ($stmt) {
+                    $stmt->bind_param("s", $order_number);
+                    if ($stmt->execute()) {
+                        $success = 'Order deleted successfully!';
+                        header('Location: orders.php?success=1&deleted=1');
+                        exit();
+                    } else {
+                        $error = 'Failed to delete order: ' . $stmt->error;
+                    }
+                    $stmt->close();
+                }
+            } else {
+                $stmt->close();
+                $error = 'Order not found.';
             }
-        } else {
-            $stmt->close();
-            $error = 'Order not found.';
         }
     }
 }
@@ -1162,7 +1178,8 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     </div>
 <?php endif; ?>
 
-<!-- Create Order Section - 3-Step Wizard -->
+<!-- Create Order Section - 3-Step Wizard (Admin only) -->
+<?php if (isAdmin()): ?>
 <div class="row mb-4">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1796,6 +1813,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
         </div>
     </div>
 </div>
+<?php endif; // End admin check for create order section ?>
 
 <!-- All Orders Section -->
 <div class="row">
@@ -1942,6 +1960,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             </div>
                                         <?php endif; ?>
                                         
+                                        <?php if (isAdmin()): ?>
                                         <div class="mb-0">
                                             <form method="POST" action="">
                                                 <input type="hidden" name="order_id" value="<?php echo $grouped_order['id']; ?>">
@@ -1957,6 +1976,13 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                                 <input type="hidden" name="update_status" value="1">
                                             </form>
                                         </div>
+                                        <?php else: ?>
+                                        <div class="mb-0">
+                                            <small class="text-muted d-block text-center" style="font-size: 0.7rem; padding: 0.25rem 0;">
+                                                <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?>"><?php echo ucfirst($grouped_order['status']); ?></span>
+                                            </small>
+                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="card-footer bg-white">
                                         <div class="d-flex gap-1 flex-wrap">
@@ -1978,12 +2004,14 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                                     style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-printer-fill"></i>
                                             </button>
+                                            <?php if (isAdmin()): ?>
                                             <a href="?delete=<?php echo $grouped_order['id']; ?>" class="btn btn-sm btn-danger" 
                                                title="<?php e('delete'); ?>" 
                                                onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');"
                                                style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-trash"></i>
                                             </a>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>

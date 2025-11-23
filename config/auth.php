@@ -26,6 +26,14 @@ function isAdmin() {
 }
 
 /**
+ * Check if user is regular user (not admin)
+ * @return bool True if user is regular user, false otherwise
+ */
+function isUser() {
+    return isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'user';
+}
+
+/**
  * Require user to be logged in
  * Redirects to login page if not logged in
  */
