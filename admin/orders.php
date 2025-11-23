@@ -107,12 +107,10 @@ try {
     error_log("Schema modification error: " . $e->getMessage());
 }
 
-// Handle create order (Admin only)
+// Handle create order (All users can create orders)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
-    // Only admins can create orders
-    if (!isAdmin()) {
-        $error = 'You do not have permission to create orders.';
-    } else {
+    // All logged-in users can create orders
+    {
         // Set execution time limit for order creation
         @set_time_limit(60);
         
@@ -332,15 +330,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                 } // End of empty($valid_dishes) else block
             } // End of empty($error) check
         } // End of database connection else block
-    } // End of isAdmin else block
+    } // End of order creation block
 }
 
-// Handle order status update - update all items in the same order (Admin only)
+// Handle order status update - update all items in the same order (All users can update)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
-    // Only admins can update order status
-    if (!isAdmin()) {
-        $error = 'You do not have permission to update order status.';
-    } else {
+    // All logged-in users can update order status
+    {
         $order_id = intval($_POST['order_id'] ?? 0);
         $order_number = trim($_POST['order_number'] ?? '');
         $status = trim($_POST['status'] ?? '');
@@ -380,15 +376,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
                 $error = 'Invalid order or status.';
             }
         } // End of in_array check
-    } // End of isAdmin else block
+    } // End of status update block
 }
 
-// Handle delete order - delete all items in the same order (Admin only)
+// Handle delete order - delete all items in the same order (All users can delete)
 if (isset($_GET['delete'])) {
-    // Only admins can delete orders
-    if (!isAdmin()) {
-        $error = 'You do not have permission to delete orders.';
-    } else {
+    // All logged-in users can delete orders
+    {
         $id = intval($_GET['delete']);
         // Get order_number first
         $stmt = $conn->prepare("SELECT order_number FROM orders WHERE id = ?");
@@ -418,7 +412,7 @@ if (isset($_GET['delete'])) {
                 $error = 'Order not found.';
             }
         }
-    }
+    } // End of delete order block
 }
 
 // Handle success message from redirect
@@ -1178,8 +1172,8 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
     </div>
 <?php endif; ?>
 
-<!-- Create Order Section - 3-Step Wizard (Admin only) -->
-<?php if (isAdmin()): ?>
+<!-- Create Order Section - 3-Step Wizard (All users can create orders) -->
+<?php if (isLoggedIn()): ?>
 <div class="row mb-4">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1813,7 +1807,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
         </div>
     </div>
 </div>
-<?php endif; // End admin check for create order section ?>
+<?php endif; // End logged-in user check for create order section ?>
 
 <!-- All Orders Section -->
 <div class="row">
@@ -1960,7 +1954,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             </div>
                                         <?php endif; ?>
                                         
-                                        <?php if (isAdmin()): ?>
                                         <div class="mb-0">
                                             <form method="POST" action="">
                                                 <input type="hidden" name="order_id" value="<?php echo $grouped_order['id']; ?>">
@@ -1976,13 +1969,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                                 <input type="hidden" name="update_status" value="1">
                                             </form>
                                         </div>
-                                        <?php else: ?>
-                                        <div class="mb-0">
-                                            <small class="text-muted d-block text-center" style="font-size: 0.7rem; padding: 0.25rem 0;">
-                                                <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?>"><?php echo ucfirst($grouped_order['status']); ?></span>
-                                            </small>
-                                        </div>
-                                        <?php endif; ?>
                                     </div>
                                     <div class="card-footer bg-white">
                                         <div class="d-flex gap-1 flex-wrap">
@@ -2004,14 +1990,12 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                                     style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-printer-fill"></i>
                                             </button>
-                                            <?php if (isAdmin()): ?>
                                             <a href="?delete=<?php echo $grouped_order['id']; ?>" class="btn btn-sm btn-danger" 
                                                title="<?php e('delete'); ?>" 
                                                onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');"
                                                style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-trash"></i>
                                             </a>
-                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
