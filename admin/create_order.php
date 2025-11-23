@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     }
     
     // Validation
-    if (empty($customer_name) || empty($customer_cell) || empty($order_date) || empty($order_time) || 
+    if (empty($customer_cell) || empty($order_date) || empty($order_time) || 
         $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
         $error = 'Please fill all required fields in Step 1.';
     } elseif (empty($dishes_data)) {
@@ -495,9 +495,9 @@ include __DIR__ . '/../includes/header.php';
                             <small class="text-muted">Select a customer to auto-fill their information, or enter manually below.</small>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Customer Name <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">Customer Name</label>
                             <div class="position-relative">
-                                <input type="text" class="form-control" name="customer_name" id="customer_name" required 
+                                <input type="text" class="form-control" name="customer_name" id="customer_name" 
                                        value="<?php echo htmlspecialchars($_POST['customer_name'] ?? ''); ?>"
                                        autocomplete="off" oninput="filterCustomers(this.value)" 
                                        onfocus="showCustomerDropdown()" onblur="hideCustomerDropdown()">

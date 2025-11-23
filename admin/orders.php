@@ -187,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     
     if ($use_new_form) {
         // New form validation
-        if (empty($customer_name) || empty($customer_cell) || 
+        if (empty($customer_cell) || 
             $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
             $error = 'Please fill all required fields in Step 1.';
         } elseif (empty($dishes_data)) {
@@ -1219,11 +1219,11 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             <div class="col-md-6">
                                 <label for="customer_name" class="form-label fw-semibold">
                                     <i class="bi bi-person me-1 text-primary"></i>
-                                    گاہک کا نام <span class="text-danger">*</span>
+                                    گاہک کا نام
                                 </label>
                                 <input type="text" class="form-control form-control-lg" id="customer_name" name="customer_name" 
                                        list="customer_names_list" autocomplete="off"
-                                       value="<?php echo htmlspecialchars($_POST['customer_name'] ?? ''); ?>" required>
+                                       value="<?php echo htmlspecialchars($_POST['customer_name'] ?? ''); ?>">
                                 <datalist id="customer_names_list">
                                     <?php foreach ($all_customer_names as $cust_info): ?>
                                         <option value="<?php echo htmlspecialchars($cust_info['name']); ?>" 
@@ -1512,6 +1512,14 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                     </label>
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[sponjis_iron]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        صوبی(لوہے والی )
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[sobi_iron]" 
                                            placeholder="0" step="1" min="0" value="0">
                                 </div>
                             </div>
@@ -2097,11 +2105,6 @@ function validateCurrentStep() {
         const deliveryDate = document.getElementById('delivery_date');
         const deliveryTime = document.getElementById('delivery_time');
         
-        if (customerName && !customerName.value.trim()) {
-            alert('Please enter customer name');
-            customerName.focus();
-            return false;
-        }
         if (customerCell && !customerCell.value.trim()) {
             alert('Please enter customer cell number');
             customerCell.focus();
@@ -2298,7 +2301,8 @@ function updateReview() {
         cloth_malmal: '<?php echo addslashes(t("cloth_malmal")); ?>',
         match_box: '<?php echo addslashes(t("match_box")); ?>',
         surrf: '<?php echo addslashes(t("surrf")); ?>',
-        sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>'
+        sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
+        sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>'
     };
     
     if (extraIngredientRows.length > 0 && ingredientsData.length > 0) {
@@ -2358,7 +2362,8 @@ function updateReview() {
                     'cloth_malmal': reviewTranslations.cloth_malmal || 'کپڑا ململ',
                     'match_box': reviewTranslations.match_box || 'میچ باکس',
                     'surrf': reviewTranslations.surrf || 'سرف',
-                    'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)'
+                    'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)',
+                    'sobi_iron': reviewTranslations.sobi_iron || 'صوبی(لوہے والی )'
                 };
                 displayName = nameMap[key] || key;
             }
@@ -2504,6 +2509,7 @@ document.addEventListener('DOMContentLoaded', function() {
         match_box: '<?php echo addslashes(t("match_box")); ?>',
         surrf: '<?php echo addslashes(t("surrf")); ?>',
         sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
+        sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>',
         unit_placeholder: '<?php echo addslashes(t("unit_placeholder", "kg, g, pieces, etc.")); ?>'
     };
     
@@ -2908,6 +2914,7 @@ try {
         'match_box' => $urduTranslations['match_box'] ?? 'میچ باکس',
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
         'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
+        'sobi_iron' => $urduTranslations['sobi_iron'] ?? 'صوبی(لوہے والی )',
         'pieces' => $urduTranslations['pieces'] ?? 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     
@@ -2946,6 +2953,7 @@ try {
         'match_box' => 'میچ باکس',
         'surrf' => 'سرف',
         'sponjis_iron' => 'اسپنجز (آئرن)',
+        'sobi_iron' => 'صوبی(لوہے والی )',
         'pieces' => 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 }
@@ -3189,7 +3197,8 @@ function printIngredients(orderNumberOrId) {
                     'cloth_malmal': translations.cloth_malmal || 'کپڑا ململ',
                     'match_box': translations.match_box || 'میچ باکس',
                     'surrf': translations.surrf || 'سرف',
-                    'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)'
+                    'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)',
+                    'sobi_iron': translations.sobi_iron || 'صوبی(لوہے والی )'
                 };
                 
                 // Create a special category for additional items
@@ -3365,7 +3374,10 @@ function printIngredients(orderNumberOrId) {
                                 'liter': 'لیٹر',
                                 'liters': 'لیٹر',
                                 'litre': 'لیٹر',
-                                'litres': 'لیٹر'
+                                'litres': 'لیٹر',
+                                'گچھی': 'گچھی',
+                                'guchhi': 'گچھی',
+                                'bunch': 'گچھی'
                             };
                             return unitTranslations[unitLower] || unit;
                         }
@@ -3527,11 +3539,22 @@ function printIngredients(orderNumberOrId) {
                         page-break-after: avoid !important;
                         page-break-inside: avoid !important;
                         margin: 5px 0 !important;
+                        table-layout: fixed !important;
                     }
                     .order-details-table td {
+                        width: 20% !important;
+                        height: 35px !important;
                         padding: 6px 4px !important;
                         font-size: 10px !important;
-                        min-height: 20px !important;
+                        vertical-align: middle !important;
+                        overflow: hidden !important;
+                        word-wrap: break-word !important;
+                    }
+                    .table-note {
+                        text-align: center !important;
+                        margin: 8px 0 !important;
+                        font-size: 15px !important;
+                        font-weight: bold !important;
                     }
                     .ingredients-section {
                         page-break-inside: avoid !important;
@@ -3620,16 +3643,21 @@ function printIngredients(orderNumberOrId) {
                     margin: 8px 0;
                     border: 1px solid #ddd;
                     background-color: #fff;
+                    table-layout: fixed;
                 }
                 .order-details-table td {
+                    width: 20%;
+                    height: 35px;
                     padding: 8px 6px;
                     border-left: 1px solid #ddd;
                     border-right: 1px solid #ddd;
                     text-align: center;
                     border-bottom: 1px dotted #999;
-                    min-height: 25px;
                     background-color: #fff;
                     font-size: 11px;
+                    vertical-align: middle;
+                    overflow: hidden;
+                    word-wrap: break-word;
                 }
                 .order-details-table tbody tr:first-child td {
                     background-color: #e9ecef;
@@ -3696,6 +3724,17 @@ function printIngredients(orderNumberOrId) {
                     font-weight: 600;
                 }
                 
+<<<<<<< Updated upstream
+=======
+<<<<<<< HEAD
+                .table-note {
+                    text-align: center;
+                    margin: 10px 0;
+                    font-size: 16px;
+                    color: #1e293b;
+                    font-weight: bold;
+=======
+>>>>>>> Stashed changes
                 .notes-section {
                     margin: 15px 0;
                     padding: 15px;
@@ -3721,6 +3760,10 @@ function printIngredients(orderNumberOrId) {
                     color: #047857;
                     line-height: 1.8;
                     font-weight: 500;
+<<<<<<< Updated upstream
+=======
+>>>>>>> d795fa10433a1b3570864b06881183052d8434b8
+>>>>>>> Stashed changes
                 }
                 
                 .print-btn { 
@@ -3793,6 +3836,11 @@ function printIngredients(orderNumberOrId) {
                     })()}
                 </tbody>
             </table>
+            
+            <!-- Table Note -->
+            <div class="table-note">
+                (نوٹ :مرغی وزن سوا تا ڈیڑھ کلو)
+            </div>
             
             <!-- Ingredients List Section -->
             <div class="ingredients-section">

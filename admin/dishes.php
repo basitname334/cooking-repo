@@ -1656,6 +1656,26 @@ window.addIngredientRow = function() {
                             Unit <span class="text-danger">*</span>
                         </label>
                         <select class="form-select" name="units[]" required>
+<<<<<<< Updated upstream
+=======
+<<<<<<< HEAD
+                            <option value="">Select Unit</option>
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                            <option value="mg">mg</option>
+                            <option value="liter">L</option>
+                            <option value="ml">mL</option>
+                            <option value="cup">cup</option>
+                            <option value="tbsp">tbsp</option>
+                            <option value="tsp">tsp</option>
+                            <option value="piece">piece</option>
+                            <option value="pieces">pieces</option>
+                            <option value="oz">oz</option>
+                            <option value="lb">lb</option>
+                            <option value="oz_fluid">fl oz</option>
+                            <option value="گچھی">گچھی</option>
+=======
+>>>>>>> Stashed changes
                             <option value="">اکائی منتخب کریں</option>
                             <option value="kg">کلو (kg)</option>
                             <option value="g">گرام (g)</option>
@@ -1671,6 +1691,10 @@ window.addIngredientRow = function() {
                             <option value="oz">اونس (oz)</option>
                             <option value="lb">پاؤنڈ (lb)</option>
                             <option value="oz_fluid">مائع اونس (fl oz)</option>
+<<<<<<< Updated upstream
+=======
+>>>>>>> d795fa10433a1b3570864b06881183052d8434b8
+>>>>>>> Stashed changes
                         </select>
                     </div>
                     <div class="col-lg-2 col-md-4 col-sm-6">
@@ -1897,6 +1921,25 @@ window.populateEditForm = function() {
                 
                 let unitOptions = '<option value="">اکائی منتخب کریں</option>';
                 const unitList = [
+<<<<<<< Updated upstream
+=======
+<<<<<<< HEAD
+                    {value: 'kg', label: 'kg'},
+                    {value: 'g', label: 'g'},
+                    {value: 'mg', label: 'mg'},
+                    {value: 'liter', label: 'L'},
+                    {value: 'ml', label: 'mL'},
+                    {value: 'cup', label: 'cup'},
+                    {value: 'tbsp', label: 'tbsp'},
+                    {value: 'tsp', label: 'tsp'},
+                    {value: 'piece', label: 'piece'},
+                    {value: 'pieces', label: 'pieces'},
+                    {value: 'oz', label: 'oz'},
+                    {value: 'lb', label: 'lb'},
+                    {value: 'oz_fluid', label: 'fl oz'},
+                    {value: 'گچھی', label: 'گچھی'}
+=======
+>>>>>>> Stashed changes
                     {value: 'kg', label: 'کلو (kg)'},
                     {value: 'g', label: 'گرام (g)'},
                     {value: 'mg', label: 'ملی گرام (mg)'},
@@ -1911,6 +1954,10 @@ window.populateEditForm = function() {
                     {value: 'oz', label: 'اونس (oz)'},
                     {value: 'lb', label: 'پاؤنڈ (lb)'},
                     {value: 'oz_fluid', label: 'مائع اونس (fl oz)'}
+<<<<<<< Updated upstream
+=======
+>>>>>>> d795fa10433a1b3570864b06881183052d8434b8
+>>>>>>> Stashed changes
                 ];
                 
                 unitList.forEach(unit => {
