@@ -539,18 +539,9 @@ include __DIR__ . '/../includes/header.php';
                                     <i class="bi bi-rulers me-1 text-primary"></i>
                                     Unit
                                 </label>
-                                <select class="form-select" id="base_unit" name="base_unit" required>
-                                    <option value="kg" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'kg') ? 'selected' : (!isset($edit_dish) ? 'selected' : ''); ?>>کلو (kg)</option>
-                                    <option value="g" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'g') ? 'selected' : ''; ?>>گرام (g)</option>
-                                    <option value="piece" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'piece') ? 'selected' : ''; ?>>عدد (piece)</option>
-                                    <option value="pieces" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'pieces') ? 'selected' : ''; ?>>عدد (pieces)</option>
-                                    <option value="liter" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'liter') ? 'selected' : ''; ?>>لیٹر (liter)</option>
-                                    <option value="l" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'l') ? 'selected' : ''; ?>>لیٹر (l)</option>
-                                    <option value="ml" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'ml') ? 'selected' : ''; ?>>ملی لیٹر (ml)</option>
-                                    <option value="cup" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'cup') ? 'selected' : ''; ?>>کپ (cup)</option>
-                                    <option value="tbsp" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'tbsp') ? 'selected' : ''; ?>>چمچ (tbsp)</option>
-                                    <option value="tsp" <?php echo (isset($edit_dish['base_unit']) && $edit_dish['base_unit'] == 'tsp') ? 'selected' : ''; ?>>چائے کا چمچ (tsp)</option>
-                                </select>
+                                <input type="hidden" id="base_unit" name="base_unit" value="kg">
+                                <input type="text" class="form-control" value="kg" disabled style="background-color: #e9ecef;">
+                                <small class="form-text text-muted">Unit is fixed as kg</small>
                             </div>
                             
                             <!-- Ingredients Section -->
@@ -1656,9 +1647,6 @@ window.addIngredientRow = function() {
                             Unit <span class="text-danger">*</span>
                         </label>
                         <select class="form-select" name="units[]" required>
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                             <option value="">Select Unit</option>
                             <option value="kg">kg</option>
                             <option value="g">g</option>
@@ -1674,27 +1662,6 @@ window.addIngredientRow = function() {
                             <option value="lb">lb</option>
                             <option value="oz_fluid">fl oz</option>
                             <option value="گچھی">گچھی</option>
-=======
->>>>>>> Stashed changes
-                            <option value="">اکائی منتخب کریں</option>
-                            <option value="kg">کلو (kg)</option>
-                            <option value="g">گرام (g)</option>
-                            <option value="mg">ملی گرام (mg)</option>
-                            <option value="liter">لیٹر (liter)</option>
-                            <option value="l">لیٹر (l)</option>
-                            <option value="ml">ملی لیٹر (ml)</option>
-                            <option value="cup">کپ (cup)</option>
-                            <option value="tbsp">چمچ (tbsp)</option>
-                            <option value="tsp">چائے کا چمچ (tsp)</option>
-                            <option value="piece">عدد (piece)</option>
-                            <option value="pieces">عدد (pieces)</option>
-                            <option value="oz">اونس (oz)</option>
-                            <option value="lb">پاؤنڈ (lb)</option>
-                            <option value="oz_fluid">مائع اونس (fl oz)</option>
-<<<<<<< Updated upstream
-=======
->>>>>>> d795fa10433a1b3570864b06881183052d8434b8
->>>>>>> Stashed changes
                         </select>
                     </div>
                     <div class="col-lg-2 col-md-4 col-sm-6">
@@ -1919,11 +1886,8 @@ window.populateEditForm = function() {
                     ingredientOptions += `<option value="${ingredientId}" data-search="ingredient #${ingredientId}" selected>Ingredient #${ingredientId}</option>`;
                 }
                 
-                let unitOptions = '<option value="">اکائی منتخب کریں</option>';
+                let unitOptions = '<option value="">Unit</option>';
                 const unitList = [
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                     {value: 'kg', label: 'kg'},
                     {value: 'g', label: 'g'},
                     {value: 'mg', label: 'mg'},
@@ -1938,26 +1902,6 @@ window.populateEditForm = function() {
                     {value: 'lb', label: 'lb'},
                     {value: 'oz_fluid', label: 'fl oz'},
                     {value: 'گچھی', label: 'گچھی'}
-=======
->>>>>>> Stashed changes
-                    {value: 'kg', label: 'کلو (kg)'},
-                    {value: 'g', label: 'گرام (g)'},
-                    {value: 'mg', label: 'ملی گرام (mg)'},
-                    {value: 'liter', label: 'لیٹر (liter)'},
-                    {value: 'l', label: 'لیٹر (l)'},
-                    {value: 'ml', label: 'ملی لیٹر (ml)'},
-                    {value: 'cup', label: 'کپ (cup)'},
-                    {value: 'tbsp', label: 'چمچ (tbsp)'},
-                    {value: 'tsp', label: 'چائے کا چمچ (tsp)'},
-                    {value: 'piece', label: 'عدد (piece)'},
-                    {value: 'pieces', label: 'عدد (pieces)'},
-                    {value: 'oz', label: 'اونس (oz)'},
-                    {value: 'lb', label: 'پاؤنڈ (lb)'},
-                    {value: 'oz_fluid', label: 'مائع اونس (fl oz)'}
-<<<<<<< Updated upstream
-=======
->>>>>>> d795fa10433a1b3570864b06881183052d8434b8
->>>>>>> Stashed changes
                 ];
                 
                 unitList.forEach(unit => {

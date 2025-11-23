@@ -56,12 +56,6 @@ try {
         @$conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
     }
     
-    // Check if unit column exists in orders table, if not add it
-    $check_unit = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'unit'");
-    if ($check_unit && $check_unit->num_rows == 0) {
-        @$conn->query("ALTER TABLE `orders` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`");
-    }
-    
     // Make customer_id nullable to support orders without registered customers
     $check_customer_id = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
     if ($check_customer_id && $check_customer_id->num_rows > 0) {
@@ -215,7 +209,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         foreach ($dishes_data as $dish_data) {
             $dish_id = intval($dish_data['dish_id'] ?? 0);
             $quantity = floatval($dish_data['quantity'] ?? 0);
-            $unit = trim($dish_data['unit'] ?? 'deg'); // Default to 'deg' if not provided
             $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
             $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
             
@@ -236,7 +229,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             $valid_dishes[] = [
                 'dish_id' => $dish_id,
                 'quantity' => $quantity,
-                'unit' => $unit,
                 'total_amount' => $total_amount
             ];
         }
@@ -261,16 +253,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                 if ($use_new_form) {
                     // New form with all required fields - use NULL for customer_id since customer info is in separate fields
                     // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
                         customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
-                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     if ($stmt) {
                         // Skip customer_id in bind_param since we're using NULL directly in the query
-                        $stmt->bind_param("siisdsssssssiss", 
+                        $stmt->bind_param("siidsssssssiss", 
                             $order_number, 
                             $dish_info['dish_id'], 
-                            $dish_info['quantity'],
-                            $dish_info['unit'],
+                            $dish_info['quantity'], 
                             $dish_info['total_amount'], 
                             $status,
                             $customer_name,
@@ -286,9 +277,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                     }
                 } else {
                     // Old form (backward compatibility)
-                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
                     if ($stmt) {
-                        $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
+                        $stmt->bind_param("siiddsss", $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json);
                     }
                 }
                 
@@ -529,7 +520,7 @@ $orders = [];
 // Also explicitly select o.customer_name and o.customer_cell to ensure they're available
 // Show all orders - removed WHERE clause to ensure all orders are displayed
 // Simplified query to ensure it works
-$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount, 
+$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.total_amount, 
     o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
     o.delivery_time, o.shift, o.number_of_persons,
     o.customer_name as order_customer_name,
@@ -537,8 +528,7 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.u
     u.name as user_customer_name,
     u.email as user_customer_email,
     COALESCE(u.name, o.customer_name) as customer_name, 
-    COALESCE(u.email, o.customer_cell) as customer_email,
-    o.customer_cell as customer_phone,
+    COALESCE(u.email, o.customer_cell) as customer_email, 
     d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
     cat.name as dish_category_name
     FROM orders o
@@ -699,8 +689,6 @@ if ($result && $result->num_rows > 0) {
             $customer_email = !empty($order['user_customer_email']) ? $order['user_customer_email'] : 
                              (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] : 
                              (!empty($order['customer_email']) ? $order['customer_email'] : ''));
-            // Use customer_cell from orders table as phone number
-            $customer_phone = $order['customer_cell'] ?? $order['order_customer_cell'] ?? '';
             
             $grouped_orders[$order_num] = [
                 'order_number' => $order_num,
@@ -708,7 +696,6 @@ if ($result && $result->num_rows > 0) {
                 'customer_name' => $customer_name,
                 'customer_email' => $customer_email,
                 'customer_cell' => $order['customer_cell'] ?? '',
-                'customer_phone' => $customer_phone,
                 'order_date' => !empty($order['order_date']) ? $order['order_date'] : date('Y-m-d H:i:s'),
                 'delivery_date' => $order['delivery_date'] ?? '',
                 'delivery_time' => $order['delivery_time'] ?? '',
@@ -1379,17 +1366,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small">
-                                                <?php e('unit_label'); ?> <span class="text-danger">*</span>
-                                            </label>
-                                            <select class="form-select dish-unit" name="dishes[0][unit]" required>
-                                                <option value="deg" selected>دیگ (deg)</option>
-                                                <option value="kg">کلو (kg)</option>
-                                                <option value="piece">عدد (piece)</option>
-                                                <option value="liter">لیٹر (liter)</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label fw-semibold small">
                                                 <?php e('unit_price'); ?> (Rs)
                                             </label>
                                             <input type="number" class="form-control dish-unit-price" name="dishes[0][unit_price]" 
@@ -1402,10 +1378,10 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             <input type="number" class="form-control dish-total-amount" name="dishes[0][total_amount]" 
                                                    placeholder="0.00" step="0.01" min="0">
                                         </div>
-                                        <div class="col-md-1">
+                                        <div class="col-md-2">
                                             <label class="form-label fw-semibold small d-block">&nbsp;</label>
                                             <button type="button" class="btn btn-sm btn-danger remove-dish-btn" style="display: none;">
-                                                <i class="bi bi-trash"></i>
+                                                <i class="bi bi-trash"></i> Remove
                                             </button>
                                         </div>
                                     </div>
@@ -1520,6 +1496,102 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                     </label>
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[sobi_iron]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        سٹیم پتیلہ جال ڈھکن
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[steam_pot_with_lid]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        دیگ
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[deg]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        کڑاہی
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[karahi]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        چولہے
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[chulhe]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        پرات
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[parat]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        ٹب
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[tub]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        شامیانہ
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[shamiana]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        قنات
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[qanat]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        دری
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[dari]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        چارپائی
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[charpai]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        کوئلہ
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[coal]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">
+                                        سٹیم پتیلہ بغیر ڈھکن
+                                    </label>
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[steam_pot_without_lid]" 
                                            placeholder="0" step="1" min="0" value="0">
                                 </div>
                             </div>
@@ -2258,7 +2330,6 @@ function updateReview() {
         dishRows.forEach(function(row) {
             const dishSelect = row.querySelector('.dish-select');
             const quantityInput = row.querySelector('.dish-quantity');
-            const unitSelect = row.querySelector('.dish-unit');
             const unitPriceInput = row.querySelector('.dish-unit-price');
             const totalAmountInput = row.querySelector('.dish-total-amount');
             
@@ -2266,8 +2337,6 @@ function updateReview() {
                 const dishId = dishSelect.value;
                 const dish = dishesData.find(d => d.id == dishId);
                 const quantity = parseFloat(quantityInput.value) || 0;
-                const unit = unitSelect ? unitSelect.value : 'deg';
-                const unitText = unit === 'deg' ? 'دیگ' : (unit === 'kg' ? 'کلو' : (unit === 'piece' ? 'عدد' : 'لیٹر'));
                 const unitPrice = parseFloat(unitPriceInput.value) || 0;
                 const total = parseFloat(totalAmountInput.value) || (quantity * unitPrice);
                 
@@ -2276,7 +2345,7 @@ function updateReview() {
                         <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: white; border-radius: 6px;">
                             <div>
                                 <strong>${escapeHtml(dish.name)}</strong><br>
-                                <small class="text-muted">Quantity: ${quantity} ${unitText} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
+                                <small class="text-muted">Quantity: ${quantity} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
                             </div>
                             <div class="text-end">
                                 <strong class="text-primary">Rs ${total.toFixed(2)}</strong>
@@ -2302,7 +2371,19 @@ function updateReview() {
         match_box: '<?php echo addslashes(t("match_box")); ?>',
         surrf: '<?php echo addslashes(t("surrf")); ?>',
         sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
-        sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>'
+        sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>',
+        steam_pot_with_lid: '<?php echo addslashes(t("steam_pot_with_lid")); ?>',
+        deg: '<?php echo addslashes(t("deg")); ?>',
+        karahi: '<?php echo addslashes(t("karahi")); ?>',
+        chulhe: '<?php echo addslashes(t("chulhe")); ?>',
+        parat: '<?php echo addslashes(t("parat")); ?>',
+        tub: '<?php echo addslashes(t("tub")); ?>',
+        shamiana: '<?php echo addslashes(t("shamiana")); ?>',
+        qanat: '<?php echo addslashes(t("qanat")); ?>',
+        dari: '<?php echo addslashes(t("dari")); ?>',
+        charpai: '<?php echo addslashes(t("charpai")); ?>',
+        coal: '<?php echo addslashes(t("coal")); ?>',
+        steam_pot_without_lid: '<?php echo addslashes(t("steam_pot_without_lid")); ?>'
     };
     
     if (extraIngredientRows.length > 0 && ingredientsData.length > 0) {
@@ -2356,6 +2437,7 @@ function updateReview() {
             // Get the item name from the input name attribute
             const itemName = input.name.match(/\[([^\]]+)\]/);
             let displayName = '';
+            let unit = 'عدد'; // Default to pieces
             if (itemName) {
                 const key = itemName[1];
                 const nameMap = {
@@ -2363,16 +2445,33 @@ function updateReview() {
                     'match_box': reviewTranslations.match_box || 'میچ باکس',
                     'surrf': reviewTranslations.surrf || 'سرف',
                     'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)',
-                    'sobi_iron': reviewTranslations.sobi_iron || 'صوبی(لوہے والی )'
+                    'sobi_iron': reviewTranslations.sobi_iron || 'صوبی(لوہے والی )',
+                    'steam_pot_with_lid': reviewTranslations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
+                    'deg': reviewTranslations.deg || 'دیگ',
+                    'karahi': reviewTranslations.karahi || 'کڑاہی',
+                    'chulhe': reviewTranslations.chulhe || 'چولہے',
+                    'parat': reviewTranslations.parat || 'پرات',
+                    'tub': reviewTranslations.tub || 'ٹب',
+                    'shamiana': reviewTranslations.shamiana || 'شامیانہ',
+                    'qanat': reviewTranslations.qanat || 'قنات',
+                    'dari': reviewTranslations.dari || 'دری',
+                    'charpai': reviewTranslations.charpai || 'چارپائی',
+                    'coal': reviewTranslations.coal || 'کوئلہ',
+                    'steam_pot_without_lid': reviewTranslations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
                 };
                 displayName = nameMap[key] || key;
+                
+                // Set unit: meter for cloth_malmal, pieces for others
+                if (key === 'cloth_malmal') {
+                    unit = 'میٹر'; // Meter for cloth
+                }
             }
             
             additionalItemsHTML += `
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
                     <div>
                         <strong class="text-info">${escapeHtml(displayName)}</strong><br>
-                        <small class="text-muted">${reviewTranslations.quantity}: ${quantity}</small>
+                        <small class="text-muted">${reviewTranslations.quantity}: ${quantity} ${unit}</small>
                     </div>
                 </div>
             `;
@@ -2510,6 +2609,18 @@ document.addEventListener('DOMContentLoaded', function() {
         surrf: '<?php echo addslashes(t("surrf")); ?>',
         sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
         sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>',
+        steam_pot_with_lid: '<?php echo addslashes(t("steam_pot_with_lid")); ?>',
+        deg: '<?php echo addslashes(t("deg")); ?>',
+        karahi: '<?php echo addslashes(t("karahi")); ?>',
+        chulhe: '<?php echo addslashes(t("chulhe")); ?>',
+        parat: '<?php echo addslashes(t("parat")); ?>',
+        tub: '<?php echo addslashes(t("tub")); ?>',
+        shamiana: '<?php echo addslashes(t("shamiana")); ?>',
+        qanat: '<?php echo addslashes(t("qanat")); ?>',
+        dari: '<?php echo addslashes(t("dari")); ?>',
+        charpai: '<?php echo addslashes(t("charpai")); ?>',
+        coal: '<?php echo addslashes(t("coal")); ?>',
+        steam_pot_without_lid: '<?php echo addslashes(t("steam_pot_without_lid")); ?>',
         unit_placeholder: '<?php echo addslashes(t("unit_placeholder", "kg, g, pieces, etc.")); ?>'
     };
     
@@ -2642,17 +2753,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold small">
-                        <?php e('unit_label'); ?> <span class="text-danger">*</span>
-                    </label>
-                    <select class="form-select dish-unit" name="dishes[${dishRowCount}][unit]" required>
-                        <option value="deg" selected>دیگ (deg)</option>
-                        <option value="kg">کلو (kg)</option>
-                        <option value="piece">عدد (piece)</option>
-                        <option value="liter">لیٹر (liter)</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small">
                         <?php e('unit_price'); ?> (Rs)
                     </label>
                     <input type="number" class="form-control dish-unit-price" name="dishes[${dishRowCount}][unit_price]" 
@@ -2665,10 +2765,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="number" class="form-control dish-total-amount" name="dishes[${dishRowCount}][total_amount]" 
                            placeholder="0.00" step="0.01" min="0">
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold small d-block">&nbsp;</label>
                     <button type="button" class="btn btn-sm btn-danger remove-dish-btn">
-                        <i class="bi bi-trash"></i>
+                        <i class="bi bi-trash"></i> Remove
                     </button>
                 </div>
             </div>
@@ -2915,6 +3015,18 @@ try {
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
         'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
         'sobi_iron' => $urduTranslations['sobi_iron'] ?? 'صوبی(لوہے والی )',
+        'steam_pot_with_lid' => $urduTranslations['steam_pot_with_lid'] ?? 'سٹیم پتیلہ جال ڈھکن',
+        'deg' => $urduTranslations['deg'] ?? 'دیگ',
+        'karahi' => $urduTranslations['karahi'] ?? 'کڑاہی',
+        'chulhe' => $urduTranslations['chulhe'] ?? 'چولہے',
+        'parat' => $urduTranslations['parat'] ?? 'پرات',
+        'tub' => $urduTranslations['tub'] ?? 'ٹب',
+        'shamiana' => $urduTranslations['shamiana'] ?? 'شامیانہ',
+        'qanat' => $urduTranslations['qanat'] ?? 'قنات',
+        'dari' => $urduTranslations['dari'] ?? 'دری',
+        'charpai' => $urduTranslations['charpai'] ?? 'چارپائی',
+        'coal' => $urduTranslations['coal'] ?? 'کوئلہ',
+        'steam_pot_without_lid' => $urduTranslations['steam_pot_without_lid'] ?? 'سٹیم پتیلہ بغیر ڈھکن',
         'pieces' => $urduTranslations['pieces'] ?? 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     
@@ -2954,6 +3066,18 @@ try {
         'surrf' => 'سرف',
         'sponjis_iron' => 'اسپنجز (آئرن)',
         'sobi_iron' => 'صوبی(لوہے والی )',
+        'steam_pot_with_lid' => 'سٹیم پتیلہ جال ڈھکن',
+        'deg' => 'دیگ',
+        'karahi' => 'کڑاہی',
+        'chulhe' => 'چولہے',
+        'parat' => 'پرات',
+        'tub' => 'ٹب',
+        'shamiana' => 'شامیانہ',
+        'qanat' => 'قنات',
+        'dari' => 'دری',
+        'charpai' => 'چارپائی',
+        'coal' => 'کوئلہ',
+        'steam_pot_without_lid' => 'سٹیم پتیلہ بغیر ڈھکن',
         'pieces' => 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 }
@@ -2983,7 +3107,6 @@ try {
             'customer_name' => $grouped_order['customer_name'] ?? '',
             'customer_email' => $grouped_order['customer_email'] ?? '',
             'customer_cell' => $grouped_order['customer_cell'] ?? '',
-            'customer_phone' => $grouped_order['customer_phone'] ?? '',
             'order_date' => $grouped_order['order_date'] ?? '',
             'delivery_date' => $grouped_order['delivery_date'] ?? '',
             'delivery_time' => $grouped_order['delivery_time'] ?? '',
@@ -3001,7 +3124,6 @@ try {
                 'dish_name' => $dish['dish_name'] ?? '',
                 'dish_id' => $dish['dish_id'] ?? 0,
                 'quantity' => $dish['quantity'] ?? 0,
-                'unit' => $dish['unit'] ?? 'deg',
                 'total_amount' => $dish['total_amount'] ?? 0,
                 'number_of_persons' => $orderData['number_of_persons'] ?? ($dish['number_of_persons'] ?? 1),
                 'category_name' => $dish['dish_category_name'] ?? 'Uncategorized',
@@ -3198,7 +3320,19 @@ function printIngredients(orderNumberOrId) {
                     'match_box': translations.match_box || 'میچ باکس',
                     'surrf': translations.surrf || 'سرف',
                     'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)',
-                    'sobi_iron': translations.sobi_iron || 'صوبی(لوہے والی )'
+                    'sobi_iron': translations.sobi_iron || 'صوبی(لوہے والی )',
+                    'steam_pot_with_lid': translations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
+                    'deg': translations.deg || 'دیگ',
+                    'karahi': translations.karahi || 'کڑاہی',
+                    'chulhe': translations.chulhe || 'چولہے',
+                    'parat': translations.parat || 'پرات',
+                    'tub': translations.tub || 'ٹب',
+                    'shamiana': translations.shamiana || 'شامیانہ',
+                    'qanat': translations.qanat || 'قنات',
+                    'dari': translations.dari || 'دری',
+                    'charpai': translations.charpai || 'چارپائی',
+                    'coal': translations.coal || 'کوئلہ',
+                    'steam_pot_without_lid': translations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
                 };
                 
                 // Create a special category for additional items
@@ -3231,6 +3365,12 @@ function printIngredients(orderNumberOrId) {
                         const itemName = additionalItemsMap[itemKey] || itemKey;
                         const key = 'additional_' + itemKey;
                         
+                        // Set unit: meter for cloth_malmal, pieces for others
+                        let unit = 'عدد'; // Default to pieces
+                        if (itemKey === 'cloth_malmal') {
+                            unit = 'میٹر'; // Meter for cloth
+                        }
+                        
                         // Add or update additional item in category
                         if (ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key]) {
                             ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key].quantity += quantity;
@@ -3238,7 +3378,7 @@ function printIngredients(orderNumberOrId) {
                             ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key] = {
                                 ingredient_name: itemName,
                                 quantity: quantity,
-                                unit: translations.pieces || 'عدد'
+                                unit: unit
                             };
                         }
                     }
@@ -3255,16 +3395,6 @@ function printIngredients(orderNumberOrId) {
     const fontFamily = 'Arial, "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif';
     
     let ingredientsHtml = '<div style="direction: rtl;">';
-    
-    // Display notes before ingredients if they exist
-    if (order.notes && order.notes.trim()) {
-        ingredientsHtml += '<div class="notes-section" style="margin: 15px 0; padding: 15px; background: #d1fae5; border: 3px solid #10b981; border-radius: 12px; font-family: ' + fontFamily + '; direction: rtl; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);">';
-        ingredientsHtml += '<div style="font-weight: bold; font-size: 16px; color: #065f46; margin-bottom: 8px; display: flex; align-items: center;">';
-        ingredientsHtml += '<span style="display: inline-block; width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-left: 8px;"></span>';
-        ingredientsHtml += 'نوٹ:</div>';
-        ingredientsHtml += '<div style="font-size: 14px; color: #047857; line-height: 1.8; font-weight: 500;">' + order.notes + '</div>';
-        ingredientsHtml += '</div>';
-    }
     
     // Check if we have any ingredients
     const dishKeys = Object.keys(ingredientsByDish);
@@ -3375,6 +3505,12 @@ function printIngredients(orderNumberOrId) {
                                 'liters': 'لیٹر',
                                 'litre': 'لیٹر',
                                 'litres': 'لیٹر',
+                                'meter': 'میٹر',
+                                'meters': 'میٹر',
+                                'metre': 'میٹر',
+                                'metres': 'میٹر',
+                                'میٹر': 'میٹر',
+                                'عدد': 'عدد',
                                 'گچھی': 'گچھی',
                                 'guchhi': 'گچھی',
                                 'bunch': 'گچھی'
@@ -3382,29 +3518,9 @@ function printIngredients(orderNumberOrId) {
                             return unitTranslations[unitLower] || unit;
                         }
                         
-                        // Function to remove trailing zeros from decimal numbers
-                        function removeTrailingZeros(num) {
-                            if (typeof num === 'number') {
-                                // If it's a whole number, return as integer string
-                                if (num % 1 === 0) {
-                                    return num.toString();
-                                }
-                                // Otherwise, convert to string and remove trailing zeros
-                                return num.toString().replace(/\.?0+$/, '');
-                            }
-                            // If it's already a string, parse and format
-                            const parsed = parseFloat(num);
-                            if (isNaN(parsed)) return num;
-                            if (parsed % 1 === 0) {
-                                return parsed.toString();
-                            }
-                            return parsed.toString().replace(/\.?0+$/, '');
-                        }
-                        
                         // Convert large gram values to kg for better readability
                         if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                            const kgValue = quantity / 1000;
-                            quantity = removeTrailingZeros(kgValue);
+                            quantity = (quantity / 1000).toFixed(2);
                             unit = 'kg';
                         }
                         
@@ -3429,20 +3545,15 @@ function printIngredients(orderNumberOrId) {
                                 quantityUnit = '0 کلو';
                             }
                         } else {
-                            // For grams (g, gram, grams), show exact value without decimals
-                            if (unitLower === 'g' || unitLower === 'gram' || unitLower === 'grams') {
-                                quantity = Math.round(quantity).toString();
-                            }
                             // For countable items (pieces, piece, serving, servings, etc.), show as whole number
-                            else if (unitLower === 'piece' || unitLower === 'pieces' || 
+                            if (unitLower === 'piece' || unitLower === 'pieces' || 
                                 unitLower === 'serving' || unitLower === 'servings' ||
                                 unitLower === 'portion' || unitLower === 'portions' ||
                                 unitLower === 'item' || unitLower === 'items') {
                                 quantity = Math.round(quantity).toString();
                             } else {
-                                // For other weight/volume units, remove trailing zeros
-                                const formatted = parseFloat(quantity);
-                                quantity = removeTrailingZeros(formatted);
+                                // For weight/volume units, show 2 decimal places
+                                quantity = quantity.toFixed(2);
                             }
                             
                             // Translate unit to Urdu
@@ -3522,6 +3633,25 @@ function printIngredients(orderNumberOrId) {
                         font-size: 10px !important;
                         page-break-inside: avoid !important;
                     }
+                    
+                    body::before {
+                        content: '' !important;
+                        position: fixed !important;
+                        top: 50% !important;
+                        left: 50% !important;
+                        transform: translate(-50%, -50%) !important;
+                        width: 60% !important;
+                        height: 60% !important;
+                        min-width: 400px !important;
+                        min-height: 400px !important;
+                        background-image: url('images/watermark.jpg') !important;
+                        background-repeat: no-repeat !important;
+                        background-position: center center !important;
+                        background-size: contain !important;
+                        opacity: 0.15 !important;
+                        z-index: -1 !important;
+                        pointer-events: none !important;
+                    }
                     .no-print { display: none !important; }
                     .header-image {
                         page-break-after: avoid !important;
@@ -3553,7 +3683,7 @@ function printIngredients(orderNumberOrId) {
                     .table-note {
                         text-align: center !important;
                         margin: 8px 0 !important;
-                        font-size: 15px !important;
+                        font-size: 20px !important;
                         font-weight: bold !important;
                     }
                     .ingredients-section {
@@ -3566,19 +3696,6 @@ function printIngredients(orderNumberOrId) {
                         margin-bottom: 6px !important;
                         margin-top: 3px !important;
                         line-height: 1.2 !important;
-                    }
-                    .notes-section {
-                        page-break-inside: avoid !important;
-                        page-break-after: avoid !important;
-                        margin: 10px 0 !important;
-                        padding: 12px !important;
-                        font-size: 12px !important;
-                        background: #d1fae5 !important;
-                        border: 3px solid #10b981 !important;
-                        border-radius: 12px !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                        color-adjust: exact !important;
                     }
                     .category-section {
                         page-break-inside: avoid !important;
@@ -3616,6 +3733,25 @@ function printIngredients(orderNumberOrId) {
                     position: relative; 
                     direction: rtl; 
                     background: #fff;
+                }
+                
+                body::before {
+                    content: '';
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 60%;
+                    height: 60%;
+                    min-width: 400px;
+                    min-height: 400px;
+                    background-image: url('images/watermark.jpg');
+                    background-repeat: no-repeat;
+                    background-position: center center;
+                    background-size: contain;
+                    opacity: 0.15;
+                    z-index: -1;
+                    pointer-events: none;
                 }
                 
                 /* Header Image */
@@ -3724,46 +3860,12 @@ function printIngredients(orderNumberOrId) {
                     font-weight: 600;
                 }
                 
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                 .table-note {
                     text-align: center;
                     margin: 10px 0;
-                    font-size: 16px;
+                    font-size: 22px;
                     color: #1e293b;
                     font-weight: bold;
-=======
->>>>>>> Stashed changes
-                .notes-section {
-                    margin: 15px 0;
-                    padding: 15px;
-                    background: #d1fae5;
-                    border: 3px solid #10b981;
-                    border-radius: 12px;
-                    direction: rtl;
-                    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    color-adjust: exact !important;
-                }
-                .notes-section > div:first-child {
-                    font-weight: bold;
-                    font-size: 16px;
-                    color: #065f46;
-                    margin-bottom: 8px;
-                    display: flex;
-                    align-items: center;
-                }
-                .notes-section > div:last-child {
-                    font-size: 14px;
-                    color: #047857;
-                    line-height: 1.8;
-                    font-weight: 500;
-<<<<<<< Updated upstream
-=======
->>>>>>> d795fa10433a1b3570864b06881183052d8434b8
->>>>>>> Stashed changes
                 }
                 
                 .print-btn { 
@@ -3796,7 +3898,7 @@ function printIngredients(orderNumberOrId) {
                 <tbody>
                     <!-- First row with header and value in same cell -->
                     <tr>
-                        <td><strong>گایک:</strong> ${order.customer_name || ''} ${order.customer_phone ? '(' + order.customer_phone + ')' : (order.customer_cell ? '(' + order.customer_cell + ')' : '')}</td>
+                        <td><strong>گایک:</strong> ${order.customer_name || ''}</td>
                         <td><strong>افراد:</strong> ${totalPersons > 0 ? totalPersons : ''}</td>
                         <td><strong>تاريخ:</strong> ${deliveryDate}</td>
                         <td><strong>شفت:</strong> ${shiftText}</td>
@@ -3822,9 +3924,7 @@ function printIngredients(orderNumberOrId) {
                                     const dish = dishes[dishIndex];
                                     const dishName = dish ? (dish.dish_name || '') : '';
                                     const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
-                                    const dishUnit = dish ? (dish.unit || 'deg') : 'deg';
-                                    const unitText = dishUnit === 'deg' ? 'دیگ' : (dishUnit === 'kg' ? 'کلو' : (dishUnit === 'piece' ? 'عدد' : 'لیٹر'));
-                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ' ' + unitText + ')' : '');
+                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ' دیگ)' : '');
                                     cells += `<td>${displayText}</td>`;
                                 } else {
                                     cells += `<td></td>`;
@@ -4143,9 +4243,7 @@ function printOrder(orderNumberOrId) {
                     const dishName = dish.dish_name || 'N/A';
                     const categoryName = dish.category_name || 'Uncategorized';
                     const quantity = parseFloat(dish.quantity) || 1;
-                    const dishUnit = dish.unit || 'deg';
-                    const unitText = dishUnit === 'deg' ? 'دیگ' : (dishUnit === 'kg' ? 'کلو' : (dishUnit === 'piece' ? 'عدد' : 'لیٹر'));
-                    const quantityText = ' ' + quantity.toFixed(2) + ' ' + unitText;
+                    const quantityText = ' ' + quantity.toFixed(2) + ' دیگ';
                     return `
                     <div class="fillable-field">
                         <span class="fillable-label">${translations.dish || 'Dish'}:</span>
@@ -4197,7 +4295,7 @@ function printOrder(orderNumberOrId) {
                             <div style="flex: 1;">
                                 <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
                                 <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
-                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong> ${dish.unit === 'deg' ? 'دیگ' : (dish.unit === 'kg' ? 'کلو' : (dish.unit === 'piece' ? 'عدد' : (dish.unit === 'liter' ? 'لیٹر' : '')))}</span>
+                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong></span>
                                     <span style="margin: 0 10px;">|</span>
                                     <span>${translations.persons}: <strong>${persons}</strong></span>
                                     ${dish.total_amount > 0 ? '<span style="margin: 0 10px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}
