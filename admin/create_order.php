@@ -26,7 +26,8 @@ $required_columns = [
     'cloth_malmal_quantity' => "INT DEFAULT 0",
     'match_box_quantity' => "INT DEFAULT 0",
     'surrf_quantity' => "INT DEFAULT 0",
-    'sponjis_quantity' => "INT DEFAULT 0"
+    'sponjis_quantity' => "INT DEFAULT 0",
+    'wood_quantity' => "INT DEFAULT 0"
 ];
 
 foreach ($required_columns as $column => $definition) {
@@ -53,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     $match_box_quantity = intval($_POST['match_box_quantity'] ?? 0);
     $surrf_quantity = intval($_POST['surrf_quantity'] ?? 0);
     $sponjis_quantity = intval($_POST['sponjis_quantity'] ?? 0);
+    $wood_quantity = intval($_POST['wood_quantity'] ?? 0);
     
     // Dishes data
     $dishes_data = [];
@@ -94,11 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
             
             $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
                 customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons,
-                cloth_malmal_quantity, match_box_quantity, surrf_quantity, sponjis_quantity) 
-                VALUES (?, NULLIF(?, 0), ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                cloth_malmal_quantity, match_box_quantity, surrf_quantity, sponjis_quantity, wood_quantity) 
+                VALUES (?, NULLIF(?, 0), ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             
             if ($stmt) {
-                $stmt->bind_param("siidsssssiiiii", 
+                $stmt->bind_param("siidsssssiiiiii", 
                     $order_number,
                     $final_customer_id,
                     $dish_info['dish_id'], 
@@ -113,7 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
                     $cloth_malmal_quantity,
                     $match_box_quantity,
                     $surrf_quantity,
-                    $sponjis_quantity
+                    $sponjis_quantity,
+                    $wood_quantity
                 );
                 
                 if ($stmt->execute()) {
@@ -691,14 +694,21 @@ include __DIR__ . '/../includes/header.php';
                                    value="<?php echo htmlspecialchars($_POST['match_box_quantity'] ?? '0'); ?>">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Surrf <span class="text-danger">*</span></label>
+                            <label class="form-label fw-semibold">سرف (Surrf) <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" name="surrf_quantity" required min="0" 
                                    value="<?php echo htmlspecialchars($_POST['surrf_quantity'] ?? '0'); ?>">
+                            <small class="text-muted">Unit: kilo</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Sponjis (Iron) <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" name="sponjis_quantity" required min="0" 
                                    value="<?php echo htmlspecialchars($_POST['sponjis_quantity'] ?? '0'); ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">لکڑی (Wood) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" name="wood_quantity" required min="0" 
+                                   value="<?php echo htmlspecialchars($_POST['wood_quantity'] ?? '0'); ?>">
+                            <small class="text-muted">Unit: kilo</small>
                         </div>
                     </div>
                     <div class="mt-4 d-flex justify-content-between">
