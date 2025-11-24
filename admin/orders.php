@@ -2792,30 +2792,46 @@ document.addEventListener('DOMContentLoaded', function() {
         const dishId = dishSelect.value;
         const dish = dishesData.find(d => d.id == dishId);
         
-        // Clear existing options except the first one
+        // Clear existing options
         unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
         
-        if (dish && dish.base_unit) {
-            // Add the dish's base_unit as the option
+        // Always show these 4 units in the specified order
+        const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+        defaultUnits.forEach(unit => {
             const option = document.createElement('option');
-            option.value = dish.base_unit;
-            option.textContent = dish.base_unit;
-            option.selected = true;
+            option.value = unit;
+            option.textContent = unit;
+            // If dish has base_unit and it matches one of these units, select it
+            if (dish && dish.base_unit && dish.base_unit === unit) {
+                option.selected = true;
+            }
             unitSelect.appendChild(option);
-        } else {
-            // If no base_unit, add default options
-            const defaultUnits = ['دیگ', 'کلو', 'عدد', 'لیٹر'];
-            defaultUnits.forEach(unit => {
-                const option = document.createElement('option');
-                option.value = unit;
-                option.textContent = unit;
-                unitSelect.appendChild(option);
-            });
-        }
+        });
     }
     
     // Make updateUnitDropdown available globally
     window.updateUnitDropdown = updateUnitDropdown;
+    
+    // Initialize unit dropdowns for all existing rows on page load
+    function initializeUnitDropdowns() {
+        document.querySelectorAll('.dish-row').forEach(function(row) {
+            const unitSelect = row.querySelector('.dish-unit');
+            if (unitSelect && unitSelect.children.length <= 1) {
+                // Only initialize if dropdown is empty (only has the default "Select Unit" option)
+                unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
+                const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+                defaultUnits.forEach(unit => {
+                    const option = document.createElement('option');
+                    option.value = unit;
+                    option.textContent = unit;
+                    unitSelect.appendChild(option);
+                });
+            }
+        });
+    }
+    
+    // Initialize on page load
+    initializeUnitDropdowns();
     
     // Setup listeners for existing rows
     document.querySelectorAll('.dish-row').forEach(function(row) {
@@ -2823,6 +2839,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add event listener for dish selection to update unit
         const dishSelect = row.querySelector('.dish-select');
         if (dishSelect) {
+            // Initialize unit dropdown if dish is already selected
+            if (dishSelect.value) {
+                updateUnitDropdown(dishSelect);
+            }
+            // Add change listener
             dishSelect.addEventListener('change', function() {
                 updateUnitDropdown(this);
             });
@@ -2892,6 +2913,19 @@ document.addEventListener('DOMContentLoaded', function() {
         
         dishesContainer.appendChild(newRow);
         setupRowListeners(newRow);
+        
+        // Initialize unit dropdown with default options for new row
+        const unitSelect = newRow.querySelector('.dish-unit');
+        if (unitSelect) {
+            unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
+            const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+            defaultUnits.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit;
+                option.textContent = unit;
+                unitSelect.appendChild(option);
+            });
+        }
         
         // Add event listener for dish selection to update unit
         const dishSelect = newRow.querySelector('.dish-select');
