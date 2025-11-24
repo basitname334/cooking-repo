@@ -3891,12 +3891,16 @@ function printIngredients(orderNumberOrId) {
                         
                         // Convert large gram values to kg for better readability
                         if (unit.toLowerCase() === 'g' && quantity >= 1000) {
-                            quantity = Math.round(quantity / 1000);
+                            const gramsValue = parseFloat(quantity);
+                            if (!isNaN(gramsValue)) {
+                                quantity = gramsValue / 1000;
+                            }
                             unit = 'kg';
                         }
                         
                         // Format quantity based on unit type
                         const unitLower = unit.toLowerCase();
+                        const gramUnits = ['g', 'gram', 'grams'];
                         let quantityUnit = '';
                         
                         // Special handling for kg/kilogram: split into kilos and grams
@@ -3916,12 +3920,20 @@ function printIngredients(orderNumberOrId) {
                                 quantityUnit = '0 کلو';
                             }
                         } else {
-                            // For all units, show as whole number without decimal points
-                            quantity = Math.round(quantity).toString();
+                            let displayQuantity = quantity;
+                            const numericQuantity = parseFloat(quantity);
+                            const hasNumericQuantity = !isNaN(numericQuantity);
                             
-                            // Translate unit to Urdu
+                            if (hasNumericQuantity) {
+                                if (gramUnits.includes(unitLower)) {
+                                    displayQuantity = numericQuantity.toString().replace(/\.0+$/, '');
+                                } else {
+                                    displayQuantity = Math.round(numericQuantity).toString();
+                                }
+                            }
+                            
                             const unitUrdu = translateUnitToUrdu(unit);
-                            quantityUnit = quantity + (unitUrdu ? ' ' + unitUrdu : '');
+                            quantityUnit = displayQuantity + (unitUrdu ? ' ' + unitUrdu : '');
                         }
                         const ingredientName = ing.ingredient_name || 'N/A';
                         
@@ -4065,13 +4077,19 @@ function printIngredients(orderNumberOrId) {
                         margin: 4px 0 !important;
                     }
                     .category-header {
-                        font-size: 14px !important;
+                        font-size: 15px !important;
                         font-weight: 900 !important;
-                        padding: 8px 12px !important;
-                        margin: 0 0 6px 0 !important;
-                        box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3) !important;
-                        border: 2px solid #5a67d8 !important;
-                        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
+                        padding: 10px 14px !important;
+                        margin: 0 0 8px 0 !important;
+                        background-color: #4c51bf !important;
+                        background: #4c51bf !important;
+                        color: #ffffff !important;
+                        border: 3px solid #2d3748 !important;
+                        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+                        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5) !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
@@ -4194,17 +4212,21 @@ function printIngredients(orderNumberOrId) {
                     margin-bottom: 8px;
                 }
                 .category-header {
-                    font-size: 16px;
+                    font-size: 17px;
                     font-weight: 900;
                     color: #ffffff;
-                    padding: 10px 15px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 12px 16px;
+                    background: #4c51bf;
+                    background-color: #4c51bf;
                     border-radius: 6px;
-                    margin: 0 0 8px 0;
-                    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-                    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
-                    border: 2px solid #5a67d8;
-                    letter-spacing: 0.5px;
+                    margin: 0 0 10px 0;
+                    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+                    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+                    border: 3px solid #2d3748;
+                    letter-spacing: 0.8px;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    color-adjust: exact;
                 }
                 .ingredients-grid {
                     display: grid;
