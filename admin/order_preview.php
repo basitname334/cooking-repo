@@ -314,34 +314,34 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="card-body p-4">
             <div class="row g-3">
-                <div class="col-md-3">
+                <div class="col-md-3 col-sm-6">
                     <div class="text-center p-3 border rounded">
                         <div class="fw-bold text-muted mb-2">Cloth Malmal</div>
                         <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['cloth_malmal_quantity'] ?? 0); ?></div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 col-sm-6">
                     <div class="text-center p-3 border rounded">
                         <div class="fw-bold text-muted mb-2">Match Box</div>
                         <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['match_box_quantity'] ?? 0); ?></div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 col-sm-6">
                     <div class="text-center p-3 border rounded">
                         <div class="fw-bold text-muted mb-2">سرف (Surrf)</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['surrf_quantity'] ?? 0); ?> <small class="text-muted">kilo</small></div>
+                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['surrf_quantity'] ?? 0); ?> <small class="text-muted">کلو</small></div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 col-sm-6">
                     <div class="text-center p-3 border rounded">
                         <div class="fw-bold text-muted mb-2">Sponjis (Iron)</div>
                         <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['sponjis_quantity'] ?? 0); ?></div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 col-sm-6">
                     <div class="text-center p-3 border rounded">
                         <div class="fw-bold text-muted mb-2">لکڑی (Wood)</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['wood_quantity'] ?? 0); ?> <small class="text-muted">kilo</small></div>
+                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['wood_quantity'] ?? 0); ?> <small class="text-muted">کلو</small></div>
                     </div>
                 </div>
             </div>

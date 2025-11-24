@@ -695,9 +695,11 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">سرف (Surrf) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" name="surrf_quantity" required min="0" 
-                                   value="<?php echo htmlspecialchars($_POST['surrf_quantity'] ?? '0'); ?>">
-                            <small class="text-muted">Unit: kilo</small>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="surrf_quantity" required min="0" 
+                                       value="<?php echo htmlspecialchars($_POST['surrf_quantity'] ?? '0'); ?>">
+                                <span class="input-group-text">کلو</span>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Sponjis (Iron) <span class="text-danger">*</span></label>
@@ -706,9 +708,11 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">لکڑی (Wood) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" name="wood_quantity" required min="0" 
-                                   value="<?php echo htmlspecialchars($_POST['wood_quantity'] ?? '0'); ?>">
-                            <small class="text-muted">Unit: kilo</small>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="wood_quantity" required min="0" 
+                                       value="<?php echo htmlspecialchars($_POST['wood_quantity'] ?? '0'); ?>">
+                                <span class="input-group-text">کلو</span>
+                            </div>
                         </div>
                     </div>
                     <div class="mt-4 d-flex justify-content-between">

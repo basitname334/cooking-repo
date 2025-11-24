@@ -1535,9 +1535,23 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                 <label class="form-label fw-semibold">
                                     سرف
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[surrf]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[surrf]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">کلو</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    لکڑی
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[wood]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">کلو</span>
+                                </div>
                             </div>
                           
                             <div class="col-md-6">
