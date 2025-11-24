@@ -4065,9 +4065,13 @@ function printIngredients(orderNumberOrId) {
                         margin: 4px 0 !important;
                     }
                     .category-header {
-                        font-size: 12px !important;
-                        padding: 4px 8px !important;
-                        margin: 0 0 4px 0 !important;
+                        font-size: 14px !important;
+                        font-weight: 900 !important;
+                        padding: 8px 12px !important;
+                        margin: 0 0 6px 0 !important;
+                        box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3) !important;
+                        border: 2px solid #5a67d8 !important;
+                        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2) !important;
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
@@ -4190,13 +4194,17 @@ function printIngredients(orderNumberOrId) {
                     margin-bottom: 8px;
                 }
                 .category-header {
-                    font-size: 13px;
-                    font-weight: bold;
+                    font-size: 16px;
+                    font-weight: 900;
                     color: #ffffff;
-                    padding: 6px 10px;
-                    background-color: #8b5cf6;
-                    border-radius: 4px;
-                    margin: 0 0 6px 0;
+                    padding: 10px 15px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 6px;
+                    margin: 0 0 8px 0;
+                    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+                    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+                    border: 2px solid #5a67d8;
+                    letter-spacing: 0.5px;
                 }
                 .ingredients-grid {
                     display: grid;
