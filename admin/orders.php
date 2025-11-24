@@ -2804,7 +2804,7 @@ document.addEventListener('DOMContentLoaded', function() {
             unitSelect.appendChild(option);
         } else {
             // If no base_unit, add default options
-            const defaultUnits = ['عدد', 'کلو', 'گرام', 'لیٹر', 'ڈیگ', 'پورشن', 'سروینگ', 'پلیٹ', 'بوتل', 'پیکٹ'];
+            const defaultUnits = ['دیگ', 'کلو', 'عدد', 'لیٹر'];
             defaultUnits.forEach(unit => {
                 const option = document.createElement('option');
                 option.value = unit;
@@ -4018,7 +4018,7 @@ function printIngredients(orderNumberOrId) {
                         <td><strong>گایک:</strong> ${order.customer_name || ''}${order.customer_cell ? ' (' + order.customer_cell + ')' : ''}</td>
                         <td><strong>افراد:</strong> ${totalPersons > 0 ? totalPersons : ''}</td>
                         <td><strong>تاريخ:</strong> ${deliveryDate}</td>
-                        <td><strong>شفت:</strong> ${shiftText}</td>
+                        <td><strong>شفٹ:</strong> ${shiftText}</td>
                         <td><strong>وقت:</strong> ${orderTime}</td>
                     </tr>
                     <!-- Additional rows with dish names -->
