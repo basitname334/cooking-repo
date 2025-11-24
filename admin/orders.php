@@ -1539,7 +1539,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                     <input type="number" class="form-control additional-item" 
                                            name="additional_items[surrf]" 
                                            placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">کلو</span>
+                                    <span class="input-group-text">گرام</span>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -2716,11 +2716,13 @@ function updateReview() {
                 };
                 displayName = nameMap[key] || key;
                 
-                // Set unit: meter for cloth_malmal, kilo for surrf and wood, pieces for others
+                // Set unit: meter for cloth_malmal, gram for surrf, kilo for wood, pieces for others
                 if (key === 'cloth_malmal') {
                     unit = 'میٹر'; // Meter for cloth
-                } else if (key === 'surrf' || key === 'wood') {
-                    unit = 'کلو'; // Kilo for surrf and wood
+                } else if (key === 'surrf') {
+                    unit = 'گرام'; // Gram for surrf
+                } else if (key === 'wood') {
+                    unit = 'کلو'; // Kilo for wood
                 }
             }
             
@@ -3752,12 +3754,14 @@ function printIngredients(orderNumberOrId) {
                         const itemName = additionalItemsMap[itemKey] || itemKey;
                         const key = 'additional_' + itemKey;
                         
-                        // Set unit: meter for cloth_malmal, kilo for surrf and wood, pieces for others
+                        // Set unit: meter for cloth_malmal, gram for surrf, kilo for wood, pieces for others
                         let unit = 'عدد'; // Default to pieces
                         if (itemKey === 'cloth_malmal') {
                             unit = 'میٹر'; // Meter for cloth
-                        } else if (itemKey === 'surrf' || itemKey === 'wood') {
-                            unit = 'کلو'; // Kilo for surrf and wood
+                        } else if (itemKey === 'surrf') {
+                            unit = 'گرام'; // Gram for surrf
+                        } else if (itemKey === 'wood') {
+                            unit = 'کلو'; // Kilo for wood
                         }
                         
                         // Add or update additional item in category

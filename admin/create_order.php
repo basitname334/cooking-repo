@@ -698,7 +698,7 @@ include __DIR__ . '/../includes/header.php';
                             <div class="input-group">
                                 <input type="number" class="form-control" name="surrf_quantity" required min="0" 
                                        value="<?php echo htmlspecialchars($_POST['surrf_quantity'] ?? '0'); ?>">
-                                <span class="input-group-text">کلو</span>
+                                <span class="input-group-text">گرام</span>
                             </div>
                         </div>
                         <div class="col-md-6">
