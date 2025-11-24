@@ -2623,6 +2623,7 @@ function updateReview() {
         cloth_malmal: '<?php echo addslashes(t("cloth_malmal")); ?>',
         match_box: '<?php echo addslashes(t("match_box")); ?>',
         surrf: '<?php echo addslashes(t("surrf")); ?>',
+        wood: '<?php echo addslashes(t("wood", "لکڑی")); ?>',
         sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
         sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>',
         steam_pot_with_lid: '<?php echo addslashes(t("steam_pot_with_lid")); ?>',
@@ -2697,6 +2698,7 @@ function updateReview() {
                     'cloth_malmal': reviewTranslations.cloth_malmal || 'کپڑا ململ',
                     'match_box': reviewTranslations.match_box || 'میچ باکس',
                     'surrf': reviewTranslations.surrf || 'سرف',
+                    'wood': reviewTranslations.wood || 'لکڑی',
                     'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)',
                     'sobi_iron': reviewTranslations.sobi_iron || 'صوبی(لوہے والی )',
                     'steam_pot_with_lid': reviewTranslations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
@@ -2714,9 +2716,11 @@ function updateReview() {
                 };
                 displayName = nameMap[key] || key;
                 
-                // Set unit: meter for cloth_malmal, pieces for others
+                // Set unit: meter for cloth_malmal, kilo for surrf and wood, pieces for others
                 if (key === 'cloth_malmal') {
                     unit = 'میٹر'; // Meter for cloth
+                } else if (key === 'surrf' || key === 'wood') {
+                    unit = 'کلو'; // Kilo for surrf and wood
                 }
             }
             
@@ -2872,6 +2876,7 @@ document.addEventListener('DOMContentLoaded', function() {
         cloth_malmal: '<?php echo addslashes(t("cloth_malmal")); ?>',
         match_box: '<?php echo addslashes(t("match_box")); ?>',
         surrf: '<?php echo addslashes(t("surrf")); ?>',
+        wood: '<?php echo addslashes(t("wood", "لکڑی")); ?>',
         sponjis_iron: '<?php echo addslashes(t("sponjis_iron")); ?>',
         sobi_iron: '<?php echo addslashes(t("sobi_iron")); ?>',
         steam_pot_with_lid: '<?php echo addslashes(t("steam_pot_with_lid")); ?>',
@@ -3384,6 +3389,7 @@ try {
         'cloth_malmal' => $urduTranslations['cloth_malmal'] ?? 'کپڑا ململ',
         'match_box' => $urduTranslations['match_box'] ?? 'میچ باکس',
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
+        'wood' => $urduTranslations['wood'] ?? 'لکڑی',
         'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
         'sobi_iron' => $urduTranslations['sobi_iron'] ?? 'صوبی(لوہے والی )',
         'steam_pot_with_lid' => $urduTranslations['steam_pot_with_lid'] ?? 'سٹیم پتیلہ جال ڈھکن',
@@ -3435,6 +3441,7 @@ try {
         'cloth_malmal' => 'کپڑا ململ',
         'match_box' => 'میچ باکس',
         'surrf' => 'سرف',
+        'wood' => 'لکڑی',
         'sponjis_iron' => 'اسپنجز (آئرن)',
         'sobi_iron' => 'صوبی(لوہے والی )',
         'steam_pot_with_lid' => 'سٹیم پتیلہ جال ڈھکن',
@@ -3698,6 +3705,7 @@ function printIngredients(orderNumberOrId) {
                     'cloth_malmal': translations.cloth_malmal || 'کپڑا ململ',
                     'match_box': translations.match_box || 'میچ باکس',
                     'surrf': translations.surrf || 'سرف',
+                    'wood': translations.wood || 'لکڑی',
                     'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)',
                     'sobi_iron': translations.sobi_iron || 'صوبی(لوہے والی )',
                     'steam_pot_with_lid': translations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
@@ -3744,10 +3752,12 @@ function printIngredients(orderNumberOrId) {
                         const itemName = additionalItemsMap[itemKey] || itemKey;
                         const key = 'additional_' + itemKey;
                         
-                        // Set unit: meter for cloth_malmal, pieces for others
+                        // Set unit: meter for cloth_malmal, kilo for surrf and wood, pieces for others
                         let unit = 'عدد'; // Default to pieces
                         if (itemKey === 'cloth_malmal') {
                             unit = 'میٹر'; // Meter for cloth
+                        } else if (itemKey === 'surrf' || itemKey === 'wood') {
+                            unit = 'کلو'; // Kilo for surrf and wood
                         }
                         
                         // Add or update additional item in category
