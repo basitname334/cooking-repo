@@ -3386,6 +3386,7 @@ function printIngredients(orderNumberOrId) {
         const dishName = dish.dish_name || 'Unknown Dish';
         const dishId = dish.dish_id || 0;
         const orderQuantity = parseFloat(dish.quantity) || 0;
+        const dishUnit = dish.unit || ''; // Get dish unit from order
         const ingredients = dish.ingredients || [];
         
         // Use dish name as key to combine same dishes together
@@ -3398,12 +3399,18 @@ function printIngredients(orderNumberOrId) {
                 dish_name: dishName,
                 dish_id: dishId,
                 quantity: 0, // Will accumulate total quantity
+                unit: dishUnit, // Store dish unit
                 categories: {}
             };
         }
         
         // Accumulate dish quantity (in case same dish appears multiple times)
         ingredientsByDish[dishKey].quantity += orderQuantity;
+        
+        // Update unit if not set or if different (prefer non-empty unit)
+        if (dishUnit && (!ingredientsByDish[dishKey].unit || ingredientsByDish[dishKey].unit === '')) {
+            ingredientsByDish[dishKey].unit = dishUnit;
+        }
         
         // Process all ingredients for this dish
         ingredients.forEach(function(ing) {
@@ -4132,7 +4139,10 @@ function printIngredients(orderNumberOrId) {
                                     const dish = dishes[dishIndex];
                                     const dishName = dish ? (dish.dish_name || '') : '';
                                     const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
-                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + ' دیگ)' : '');
+                                    const dishUnit = dish ? (dish.unit || '') : '';
+                                    // Filter out "دیگ" from display, show other units
+                                    const displayUnit = dishUnit && dishUnit !== 'دیگ' && dishUnit !== 'ڈیگ' ? dishUnit : '';
+                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + (displayUnit ? ' ' + displayUnit : '') + ')' : '');
                                     cells += `<td>${displayText}</td>`;
                                 } else {
                                     cells += `<td></td>`;
