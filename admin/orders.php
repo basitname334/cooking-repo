@@ -1398,7 +1398,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             <label class="form-label fw-semibold small">
                                                 <?php echo t('unit', 'Unit'); ?> <span class="text-danger">*</span>
                                             </label>
-                                            <select class="form-select dish-unit" name="dishes[0][unit]" required>
+                                            <select class="form-select dish-unit" name="dishes[0][unit]">
                                                 <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
                                             </select>
                                         </div>
@@ -2092,6 +2092,11 @@ const dishesData = <?php echo json_encode($dishes); ?>;
 
 // Step navigation functions
 function nextStep(step) {
+    // Initialize unit dropdowns before validation
+    if (currentStep === 2) {
+        initializeUnitDropdowns();
+    }
+    
     if (validateCurrentStep()) {
         if (step <= totalSteps) {
             // Hide current step
@@ -2264,23 +2269,54 @@ function validateCurrentStep() {
         }
         return true;
     } else if (currentStep === 2) {
-        // Validate at least one dish is added
+        // Initialize unit dropdowns before validation
+        if (typeof initializeUnitDropdowns === 'function') {
+            initializeUnitDropdowns();
+        }
+        
+        // Validate at least one dish is added with unit
         const dishRows = document.querySelectorAll('.dish-row');
         let hasValidDish = false;
         
         dishRows.forEach(function(row) {
             const dishSelect = row.querySelector('.dish-select');
             const quantityInput = row.querySelector('.dish-quantity');
+            const unitSelect = row.querySelector('.dish-unit');
             
             if (dishSelect.value && quantityInput.value && parseFloat(quantityInput.value) > 0) {
-                hasValidDish = true;
+                // If dish is selected, unit must also be selected
+                if (unitSelect && unitSelect.value) {
+                    hasValidDish = true;
+                } else if (dishSelect.value) {
+                    // Dish selected but no unit - make unit optional for now, but show warning
+                    hasValidDish = true;
+                }
             }
         });
         
         if (!hasValidDish) {
-            alert('Please add at least one dish with quantity');
+            alert('Please add at least one dish with quantity and unit');
             return false;
         }
+        
+        // Check if any dish has no unit selected
+        let missingUnit = false;
+        dishRows.forEach(function(row) {
+            const dishSelect = row.querySelector('.dish-select');
+            const unitSelect = row.querySelector('.dish-unit');
+            if (dishSelect.value && (!unitSelect || !unitSelect.value)) {
+                missingUnit = true;
+                if (unitSelect) {
+                    unitSelect.focus();
+                }
+            }
+        });
+        
+        if (missingUnit) {
+            alert('Please select a unit for all selected dishes');
+            return false;
+        }
+        
         return true;
     }
     return true;
@@ -2557,7 +2593,7 @@ function escapeHtml(text) {
         '>': '&gt;',
         '"': '&quot;',
         "'": '&#039;'
-    };x
+    };
     return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
@@ -2807,6 +2843,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             unitSelect.appendChild(option);
         });
+        
+        // Make unit required when dish is selected
+        if (dishId) {
+            unitSelect.setAttribute('required', 'required');
+        } else {
+            unitSelect.removeAttribute('required');
+        }
     }
     
     // Make updateUnitDropdown available globally
@@ -2816,19 +2859,24 @@ document.addEventListener('DOMContentLoaded', function() {
     function initializeUnitDropdowns() {
         document.querySelectorAll('.dish-row').forEach(function(row) {
             const unitSelect = row.querySelector('.dish-unit');
-            if (unitSelect && unitSelect.children.length <= 1) {
-                // Only initialize if dropdown is empty (only has the default "Select Unit" option)
-                unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
-                const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
-                defaultUnits.forEach(unit => {
-                    const option = document.createElement('option');
-                    option.value = unit;
-                    option.textContent = unit;
-                    unitSelect.appendChild(option);
-                });
+            if (unitSelect) {
+                // Always ensure dropdown has options
+                if (unitSelect.children.length <= 1) {
+                    unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
+                    const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+                    defaultUnits.forEach(unit => {
+                        const option = document.createElement('option');
+                        option.value = unit;
+                        option.textContent = unit;
+                        unitSelect.appendChild(option);
+                    });
+                }
             }
         });
     }
+    
+    // Make initializeUnitDropdowns available globally
+    window.initializeUnitDropdowns = initializeUnitDropdowns;
     
     // Initialize on page load
     initializeUnitDropdowns();
