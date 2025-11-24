@@ -3249,6 +3249,7 @@ try {
                 'dish_name' => $dish['dish_name'] ?? '',
                 'dish_id' => $dish['dish_id'] ?? 0,
                 'quantity' => $dish['quantity'] ?? 0,
+                'unit' => $dish['unit'] ?? '',
                 'total_amount' => $dish['total_amount'] ?? 0,
                 'number_of_persons' => $orderData['number_of_persons'] ?? ($dish['number_of_persons'] ?? 1),
                 'category_name' => $dish['dish_category_name'] ?? 'Uncategorized',
@@ -3603,10 +3604,16 @@ function printIngredients(orderNumberOrId) {
                         let quantity = parseFloat(ing.quantity) || 0;
                         let unit = ing.unit || '';
                         
-                        // Function to translate unit to Urdu
+                        // Function to translate unit to Urdu and filter out "دیگ"
                         function translateUnitToUrdu(unit) {
                             if (!unit) return '';
                             const unitLower = unit.toLowerCase().trim();
+                            
+                            // Filter out "دیگ" - don't show it in print
+                            if (unitLower === 'دیگ' || unitLower === 'deg' || unit === 'دیگ' || unit === 'ڈیگ') {
+                                return '';
+                            }
+                            
                             const unitTranslations = {
                                 'kg': 'کلو',
                                 'kilogram': 'کلو',
@@ -3638,9 +3645,11 @@ function printIngredients(orderNumberOrId) {
                                 'عدد': 'عدد',
                                 'گچھی': 'گچھی',
                                 'guchhi': 'گچھی',
-                                'bunch': 'گچھی'
+                                'bunch': 'گچھی',
+                                'کلو': 'کلو',
+                                'لیٹر': 'لیٹر'
                             };
-                            return unitTranslations[unitLower] || unit;
+                            return unitTranslations[unitLower] || (unit === 'دیگ' || unit === 'ڈیگ' ? '' : unit);
                         }
                         
                         // Convert large gram values to kg for better readability
@@ -4412,7 +4421,7 @@ function printOrder(orderNumberOrId) {
                             <div style="flex: 1;">
                                 <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
                                 <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
-                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong></span>
+                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong>${dish.unit && dish.unit !== 'دیگ' && dish.unit !== 'ڈیگ' ? ' ' + dish.unit : ''}</span>
                                     <span style="margin: 0 10px;">|</span>
                                     <span>${translations.persons}: <strong>${persons}</strong></span>
                                     ${dish.total_amount > 0 ? '<span style="margin: 0 10px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}

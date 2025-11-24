@@ -293,7 +293,12 @@ include __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                             <div class="card-body">
                                 <h6 class="card-title fw-bold"><?php echo htmlspecialchars($order['dish_name']); ?></h6>
-                                <span class="dish-badge">Quantity: <?php echo htmlspecialchars($order['quantity']); ?></span>
+                                <span class="dish-badge">
+                                    Quantity: <?php echo htmlspecialchars($order['quantity']); ?>
+                                    <?php if (!empty($order['unit']) && $order['unit'] !== 'دیگ' && $order['unit'] !== 'ڈیگ'): ?>
+                                        <?php echo ' ' . htmlspecialchars($order['unit']); ?>
+                                    <?php endif; ?>
+                                </span>
                             </div>
                         </div>
                     </div>
