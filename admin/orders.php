@@ -486,7 +486,7 @@ ksort($all_customer_names);
 
 // Get all dishes for dropdown with images and categories
 $dishes = [];
-$result = $conn->query("SELECT d.id, d.name, d.image, c.name as category_name 
+$result = $conn->query("SELECT d.id, d.name, d.image, d.base_unit, c.name as category_name 
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
     ORDER BY d.name");
@@ -1198,7 +1198,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
             <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-cart-plus-fill me-2"></i>
-                    <?php e('create_order'); ?> - 3-Step Process
+                    <?php e('create_order'); ?> - 4-Step Process
                 </h5>
             </div>
             <div class="card-body p-4">
@@ -1217,6 +1217,11 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         <div class="step-line"></div>
                         <div class="step-item" data-step="3">
                             <div class="step-number">3</div>
+                            <div class="step-label">Compulsory Items</div>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step-item" data-step="4">
+                            <div class="step-number">4</div>
                             <div class="step-label">Review</div>
                         </div>
                     </div>
@@ -1395,16 +1400,6 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             </label>
                                             <select class="form-select dish-unit" name="dishes[0][unit]" required>
                                                 <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
-                                                <option value="عدد">عدد</option>
-                                                <option value="کلو">کلو</option>
-                                                <option value="گرام">گرام</option>
-                                                <option value="لیٹر">لیٹر</option>
-                                                <option value="ڈیگ">ڈیگ</option>
-                                                <option value="پورشن">پورشن</option>
-                                                <option value="سروینگ">سروینگ</option>
-                                                <option value="پلیٹ">پلیٹ</option>
-                                                <option value="بوتل">بوتل</option>
-                                                <option value="پیکٹ">پیکٹ</option>
                                             </select>
                                         </div>
                                         <div class="col-md-2">
@@ -1498,171 +1493,175 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                             </div>
                         </div>
                         
-                        <!-- Additional Items Section -->
-                        <div class="mt-5 pt-4 border-top">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <label class="form-label fw-bold mb-0">
-                                    <i class="bi bi-box-seam me-2 text-info"></i>
-                                    اضافی اشیاء (اختیاری)
-                                </label>
-                            </div>
-                            <p class="text-muted small mb-3">آرڈر کے لیے ضروری اضافی اشیاء شامل کریں۔</p>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        کپڑا ململ
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[cloth_malmal]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        میچ باکس
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[match_box]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        سرف
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[surrf]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        اسپنجز (آئرن)
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[sponjis_iron]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        صوبی(لوہے والی )
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[sobi_iron]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        سٹیم پتیلہ جال ڈھکن
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[steam_pot_with_lid]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        دیگ
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[deg]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        کڑاہی
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[karahi]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        چولہے
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[chulhe]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        پرات
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[parat]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        ٹب
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[tub]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        شامیانہ
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[shamiana]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        قنات
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[qanat]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        دری
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[dari]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        چارپائی
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[charpai]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        کوئلہ
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[coal]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        سٹیم پتیلہ بغیر ڈھکن
-                                    </label>
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[steam_pot_without_lid]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                </div>
-                            </div>
-                        </div>
-                        
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(1)">
                                 <i class="bi bi-arrow-left me-2"></i> Previous
                             </button>
                             <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(3)">
+                                Next: Compulsory Items <i class="bi bi-arrow-right ms-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: Compulsory Items -->
+                    <div class="order-step" id="step3" data-step="3" style="display: none;">
+                        <div class="step-header mb-4">
+                            <h4 class="fw-bold">
+                                <i class="bi bi-box-seam me-2 text-primary"></i>
+                                مرحلہ 3: لازمی اشیاء
+                            </h4>
+                            <p class="text-muted">آرڈر کے لیے ضروری اضافی اشیاء شامل کریں۔</p>
+                        </div>
+                        
+                        <!-- Additional Items Section -->
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    کپڑا ململ
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[cloth_malmal]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    میچ باکس
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[match_box]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    سرف
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[surrf]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                          
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    صوبی(لوہے والی )
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[sobi_iron]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    سٹیم پتیلہ جال ڈھکن
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[steam_pot_with_lid]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    دیگ
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[deg]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    کڑاہی
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[karahi]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    چولہے
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[chulhe]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    پرات
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[parat]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    ٹب
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[tub]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    شامیانہ
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[shamiana]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    قنات
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[qanat]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    دری
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[dari]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    چارپائی
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[charpai]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    کوئلہ
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[coal]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    سٹیم پتیلہ بغیر ڈھکن
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[steam_pot_without_lid]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                        </div>
+                        
+                        <div class="step-actions mt-4">
+                            <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(2)">
+                                <i class="bi bi-arrow-left me-2"></i> Previous
+                            </button>
+                            <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(4)">
                                 Next: Review <i class="bi bi-arrow-right ms-2"></i>
                             </button>
                         </div>
                     </div>
                     
-                    <!-- Step 3: Review & Confirm -->
-                    <div class="order-step" id="step3" data-step="3" style="display: none;">
+                    <!-- Step 4: Review & Confirm -->
+                    <div class="order-step" id="step4" data-step="4" style="display: none;">
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-check-circle me-2 text-success"></i>
-                                مرحلہ 3: جائزہ لیں اور تصدیق کریں
+                                مرحلہ 4: جائزہ لیں اور تصدیق کریں
                             </h4>
                             <p class="text-muted">جمع کرانے سے پہلے اپنے آرڈر کی تفصیلات کا جائزہ لیں</p>
                         </div>
@@ -1700,7 +1699,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                         </div>
                         
                         <div class="step-actions mt-4">
-                            <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(2)">
+                            <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(3)">
                                 <i class="bi bi-arrow-left me-2"></i> پچھلا
                             </button>
                             <button type="submit" class="btn btn-success btn-lg">
@@ -2083,9 +2082,9 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 </div>
 
 <script>
-// 3-Step Order Wizard Functions
+// 4-Step Order Wizard Functions
 let currentStep = 1;
-const totalSteps = 3;
+const totalSteps = 4;
 
 // Get customer data for review
 const customersData = <?php echo json_encode($customers); ?>;
@@ -2105,8 +2104,8 @@ function nextStep(step) {
             currentStep = step;
             document.getElementById('step' + currentStep).style.display = 'block';
             
-            // If moving to step 3, update review
-            if (step === 3) {
+            // If moving to step 4, update review
+            if (step === 4) {
                 updateReview();
             }
         }
@@ -2604,7 +2603,7 @@ document.addEventListener('DOMContentLoaded', function() {
     [customerNameField, customerCellField, numberOfPersons, shift, deliveryDate, deliveryTime].forEach(function(field) {
         if (field) {
             field.addEventListener('change', function() {
-                if (currentStep === 3) {
+                if (currentStep === 4) {
                     updateReview();
                 }
             });
@@ -2615,7 +2614,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const customerSelect = document.getElementById('customer_id');
     if (customerSelect) {
         customerSelect.addEventListener('change', function() {
-            if (currentStep === 3) {
+            if (currentStep === 4) {
                 updateReview();
             }
         });
@@ -2625,7 +2624,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const dishesContainer = document.getElementById('dishesContainer');
     if (dishesContainer) {
         dishesContainer.addEventListener('input', function(e) {
-            if (currentStep === 3 && (e.target.classList.contains('dish-select') || 
+            if (currentStep === 4 && (e.target.classList.contains('dish-select') || 
                 e.target.classList.contains('dish-quantity') || 
                 e.target.classList.contains('dish-unit') ||
                 e.target.classList.contains('dish-unit-price') || 
@@ -2634,12 +2633,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         dishesContainer.addEventListener('change', function(e) {
-            if (currentStep === 3 && (e.target.classList.contains('dish-select') || 
+            if (e.target.classList.contains('dish-select')) {
+                // Update unit dropdown when dish is selected
+                updateUnitDropdown(e.target);
+            }
+            if (currentStep === 4 && (e.target.classList.contains('dish-select') || 
                 e.target.classList.contains('dish-unit'))) {
                 updateReview();
             }
         });
     }
+    
 });
 
 // Multiple dishes management
@@ -2742,8 +2746,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Update review if on step 3
-            if (currentStep === 3) {
+            // Update review if on step 4
+            if (currentStep === 4) {
                 updateReview();
             }
         }
@@ -2761,8 +2765,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 isManualTotalEdit = true;
             }
             
-            // Update review if on step 3
-            if (currentStep === 3) {
+            // Update review if on step 4
+            if (currentStep === 4) {
                 updateReview();
             }
         });
@@ -2771,15 +2775,58 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!this.value || this.value === '') {
                 isManualTotalEdit = false;
                 calculateTotal();
-            } else if (currentStep === 3) {
+            } else if (currentStep === 4) {
                 updateReview();
             }
         });
     }
     
+    // Function to update unit dropdown based on selected dish
+    function updateUnitDropdown(dishSelect) {
+        const row = dishSelect.closest('.dish-row');
+        if (!row) return;
+        
+        const unitSelect = row.querySelector('.dish-unit');
+        if (!unitSelect) return;
+        
+        const dishId = dishSelect.value;
+        const dish = dishesData.find(d => d.id == dishId);
+        
+        // Clear existing options except the first one
+        unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
+        
+        if (dish && dish.base_unit) {
+            // Add the dish's base_unit as the option
+            const option = document.createElement('option');
+            option.value = dish.base_unit;
+            option.textContent = dish.base_unit;
+            option.selected = true;
+            unitSelect.appendChild(option);
+        } else {
+            // If no base_unit, add default options
+            const defaultUnits = ['عدد', 'کلو', 'گرام', 'لیٹر', 'ڈیگ', 'پورشن', 'سروینگ', 'پلیٹ', 'بوتل', 'پیکٹ'];
+            defaultUnits.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit;
+                option.textContent = unit;
+                unitSelect.appendChild(option);
+            });
+        }
+    }
+    
+    // Make updateUnitDropdown available globally
+    window.updateUnitDropdown = updateUnitDropdown;
+    
     // Setup listeners for existing rows
     document.querySelectorAll('.dish-row').forEach(function(row) {
         setupRowListeners(row);
+        // Add event listener for dish selection to update unit
+        const dishSelect = row.querySelector('.dish-select');
+        if (dishSelect) {
+            dishSelect.addEventListener('change', function() {
+                updateUnitDropdown(this);
+            });
+        }
     });
     
     // Add new dish row
@@ -2811,16 +2858,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     </label>
                     <select class="form-select dish-unit" name="dishes[${dishRowCount}][unit]" required>
                         <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
-                        <option value="عدد">عدد</option>
-                        <option value="کلو">کلو</option>
-                        <option value="گرام">گرام</option>
-                        <option value="لیٹر">لیٹر</option>
-                        <option value="ڈیگ">ڈیگ</option>
-                        <option value="پورشن">پورشن</option>
-                        <option value="سروینگ">سروینگ</option>
-                        <option value="پلیٹ">پلیٹ</option>
-                        <option value="بوتل">بوتل</option>
-                        <option value="پیکٹ">پیکٹ</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -2855,11 +2892,20 @@ document.addEventListener('DOMContentLoaded', function() {
         
         dishesContainer.appendChild(newRow);
         setupRowListeners(newRow);
+        
+        // Add event listener for dish selection to update unit
+        const dishSelect = newRow.querySelector('.dish-select');
+        if (dishSelect) {
+            dishSelect.addEventListener('change', function() {
+                updateUnitDropdown(this);
+            });
+        }
+        
         updateRemoveButtons();
         dishRowCount++;
         
-        // Update review if on step 3
-        if (currentStep === 3) {
+        // Update review if on step 4
+        if (currentStep === 4) {
             updateReview();
         }
     });
@@ -2872,8 +2918,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 row.remove();
                 updateRemoveButtons();
                 
-                // Update review if on step 3
-                if (currentStep === 3) {
+                // Update review if on step 4
+                if (currentStep === 4) {
                     updateReview();
                 }
             }
@@ -4525,8 +4571,8 @@ function selectDishFromModal(dishId, dishName) {
         dishSelectionModal.hide();
     }
     
-    // Update review if on step 3
-    if (typeof updateReview === 'function' && typeof currentStep !== 'undefined' && currentStep === 3) {
+    // Update review if on step 4
+    if (typeof updateReview === 'function' && typeof currentStep !== 'undefined' && currentStep === 4) {
         updateReview();
     }
 }
