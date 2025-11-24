@@ -295,7 +295,7 @@ include __DIR__ . '/../includes/header.php';
                                 <h6 class="card-title fw-bold"><?php echo htmlspecialchars($order['dish_name']); ?></h6>
                                 <span class="dish-badge">
                                     Quantity: <?php echo htmlspecialchars($order['quantity']); ?>
-                                    <?php if (!empty($order['unit']) && $order['unit'] !== 'دیگ' && $order['unit'] !== 'ڈیگ'): ?>
+                                    <?php if (!empty($order['unit'])): ?>
                                         <?php echo ' ' . htmlspecialchars($order['unit']); ?>
                                     <?php endif; ?>
                                 </span>

@@ -1898,9 +1898,18 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                                     <?php echo date('M d, Y', strtotime($grouped_order['order_date'])); ?>
                                                 </small>
                                             </div>
-                                            <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-2">
-                                                <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
-                                            </span>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-warning" 
+                                                        title="<?php e('edit'); ?>"
+                                                        onclick="editOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                        style="font-size: 0.7rem; padding: 0.2rem 0.4rem; min-width: 28px;">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-1">
+                                                    <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="card-body">
@@ -2089,6 +2098,147 @@ const totalSteps = 4;
 // Get customer data for review
 const customersData = <?php echo json_encode($customers); ?>;
 const dishesData = <?php echo json_encode($dishes); ?>;
+
+// Edit Order Function
+function editOrder(orderNumber) {
+    // Wait for ordersData to be available
+    if (typeof ordersData === 'undefined' || !ordersData || ordersData.length === 0) {
+        alert('Order data not available. Please wait a moment and try again.');
+        return;
+    }
+    
+    // Find the order
+    const order = ordersData.find(o => o.order_number == orderNumber || o.id == orderNumber);
+    if (!order) {
+        alert('Order not found.');
+        return;
+    }
+    
+    // Scroll to the order form
+    const orderForm = document.getElementById('orderForm');
+    if (orderForm) {
+        orderForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Populate Step 1: Customer Information
+        const customerName = document.getElementById('customer_name');
+        const customerCell = document.getElementById('customer_cell');
+        const numberOfPersons = document.getElementById('number_of_persons');
+        const shift = document.getElementById('shift');
+        const deliveryDate = document.getElementById('delivery_date');
+        const deliveryTime = document.getElementById('delivery_time');
+        
+        if (customerName) customerName.value = order.customer_name || '';
+        if (customerCell) customerCell.value = order.customer_cell || '';
+        if (numberOfPersons) numberOfPersons.value = order.number_of_persons || '';
+        if (shift) shift.value = order.shift || '';
+        if (deliveryDate) {
+            const date = order.delivery_date ? order.delivery_date.split(' ')[0] : '';
+            deliveryDate.value = date;
+        }
+        if (deliveryTime) {
+            const time = order.delivery_time || '';
+            deliveryTime.value = time;
+        }
+        
+        // Populate Step 2: Dishes
+        const dishesContainer = document.getElementById('dishesContainer');
+        if (dishesContainer && order.dishes && order.dishes.length > 0) {
+            // Clear existing dish rows except the first one
+            const existingRows = dishesContainer.querySelectorAll('.dish-row');
+            for (let i = 1; i < existingRows.length; i++) {
+                existingRows[i].remove();
+            }
+            
+            // Populate dishes
+            order.dishes.forEach(function(dish, index) {
+                let row;
+                if (index === 0) {
+                    // Use first row
+                    row = dishesContainer.querySelector('.dish-row');
+                } else {
+                    // Add new row
+                    const addBtn = document.getElementById('addDishBtn');
+                    if (addBtn) {
+                        addBtn.click();
+                        row = dishesContainer.querySelectorAll('.dish-row')[index];
+                    } else {
+                        return;
+                    }
+                }
+                
+                if (row) {
+                    const dishSelect = row.querySelector('.dish-select');
+                    const unitSelect = row.querySelector('.dish-unit');
+                    const quantityInput = row.querySelector('.dish-quantity');
+                    const unitPriceInput = row.querySelector('.dish-unit-price');
+                    const totalAmountInput = row.querySelector('.dish-total-amount');
+                    
+                    // Set dish
+                    if (dishSelect && dish.dish_id) {
+                        dishSelect.value = dish.dish_id;
+                        // Trigger change to populate unit dropdown
+                        if (typeof updateUnitDropdown === 'function') {
+                            updateUnitDropdown(dishSelect);
+                            // Set unit after dropdown is populated
+                            setTimeout(function() {
+                                if (unitSelect && dish.unit) {
+                                    unitSelect.value = dish.unit;
+                                }
+                            }, 200);
+                        } else {
+                            // If updateUnitDropdown not available yet, initialize unit dropdown manually
+                            if (unitSelect && typeof initializeUnitDropdowns === 'function') {
+                                initializeUnitDropdowns();
+                                setTimeout(function() {
+                                    if (unitSelect && dish.unit) {
+                                        unitSelect.value = dish.unit;
+                                    }
+                                }, 100);
+                            }
+                        }
+                    }
+                    
+                    // Set quantity
+                    if (quantityInput) quantityInput.value = dish.quantity || '';
+                    
+                    // Set unit price and total amount
+                    if (unitPriceInput && dish.total_amount && dish.quantity) {
+                        const unitPrice = parseFloat(dish.total_amount) / parseFloat(dish.quantity);
+                        unitPriceInput.value = unitPrice.toFixed(2);
+                    }
+                    if (totalAmountInput) totalAmountInput.value = dish.total_amount || '';
+                }
+            });
+        }
+        
+        // Populate Step 3: Compulsory Items (Additional Items)
+        if (order.extra_ingredients && order.extra_ingredients.additional_items) {
+            const additionalItems = order.extra_ingredients.additional_items;
+            Object.keys(additionalItems).forEach(function(itemKey) {
+                const input = document.querySelector(`input[name="additional_items[${itemKey}]"]`);
+                if (input) {
+                    input.value = additionalItems[itemKey] || 0;
+                }
+            });
+        }
+        
+        // Show Step 1
+        document.querySelectorAll('.order-step').forEach(function(step) {
+            step.style.display = 'none';
+        });
+        const step1 = document.getElementById('step1');
+        if (step1) {
+            step1.style.display = 'block';
+            currentStep = 1;
+        }
+        
+        // Update progress indicator
+        updateProgressIndicator(0, 1);
+        
+        // Show success message
+        alert('Order loaded for editing. Please review and update the information.');
+    }
+}
 
 // Step navigation functions
 function nextStep(step) {
@@ -3693,15 +3843,10 @@ function printIngredients(orderNumberOrId) {
                         let quantity = parseFloat(ing.quantity) || 0;
                         let unit = ing.unit || '';
                         
-                        // Function to translate unit to Urdu and filter out "دیگ"
+                        // Function to translate unit to Urdu
                         function translateUnitToUrdu(unit) {
                             if (!unit) return '';
                             const unitLower = unit.toLowerCase().trim();
-                            
-                            // Filter out "دیگ" - don't show it in print
-                            if (unitLower === 'دیگ' || unitLower === 'deg' || unit === 'دیگ' || unit === 'ڈیگ') {
-                                return '';
-                            }
                             
                             const unitTranslations = {
                                 'kg': 'کلو',
@@ -3736,9 +3881,12 @@ function printIngredients(orderNumberOrId) {
                                 'guchhi': 'گچھی',
                                 'bunch': 'گچھی',
                                 'کلو': 'کلو',
-                                'لیٹر': 'لیٹر'
+                                'لیٹر': 'لیٹر',
+                                'دیگ': 'دیگ',
+                                'ڈیگ': 'دیگ',
+                                'deg': 'دیگ'
                             };
-                            return unitTranslations[unitLower] || (unit === 'دیگ' || unit === 'ڈیگ' ? '' : unit);
+                            return unitTranslations[unitLower] || unit;
                         }
                         
                         // Convert large gram values to kg for better readability
@@ -4140,9 +4288,7 @@ function printIngredients(orderNumberOrId) {
                                     const dishName = dish ? (dish.dish_name || '') : '';
                                     const dishQuantity = dish ? (parseFloat(dish.quantity) || 0) : 0;
                                     const dishUnit = dish ? (dish.unit || '') : '';
-                                    // Filter out "دیگ" from display, show other units
-                                    const displayUnit = dishUnit && dishUnit !== 'دیگ' && dishUnit !== 'ڈیگ' ? dishUnit : '';
-                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + (displayUnit ? ' ' + displayUnit : '') + ')' : '');
+                                    const displayText = dishName + (dishQuantity > 0 ? ' (' + dishQuantity + (dishUnit ? ' ' + dishUnit : '') + ')' : '');
                                     cells += `<td>${displayText}</td>`;
                                 } else {
                                     cells += `<td></td>`;
@@ -4513,7 +4659,7 @@ function printOrder(orderNumberOrId) {
                             <div style="flex: 1;">
                                 <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${dishName} <span class="category-badge">${categoryName}</span></div>
                                 <div style="color: #64748b; font-size: 13px; line-height: 1.6;">
-                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong>${dish.unit && dish.unit !== 'دیگ' && dish.unit !== 'ڈیگ' ? ' ' + dish.unit : ''}</span>
+                                    <span>${translations.quantity}: <strong>${dish.quantity}</strong>${dish.unit ? ' ' + dish.unit : ''}</span>
                                     <span style="margin: 0 10px;">|</span>
                                     <span>${translations.persons}: <strong>${persons}</strong></span>
                                     ${dish.total_amount > 0 ? '<span style="margin: 0 10px;">|</span><span>Rs <strong>' + parseFloat(dish.total_amount).toFixed(2) + '</strong></span>' : ''}
