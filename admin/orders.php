@@ -3912,27 +3912,35 @@ function printIngredients(orderNumberOrId) {
                                 'لیٹر': 'لیٹر',
                                 'دیگ': 'دیگ',
                                 'ڈیگ': 'دیگ',
-                                'deg': 'دیگ'
+                                'deg': 'دیگ',
+                                'گرام': 'گرام'
                             };
                             return unitTranslations[unitLower] || unit;
                         }
                         
+                        // Format quantity based on unit type
+                        let unitLower = unit.toLowerCase().trim();
+                        const gramUnits = ['g', 'gram', 'grams', 'گرام'];
+                        let quantityUnit = '';
+                        
+                        // Check if unit is grams (English or Urdu) - handle both English and Urdu units
+                        const isGramUnit = gramUnits.includes(unitLower) || unit === 'گرام' || unit.trim() === 'گرام';
+                        
                         // Convert large gram values to kg for better readability
-                        if (unit.toLowerCase() === 'g' && quantity >= 1000) {
+                        if (isGramUnit && quantity >= 1000) {
                             const gramsValue = parseFloat(quantity);
                             if (!isNaN(gramsValue)) {
                                 quantity = gramsValue / 1000;
+                                unit = 'kg';
+                                unitLower = 'kg';
                             }
-                            unit = 'kg';
                         }
                         
-                        // Format quantity based on unit type
-                        const unitLower = unit.toLowerCase();
-                        const gramUnits = ['g', 'gram', 'grams'];
-                        let quantityUnit = '';
+                        // Update unitLower after potential conversion
+                        const finalUnitLower = unit.toLowerCase().trim();
                         
                         // Special handling for kg/kilogram: split into kilos and grams
-                        if (unitLower === 'kg' || unitLower === 'kilogram' || unitLower === 'kilograms') {
+                        if (finalUnitLower === 'kg' || finalUnitLower === 'kilogram' || finalUnitLower === 'kilograms' || unit === 'کلو') {
                             const totalKilos = parseFloat(quantity);
                             const wholeKilos = Math.floor(totalKilos);
                             const decimalPart = totalKilos - wholeKilos;
@@ -3953,8 +3961,15 @@ function printIngredients(orderNumberOrId) {
                             const hasNumericQuantity = !isNaN(numericQuantity);
                             
                             if (hasNumericQuantity) {
-                                if (gramUnits.includes(unitLower)) {
-                                    displayQuantity = numericQuantity.toString().replace(/\.0+$/, '');
+                                // Check if unit is grams (English or Urdu) - use finalUnitLower after conversion
+                                const isGramUnitFinal = gramUnits.includes(finalUnitLower) || unit === 'گرام' || unit.trim() === 'گرام';
+                                if (isGramUnitFinal) {
+                                    // For grams, show as integer if whole number, otherwise show with decimals
+                                    if (numericQuantity % 1 === 0) {
+                                        displayQuantity = numericQuantity.toString();
+                                    } else {
+                                        displayQuantity = numericQuantity.toFixed(2).replace(/\.0+$/, '');
+                                    }
                                 } else {
                                     displayQuantity = Math.round(numericQuantity).toString();
                                 }
