@@ -541,9 +541,17 @@ if ($recent_result && $recent_result->num_rows > 0) {
     unset($dish);
 }
 
-// Pagination settings
-$items_per_page = 12; // Number of orders per page
+// Pagination & view settings
+$default_items_per_page = 12; // Number of orders per page when viewing all
+$recent_items_limit = 2; // Number of orders to show on the main view
+$items_per_page = $default_items_per_page;
 $current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$view_mode = (isset($_GET['view']) && $_GET['view'] === 'all') ? 'all' : 'recent';
+$order_number_search = isset($_GET['order_number']) ? trim($_GET['order_number']) : '';
+if (strlen($order_number_search) > 50) {
+    $order_number_search = substr($order_number_search, 0, 50);
+}
+$is_search_active = $order_number_search !== '';
 
 // Get all orders grouped by order_number
 $orders = [];
@@ -600,8 +608,11 @@ if (!$result) {
 $orders = [];
 $grouped_orders = [];
 $paginated_orders = [];
+$all_grouped_orders = [];
+$display_orders = [];
 $total_orders = 0;
 $total_pages = 0;
+$overall_orders_count = 0;
 
 if ($result && $result->num_rows > 0) {
     $orders = $result->fetch_all(MYSQLI_ASSOC);
@@ -752,19 +763,54 @@ if ($result && $result->num_rows > 0) {
         $date_b = !empty($b['order_date']) ? strtotime($b['order_date']) : time();
         return $date_b - $date_a; // Descending order (newest first)
     });
+
+    // Keep master copy for stats/search and a display copy for pagination
+    $all_grouped_orders = $grouped_orders;
+    $display_orders = $all_grouped_orders;
+    $overall_orders_count = count($all_grouped_orders);
+
+    // Apply order number search on full dataset
+    if ($is_search_active) {
+        $searchTerm = strtolower($order_number_search);
+        $display_orders = array_values(array_filter($display_orders, function($order) use ($searchTerm) {
+            $orderNumber = strtolower($order['order_number'] ?? '');
+            $orderId = (string)($order['id'] ?? '');
+            return ($searchTerm === '' ||
+                strpos($orderNumber, $searchTerm) !== false ||
+                strpos(strtolower($orderId), $searchTerm) !== false);
+        }));
+    }
+
+    // Pagination calculations on filtered dataset
+    $total_orders = count($display_orders);
     
-    // Pagination calculations
-    $total_orders = count($grouped_orders);
-    $total_pages = ceil($total_orders / $items_per_page);
-    $offset = ($current_page - 1) * $items_per_page;
-    
-    // Get paginated orders
-    $paginated_orders = array_slice($grouped_orders, $offset, $items_per_page);
+    if ($is_search_active) {
+        $paginated_orders = $display_orders;
+        $total_pages = $total_orders > 0 ? 1 : 0;
+        $current_page = $total_orders > 0 ? 1 : 0;
+    } elseif ($view_mode === 'recent') {
+        $paginated_orders = array_slice($display_orders, 0, $recent_items_limit);
+        $total_pages = $total_orders > 0 ? 1 : 0;
+        $current_page = $total_orders > 0 ? 1 : 0;
+    } else {
+        $total_pages = $total_orders > 0 ? (int) ceil($total_orders / $items_per_page) : 0;
+        if ($total_pages === 0) {
+            $paginated_orders = [];
+            $current_page = 0;
+        } else {
+            $current_page = min(max(1, $current_page), $total_pages);
+            $offset = ($current_page - 1) * $items_per_page;
+            $paginated_orders = array_slice($display_orders, $offset, $items_per_page);
+        }
+    }
 } else {
     $grouped_orders = [];
+    $all_grouped_orders = [];
+    $display_orders = [];
     $paginated_orders = [];
     $total_orders = 0;
     $total_pages = 0;
+    $overall_orders_count = 0;
 }
 
 $conn->close();
@@ -782,10 +828,10 @@ include __DIR__ . '/../includes/header.php';
 
 <?php
 // Calculate statistics from all grouped orders (not just paginated)
-$total_orders_count = count($grouped_orders);
-$pending_orders = count(array_filter($grouped_orders, fn($o) => $o['status'] == 'pending'));
-$delivered_orders = count(array_filter($grouped_orders, fn($o) => $o['status'] == 'delivered'));
-$total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
+$total_orders_count = count($all_grouped_orders);
+$pending_orders = count(array_filter($all_grouped_orders, fn($o) => $o['status'] == 'pending'));
+$delivered_orders = count(array_filter($all_grouped_orders, fn($o) => $o['status'] == 'delivered'));
+$total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
 ?>
 
 <style>
@@ -1834,38 +1880,98 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
 </div>
 <?php endif; // End logged-in user check for create order section ?>
 
+<?php
+$ordersSectionTitle = $is_search_active 
+    ? t('search_results', 'Search Results') 
+    : ($view_mode === 'recent' ? t('recent_orders', 'Recent Orders') : t('all_orders', 'All Orders'));
+$visible_orders_count = count($paginated_orders);
+?>
+
 <!-- All Orders Section -->
 <div class="row">
     <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                    <h5 class="mb-0 fw-bold">
-                        <i class="bi bi-list-ul me-2 text-primary"></i>
-                        <?php e('all_orders'); ?> <span class="badge bg-primary ms-2"><?php echo count($grouped_orders); ?></span>
-                    </h5>
-                    <!-- Search Box -->
-                    <div class="flex-grow-1" style="max-width: 400px;">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0">
-                                <i class="bi bi-search text-muted"></i>
-                            </span>
-                            <input type="text" class="form-control border-start-0" id="searchOrders" 
-                                   placeholder="Search orders by customer, dish, or ID..." 
-                                   autocomplete="off">
-                            <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchOrders" style="display: none;">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+                        <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
+                            <h5 class="mb-0 fw-bold">
+                                <i class="bi bi-list-ul me-2 text-primary"></i>
+                                <?php echo htmlspecialchars($ordersSectionTitle); ?>
+                                <span class="badge bg-primary ms-2">
+                                    <?php echo $visible_orders_count; ?>
+                                    <?php if (!$is_search_active && $view_mode === 'recent' && $overall_orders_count > 0): ?>
+                                        / <?php echo $overall_orders_count; ?>
+                                    <?php elseif (!$is_search_active && $view_mode === 'all'): ?>
+                                        of <?php echo $total_orders; ?>
+                                    <?php elseif ($is_search_active): ?>
+                                        <?php echo $visible_orders_count === 1 ? 'match' : 'matches'; ?>
+                                    <?php endif; ?>
+                                </span>
+                            </h5>
+                            <div class="d-flex flex-wrap gap-2">
+                                <?php if (!$is_search_active && $view_mode === 'recent' && $overall_orders_count > $recent_items_limit): ?>
+                                    <a class="btn btn-sm btn-outline-primary" href="?view=all">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>View all orders
+                                    </a>
+                                <?php elseif ($view_mode === 'all' || $is_search_active): ?>
+                                    <a class="btn btn-sm btn-outline-secondary" href="orders.php">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Back to recent
+                                    </a>
+                                <?php endif; ?>
+                            </div>
                         </div>
+                        <form class="input-group" method="GET" style="max-width: 500px;">
+                            <?php if ($view_mode === 'all' || isset($_GET['view'])): ?>
+                                <input type="hidden" name="view" value="<?php echo $view_mode === 'all' ? 'all' : 'recent'; ?>">
+                            <?php endif; ?>
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="bi bi-upc-scan text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0" name="order_number" 
+                                   value="<?php echo htmlspecialchars($order_number_search); ?>"
+                                   placeholder="Search by order number..." autocomplete="off">
+                            <button class="btn btn-primary" type="submit">
+                                <i class="bi bi-search"></i>
+                            </button>
+                            <?php if ($order_number_search !== ''): ?>
+                                <a href="<?php echo $view_mode === 'all' ? 'orders.php?view=all' : 'orders.php'; ?>" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-lg"></i>
+                                </a>
+                            <?php endif; ?>
+                        </form>
                     </div>
+                    <?php if ($view_mode === 'all' && !$is_search_active): ?>
+                        <div class="flex-grow-1" style="max-width: 400px;">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0">
+                                    <i class="bi bi-search text-muted"></i>
+                                </span>
+                                <input type="text" class="form-control border-start-0" id="searchOrders" 
+                                       placeholder="Search orders by customer, dish, or ID..." 
+                                       autocomplete="off">
+                                <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchOrders" style="display: none;">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="card-body p-4">
-                <?php if (empty($grouped_orders)): ?>
+                <?php if (empty($paginated_orders)): ?>
                     <div class="text-center py-5">
                         <i class="bi bi-inbox display-1 text-muted d-block mb-3"></i>
-                        <h5 class="text-muted mb-2"><?php e('no_orders'); ?></h5>
-                        <p class="text-muted">Create your first order using the form above!</p>
+                        <?php if ($is_search_active): ?>
+                            <h5 class="text-muted mb-2">No orders matched that number</h5>
+                            <p class="text-muted mb-3">Double-check the order number or view the latest orders.</p>
+                            <a href="<?php echo $view_mode === 'all' ? 'orders.php?view=all' : 'orders.php'; ?>" class="btn btn-outline-primary">
+                                <i class="bi bi-arrow-left me-1"></i>Back to orders
+                            </a>
+                        <?php else: ?>
+                            <h5 class="text-muted mb-2"><?php e('no_orders'); ?></h5>
+                            <p class="text-muted">Create your first order using the form above!</p>
+                        <?php endif; ?>
                     </div>
                 <?php else: ?>
                     <div class="row g-3" id="ordersList">
@@ -1945,28 +2051,34 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                             </div>
                                             <div>
                                                 <?php 
-                                                $dish_names = [];
-                                                $total_quantity = 0;
-                                                $dish_count = 0;
                                                 $max_display = 3;
-                                                foreach ($grouped_order['dishes'] as $dish): 
-                                                    $dish_count++;
-                                                    if ($dish_count <= $max_display) {
-                                                        $dish_names[] = htmlspecialchars($dish['dish_name']);
-                                                        $total_quantity += floatval($dish['quantity']);
+                                                $displayed_dishes = [];
+                                                $default_unit_label = t('units', 'Units');
+                                                foreach ($grouped_order['dishes'] as $index => $dish): 
+                                                    if ($index < $max_display) {
+                                                        $quantity_value = number_format(floatval($dish['quantity']), 2);
+                                                        $unit_label = !empty($dish['unit']) ? htmlspecialchars($dish['unit']) : $default_unit_label;
+                                                        $displayed_dishes[] = htmlspecialchars($dish['dish_name']) . ' (' . $quantity_value . ' ' . $unit_label . ')';
                                                     }
                                                 endforeach; 
+                                                $unit_totals = [];
+                                                foreach ($grouped_order['dishes'] as $dish) {
+                                                    $unit_label = !empty($dish['unit']) ? $dish['unit'] : $default_unit_label;
+                                                    $unit_totals[$unit_label] = ($unit_totals[$unit_label] ?? 0) + floatval($dish['quantity']);
+                                                }
                                                 ?>
                                                 <small class="fw-semibold d-block" style="font-size: 0.75rem; line-height: 1.4;">
-                                                    <?php echo implode(', ', $dish_names); ?>
+                                                    <?php echo implode(', ', $displayed_dishes); ?>
                                                     <?php if (count($grouped_order['dishes']) > $max_display): ?>
                                                         <span class="text-muted">+<?php echo count($grouped_order['dishes']) - $max_display; ?> more</span>
                                                     <?php endif; ?>
                                                 </small>
                                                 <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
-                                                    Total Qty: <?php echo number_format($total_quantity, 2); ?>
+                                                    <?php foreach ($unit_totals as $unit_label => $qty): ?>
+                                                        <span class="me-2 d-inline-block"><?php echo number_format($qty, 2); ?> <?php echo htmlspecialchars($unit_label); ?></span>
+                                                    <?php endforeach; ?>
                                                     <?php if ($grouped_order['total_amount'] > 0): ?>
-                                                        - Total: Rs <?php echo number_format($grouped_order['total_amount'], 2); ?>
+                                                        • Total: Rs <?php echo number_format($grouped_order['total_amount'], 2); ?>
                                                     <?php endif; ?>
                                                 </small>
                                             </div>
@@ -2043,7 +2155,7 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                     </div>
                     
                     <!-- Pagination Controls -->
-                    <?php if ($total_pages > 1): ?>
+                    <?php if ($view_mode === 'all' && !$is_search_active && $total_pages > 1): ?>
                         <nav aria-label="Orders pagination" class="mt-4">
                             <ul class="pagination justify-content-center">
                                 <!-- Previous Button -->
@@ -2094,10 +2206,21 @@ $total_revenue = array_sum(array_column($grouped_orders, 'total_amount'));
                                 </li>
                             </ul>
                         </nav>
-                        <div class="text-center mt-2 text-muted">
-                            <small>Showing <?php echo count($paginated_orders); ?> of <?php echo $total_orders; ?> orders (Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>)</small>
-                        </div>
                     <?php endif; ?>
+                    <div class="text-center mt-3 text-muted">
+                        <?php if ($is_search_active): ?>
+                            <small>Found <?php echo $visible_orders_count; ?> matching order<?php echo $visible_orders_count === 1 ? '' : 's'; ?>.</small>
+                        <?php elseif ($view_mode === 'recent'): ?>
+                            <small>
+                                Showing the latest <?php echo min($recent_items_limit, $overall_orders_count); ?> of <?php echo $overall_orders_count; ?> orders.
+                                <?php if ($overall_orders_count > $recent_items_limit): ?>
+                                    <a href="?view=all">View all orders</a>
+                                <?php endif; ?>
+                            </small>
+                        <?php elseif ($view_mode === 'all'): ?>
+                            <small>Showing <?php echo count($paginated_orders); ?> of <?php echo $total_orders; ?> orders<?php if ($total_pages > 0): ?> (Page <?php echo max(1, $current_page); ?> of <?php echo max(1, $total_pages); ?>)<?php endif; ?></small>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -3468,7 +3591,7 @@ const ordersData = <?php
 try {
     // Clean grouped orders data for JSON encoding
     $cleanOrders = [];
-    foreach ($grouped_orders as $grouped_order) {
+    foreach ($all_grouped_orders as $grouped_order) {
         // Decode extra_ingredients JSON string if it exists
         $extra_ingredients_data = null;
         if (!empty($grouped_order['extra_ingredients'])) {
