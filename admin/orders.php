@@ -112,6 +112,194 @@ if (!$schema_checked) {
     }
 }
 
+// Handle update order (All users can update orders)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])) {
+    // All logged-in users can update orders
+    {
+        // Set execution time limit for order update
+        @set_time_limit(60);
+        
+        // Check database connection
+        if (!$conn || $conn->connect_error) {
+            $error = 'Database connection failed. Please try again.';
+            error_log("Database connection error: " . ($conn ? $conn->connect_error : 'Connection is null'));
+        } else {
+            $order_number = trim($_POST['order_number'] ?? '');
+            
+            if (empty($order_number)) {
+                $error = 'Order number is required for update.';
+            } else {
+                $customer_id = intval($_POST['customer_id'] ?? 0);
+                $customer_name = trim($_POST['customer_name'] ?? '');
+                $customer_cell = trim($_POST['customer_cell'] ?? '');
+                $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
+                $shift = trim($_POST['shift'] ?? '');
+                $delivery_date = trim($_POST['delivery_date'] ?? '');
+                $delivery_time = trim($_POST['delivery_time'] ?? '');
+                $notes = trim($_POST['notes'] ?? '');
+                
+                // Translate notes to Urdu if current language is Urdu
+                $notes = translateForDatabase($notes);
+                
+                // Get dishes array
+                $dishes_data = [];
+                if (isset($_POST['dishes']) && is_array($_POST['dishes'])) {
+                    $dishes_data = $_POST['dishes'];
+                }
+                
+                // Get extra ingredients array
+                $extra_ingredients_data = [];
+                if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
+                    foreach ($_POST['extra_ingredients'] as $ingredient_data) {
+                        $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
+                        $quantity = floatval($ingredient_data['quantity'] ?? 0);
+                        $unit = trim($ingredient_data['unit'] ?? '');
+                        
+                        if ($ingredient_id > 0 && $quantity > 0) {
+                            $extra_ingredients_data[] = [
+                                'ingredient_id' => $ingredient_id,
+                                'quantity' => $quantity,
+                                'unit' => $unit
+                            ];
+                        }
+                    }
+                }
+                
+                // Get additional items
+                $additional_items_data = [];
+                if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
+                    foreach ($_POST['additional_items'] as $item_key => $quantity) {
+                        $quantity = intval($quantity);
+                        if ($quantity > 0) {
+                            $additional_items_data[$item_key] = $quantity;
+                        }
+                    }
+                }
+                
+                // Validation
+                $use_new_form = !empty($customer_name) || !empty($customer_cell);
+                
+                if ($use_new_form) {
+                    if (empty($customer_cell) || 
+                        $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
+                        $error = 'Please fill all required fields in Step 1.';
+                    } elseif (empty($dishes_data)) {
+                        $error = 'Please select at least one dish in Step 2.';
+                    }
+                } else {
+                    if ($customer_id <= 0 || empty($dishes_data)) {
+                        $error = t('fill_all_required_fields');
+                    }
+                }
+                
+                if (empty($error)) {
+                    // Prepare extra ingredients JSON
+                    $combined_data = [];
+                    if (!empty($extra_ingredients_data)) {
+                        $combined_data['extra_ingredients'] = $extra_ingredients_data;
+                    }
+                    if (!empty($additional_items_data)) {
+                        $combined_data['additional_items'] = $additional_items_data;
+                    }
+                    $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
+                    
+                    // Start transaction
+                    $conn->begin_transaction();
+                    
+                    try {
+                        // Delete existing orders with this order_number
+                        $delete_stmt = $conn->prepare("DELETE FROM orders WHERE order_number = ?");
+                        $delete_stmt->bind_param("s", $order_number);
+                        $delete_stmt->execute();
+                        $delete_stmt->close();
+                        
+                        // Insert updated orders
+                        $orders_created = 0;
+                        $errors = [];
+                        
+                        foreach ($dishes_data as $dish_data) {
+                            $dish_id = intval($dish_data['dish_id'] ?? 0);
+                            $quantity = floatval($dish_data['quantity'] ?? 0);
+                            $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
+                            $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
+                            $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
+                            
+                            if ($dish_id <= 0 || $quantity <= 0) {
+                                continue;
+                            }
+                            
+                            // Calculate total_amount
+                            if ($total_amount_input !== null && $total_amount_input >= 0) {
+                                $total_amount = $total_amount_input;
+                            } elseif ($unit_price !== null && $unit_price > 0) {
+                                $total_amount = $quantity * $unit_price;
+                            } else {
+                                $total_amount = 0;
+                            }
+                            
+                            // Use current datetime for order_date
+                            $order_datetime = date('Y-m-d H:i:s');
+                            
+                            if ($use_new_form) {
+                                $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
+                                    customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
+                                    VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                                if ($stmt) {
+                                    $stmt->bind_param("siisdsssssssiss", 
+                                        $order_number, 
+                                        $dish_id, 
+                                        $quantity,
+                                        $unit,
+                                        $total_amount, 
+                                        $customer_name,
+                                        $customer_cell,
+                                        $order_datetime,
+                                        $delivery_date,
+                                        $delivery_time,
+                                        $shift,
+                                        $number_of_persons,
+                                        $notes,
+                                        $extra_ingredients_json
+                                    );
+                                }
+                            } else {
+                                $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)");
+                                if ($stmt) {
+                                    $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $notes, $extra_ingredients_json);
+                                }
+                            }
+                            
+                            if ($stmt) {
+                                if ($stmt->execute()) {
+                                    $orders_created++;
+                                } else {
+                                    $errors[] = 'Failed to update order for dish ID ' . $dish_id . ': ' . $stmt->error;
+                                }
+                                $stmt->close();
+                            }
+                        }
+                        
+                        if ($orders_created > 0 && empty($errors)) {
+                            $conn->commit();
+                            $dish_count = count($dishes_data);
+                            $success = $dish_count > 1 ? "Order #{$order_number} updated successfully with {$dish_count} dishes!" : 'Order updated successfully!';
+                            header('Location: orders.php?success=1&updated=1&order_number=' . urlencode($order_number));
+                            exit();
+                        } else {
+                            $conn->rollback();
+                            $error = !empty($errors) ? implode(', ', $errors) : 'Failed to update order.';
+                        }
+                    } catch (Exception $e) {
+                        $conn->rollback();
+                        $error = 'Error updating order: ' . $e->getMessage();
+                        error_log("Order update exception: " . $e->getMessage());
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Handle create order (All users can create orders)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     // All logged-in users can create orders
@@ -1287,7 +1475,10 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
             <div class="card-header text-white py-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-cart-plus-fill me-2"></i>
-                    <?php e('create_order'); ?> - 4-Step Process
+                    <span id="formTitle"><?php e('create_order'); ?> - 4-Step Process</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFormToCreateMode(); document.getElementById('orderForm').reset();" id="newOrderBtn" style="display: none;">
+                        <i class="bi bi-plus-circle me-1"></i> New Order
+                    </button>
                 </h5>
             </div>
             <div class="card-body p-4">
@@ -1317,7 +1508,9 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                 </div>
 
                 <form method="POST" action="" id="orderForm">
-                    <input type="hidden" name="create_order" value="1">
+                    <input type="hidden" name="create_order" value="1" id="createOrderInput">
+                    <input type="hidden" name="update_order" value="1" id="updateOrderInput" style="display: none;">
+                    <input type="hidden" name="order_number" value="" id="editOrderNumber">
                     
                     <!-- Step 1: Customer Information -->
                     <div class="order-step" id="step1" data-step="1">
@@ -1805,8 +1998,8 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                             <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(3)">
                                 <i class="bi bi-arrow-left me-2"></i> پچھلا
                             </button>
-                            <button type="submit" class="btn btn-success btn-lg">
-                                <i class="bi bi-check-lg me-2"></i> <?php e('create_order'); ?>
+                            <button type="submit" class="btn btn-success btn-lg" id="orderSubmitButton">
+                                <i class="bi bi-check-lg me-2"></i> <span id="submitButtonText"><?php e('create_order'); ?></span>
                             </button>
                         </div>
                     </div>
@@ -2279,6 +2472,42 @@ const totalSteps = 4;
 const customersData = <?php echo json_encode($customers); ?>;
 const dishesData = <?php echo json_encode($dishes); ?>;
 
+// Reset form to create mode
+function resetFormToCreateMode() {
+    const createOrderInput = document.getElementById('createOrderInput');
+    const updateOrderInput = document.getElementById('updateOrderInput');
+    const editOrderNumberInput = document.getElementById('editOrderNumber');
+    const submitButton = document.getElementById('orderSubmitButton');
+    const submitButtonText = document.getElementById('submitButtonText');
+    
+    if (createOrderInput && updateOrderInput && editOrderNumberInput) {
+        // Show create input, hide update input
+        createOrderInput.style.display = 'block';
+        createOrderInput.setAttribute('name', 'create_order');
+        updateOrderInput.style.display = 'none';
+        updateOrderInput.removeAttribute('name');
+        editOrderNumberInput.value = '';
+        editOrderNumberInput.removeAttribute('name');
+    }
+    
+    if (submitButton && submitButtonText) {
+        submitButtonText.textContent = '<?php echo addslashes(t("create_order")); ?>';
+        submitButton.classList.remove('btn-warning');
+        submitButton.classList.add('btn-success');
+    }
+    
+    const formTitle = document.getElementById('formTitle');
+    const newOrderBtn = document.getElementById('newOrderBtn');
+    
+    if (formTitle) {
+        formTitle.textContent = '<?php echo addslashes(t("create_order")); ?> - 4-Step Process';
+    }
+    
+    if (newOrderBtn) {
+        newOrderBtn.style.display = 'none';
+    }
+}
+
 // Edit Order Function
 function editOrder(orderNumber) {
     // Wait for ordersData to be available
@@ -2415,8 +2644,43 @@ function editOrder(orderNumber) {
         // Update progress indicator
         updateProgressIndicator(0, 1);
         
+        // Set form to update mode
+        const createOrderInput = document.getElementById('createOrderInput');
+        const updateOrderInput = document.getElementById('updateOrderInput');
+        const editOrderNumberInput = document.getElementById('editOrderNumber');
+        
+        if (createOrderInput && updateOrderInput && editOrderNumberInput) {
+            // Hide create input, show update input
+            createOrderInput.style.display = 'none';
+            createOrderInput.removeAttribute('name'); // Remove name so it won't be submitted
+            updateOrderInput.style.display = 'block';
+            updateOrderInput.setAttribute('name', 'update_order'); // Set name for submission
+            editOrderNumberInput.value = orderNumber;
+            editOrderNumberInput.setAttribute('name', 'order_number');
+        }
+        
+        // Update form submit button text if it exists
+        const submitButton = document.getElementById('orderSubmitButton');
+        const submitButtonText = document.getElementById('submitButtonText');
+        const formTitle = document.getElementById('formTitle');
+        const newOrderBtn = document.getElementById('newOrderBtn');
+        
+        if (submitButton && submitButtonText) {
+            submitButtonText.textContent = 'Update Order';
+            submitButton.classList.remove('btn-success');
+            submitButton.classList.add('btn-warning');
+        }
+        
+        if (formTitle) {
+            formTitle.textContent = 'Edit Order - 4-Step Process';
+        }
+        
+        if (newOrderBtn) {
+            newOrderBtn.style.display = 'inline-block';
+        }
+        
         // Show success message
-        alert('Order loaded for editing. Please review and update the information.');
+        alert('Order loaded for editing. Please review and update the information, then click "Update Order" to save changes.');
     }
 }
 
