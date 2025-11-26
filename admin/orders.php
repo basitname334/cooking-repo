@@ -1508,9 +1508,12 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                 </div>
 
                 <form method="POST" action="" id="orderForm" onsubmit="return validateFormSubmission()">
+                    <!-- Create Order Input - Only active when creating new order -->
                     <input type="hidden" name="create_order" value="1" id="createOrderInput">
-                    <input type="hidden" name="update_order" value="1" id="updateOrderInput" style="display: none;">
-                    <input type="hidden" name="order_number" value="" id="editOrderNumber">
+                    <!-- Update Order Input - Only active when editing existing order -->
+                    <input type="hidden" id="updateOrderInput" style="display: none;">
+                    <!-- Order Number Input - Only active when editing existing order -->
+                    <input type="hidden" id="editOrderNumber">
                     
                     <!-- Step 1: Customer Information -->
                     <div class="order-step" id="step1" data-step="1">
@@ -2478,42 +2481,53 @@ function validateFormSubmission() {
     const updateOrderInput = document.getElementById('updateOrderInput');
     const editOrderNumberInput = document.getElementById('editOrderNumber');
     
-    // Check if we're in update mode
+    // Check if we're in update mode by checking if updateOrderInput has name attribute
     const isUpdateMode = updateOrderInput && updateOrderInput.hasAttribute('name') && updateOrderInput.getAttribute('name') === 'update_order';
     
     if (isUpdateMode) {
-        // Ensure order_number is set
-        if (!editOrderNumberInput || !editOrderNumberInput.value) {
-            alert('Error: Order number is missing. Please click the Edit button again.');
+        // UPDATE MODE: Editing existing order
+        // Ensure order_number is set and has value
+        if (!editOrderNumberInput || !editOrderNumberInput.value || !editOrderNumberInput.hasAttribute('name')) {
+            alert('Error: Order number is missing. Please click the Edit button again to load the order.');
             return false;
         }
         
-        // Ensure update_order input has name attribute
+        // Ensure update_order input has name attribute and value
         if (!updateOrderInput.hasAttribute('name')) {
             updateOrderInput.setAttribute('name', 'update_order');
+            updateOrderInput.value = '1';
         }
         
-        // Ensure create_order input doesn't have name attribute
+        // CRITICAL: Remove create_order input completely so it doesn't interfere
         if (createOrderInput && createOrderInput.hasAttribute('name')) {
             createOrderInput.removeAttribute('name');
+            createOrderInput.value = '';
         }
         
         console.log('Submitting form in UPDATE mode. Order number:', editOrderNumberInput.value);
+        return true;
     } else {
+        // CREATE MODE: Creating new order
         // Ensure create_order input has name attribute
         if (createOrderInput && !createOrderInput.hasAttribute('name')) {
             createOrderInput.setAttribute('name', 'create_order');
+            createOrderInput.value = '1';
         }
         
-        // Ensure update_order input doesn't have name attribute
+        // CRITICAL: Remove update_order and order_number inputs completely so they don't interfere
         if (updateOrderInput && updateOrderInput.hasAttribute('name')) {
             updateOrderInput.removeAttribute('name');
+            updateOrderInput.value = '';
         }
         
-        console.log('Submitting form in CREATE mode');
+        if (editOrderNumberInput && editOrderNumberInput.hasAttribute('name')) {
+            editOrderNumberInput.removeAttribute('name');
+            editOrderNumberInput.value = '';
+        }
+        
+        console.log('Submitting form in CREATE mode (new order)');
+        return true;
     }
-    
-    return true;
 }
 
 // Reset form to create mode
@@ -2525,21 +2539,21 @@ function resetFormToCreateMode() {
     const submitButtonText = document.getElementById('submitButtonText');
     
     if (createOrderInput && updateOrderInput && editOrderNumberInput) {
-        // Set create_order input properly
+        // CREATE MODE: Set create_order input properly
         createOrderInput.setAttribute('name', 'create_order');
         createOrderInput.value = '1';
         createOrderInput.style.display = 'block';
         
-        // Remove update_order input completely
+        // CREATE MODE: Remove update_order input completely
         updateOrderInput.removeAttribute('name');
         updateOrderInput.value = '';
         updateOrderInput.style.display = 'none';
         
-        // Clear order number
+        // CREATE MODE: Remove order_number input completely (not needed for new orders)
         editOrderNumberInput.removeAttribute('name');
         editOrderNumberInput.value = '';
         
-        console.log('Form reset to create mode');
+        console.log('Form reset to CREATE mode (new order)');
     }
     
     if (submitButton && submitButtonText) {
@@ -2710,20 +2724,20 @@ function editOrder(orderNumber) {
         const editOrderNumberInput = document.getElementById('editOrderNumber');
         
         if (createOrderInput && updateOrderInput && editOrderNumberInput) {
-            // Remove create_order input completely to avoid conflicts
+            // EDIT MODE: Remove create_order input completely
             createOrderInput.removeAttribute('name');
             createOrderInput.value = '';
             
-            // Set update_order input properly
+            // EDIT MODE: Set update_order input properly
             updateOrderInput.setAttribute('name', 'update_order');
             updateOrderInput.value = '1';
             updateOrderInput.style.display = 'block';
             
-            // Set order number - use actualOrderNumber from order object
+            // EDIT MODE: Set order number - use actualOrderNumber from order object
             editOrderNumberInput.setAttribute('name', 'order_number');
             editOrderNumberInput.value = actualOrderNumber;
             
-            console.log('Form switched to update mode. Order number:', actualOrderNumber);
+            console.log('Form switched to UPDATE/EDIT mode. Order number:', actualOrderNumber);
         } else {
             console.error('Form elements not found:', {
                 createOrderInput: !!createOrderInput,
