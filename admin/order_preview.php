@@ -74,6 +74,44 @@ if (!empty($dish_ids)) {
     $ingredients_query->close();
 }
 
+// Helper function to convert units to grams (base unit)
+function convertToGrams($quantity, $unit) {
+    if (empty($quantity) || !is_numeric($quantity)) return 0;
+    $unitLower = strtolower(trim($unit ?? ''));
+    $qty = floatval($quantity);
+    
+    // Convert to grams (base unit)
+    if ($unitLower === 'kg' || $unitLower === 'kilogram' || $unitLower === 'kilograms' || $unit === 'کلو') {
+        return $qty * 1000; // kg to grams
+    } else if ($unitLower === 'g' || $unitLower === 'gram' || $unitLower === 'grams' || $unit === 'گرام') {
+        return $qty; // already in grams
+    } else if ($unitLower === 'mg' || $unitLower === 'milligram' || $unitLower === 'milligrams') {
+        return $qty / 1000; // mg to grams
+    }
+    // For other units, assume they're already in grams or return as-is
+    return $qty;
+}
+
+// Helper function to convert from grams to appropriate unit
+function convertFromGrams($grams, $preferredUnit = '') {
+    if (empty($grams) || !is_numeric($grams) || $grams == 0) {
+        return ['quantity' => 0, 'unit' => $preferredUnit ?: 'g'];
+    }
+    
+    $prefUnitLower = strtolower(trim($preferredUnit ?? ''));
+    
+    // If preferred unit is kg and quantity is >= 1000g, use kg
+    if (($prefUnitLower === 'kg' || $prefUnitLower === 'kilogram' || $preferredUnit === 'کلو') && $grams >= 1000) {
+        return ['quantity' => $grams / 1000, 'unit' => 'kg'];
+    }
+    // If quantity is >= 1000g, convert to kg for readability
+    if ($grams >= 1000) {
+        return ['quantity' => $grams / 1000, 'unit' => 'kg'];
+    }
+    // Otherwise use grams
+    return ['quantity' => $grams, 'unit' => 'g'];
+}
+
 // Group ingredients by category and calculate totals
 $ingredients_by_category = [];
 foreach ($ingredients as $ing) {
@@ -96,13 +134,29 @@ foreach ($ingredients as $ing) {
     }
     
     // If ingredient already exists in this category, add to quantity
+    // FIXED: Convert units before combining
     if (isset($ingredients_by_category[$cat_id]['ingredients'][$ing_id])) {
-        $ingredients_by_category[$cat_id]['ingredients'][$ing_id]['total_quantity'] += $total_qty;
+        $existingIng = &$ingredients_by_category[$cat_id]['ingredients'][$ing_id];
+        $existingGrams = convertToGrams($existingIng['total_quantity'], $existingIng['unit']);
+        $newGrams = convertToGrams($total_qty, $base_unit);
+        $totalGrams = $existingGrams + $newGrams;
+        
+        // Convert back to appropriate unit (prefer existing unit if it's kg, otherwise use best fit)
+        $preferredUnit = ($existingIng['unit'] && (stripos($existingIng['unit'], 'kg') !== false || $existingIng['unit'] === 'کلو')) 
+            ? $existingIng['unit'] : $base_unit;
+        $converted = convertFromGrams($totalGrams, $preferredUnit);
+        
+        $existingIng['total_quantity'] = $converted['quantity'];
+        $existingIng['unit'] = $converted['unit'];
     } else {
+        // Convert to appropriate unit if needed
+        $grams = convertToGrams($total_qty, $base_unit);
+        $converted = convertFromGrams($grams, $base_unit);
+        
         $ingredients_by_category[$cat_id]['ingredients'][$ing_id] = [
             'name' => $ing_name,
-            'total_quantity' => $total_qty,
-            'unit' => $base_unit
+            'total_quantity' => $converted['quantity'],
+            'unit' => $converted['unit']
         ];
     }
 }
