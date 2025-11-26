@@ -18,10 +18,14 @@ $success = '';
 @set_time_limit(30);
 
 // Wrap schema modifications in try-catch to prevent crashes
-try {
-    // Check and add order_number column if it doesn't exist
-    $result = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_number'");
-    if ($result && $result->num_rows == 0) {
+// Cache schema check to avoid running on every request
+static $schema_checked = false;
+if (!$schema_checked) {
+    $schema_checked = true;
+    try {
+        // Check and add order_number column if it doesn't exist
+        $result = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_number'");
+        if ($result && $result->num_rows == 0) {
         @$conn->query("ALTER TABLE `orders` ADD COLUMN `order_number` VARCHAR(50) DEFAULT NULL AFTER `id`");
         @$conn->query("ALTER TABLE `orders` ADD INDEX `idx_order_number` (`order_number`)");
         // Generate order numbers for existing orders (limit to prevent timeout)
@@ -102,9 +106,10 @@ try {
             }
         }
     }
-} catch (Exception $e) {
-    // Log error but don't crash the page
-    error_log("Schema modification error: " . $e->getMessage());
+    } catch (Exception $e) {
+        // Log error but don't crash the page
+        error_log("Schema modification error: " . $e->getMessage());
+    }
 }
 
 // Handle create order (All users can create orders)
@@ -573,11 +578,23 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.u
     FROM orders o
     LEFT JOIN users u ON o.customer_id = u.id
     LEFT JOIN dishes d ON o.dish_id = d.id
-    LEFT JOIN categories cat ON d.category_id = cat.id
-    ORDER BY 
+    LEFT JOIN categories cat ON d.category_id = cat.id";
+    
+    // Add search filter if active
+    if ($is_search_active && !empty($order_number_search)) {
+        $escaped_search = $conn->real_escape_string($order_number_search);
+        $query .= " WHERE o.order_number LIKE '%$escaped_search%'";
+    }
+    
+    $query .= " ORDER BY 
         COALESCE(o.order_date, NOW()) DESC, 
         COALESCE(o.order_number, ''), 
         o.id DESC";
+    
+    // Add LIMIT for performance - load more than needed to account for grouping
+    // Load 3x the items per page to ensure we have enough after grouping
+    $limit = ($view_mode === 'all') ? ($items_per_page * 3) : ($recent_items_limit * 3);
+    $query .= " LIMIT $limit";
 
 $result = $conn->query($query);
 if (!$result) {
@@ -621,50 +638,69 @@ if ($result && $result->num_rows > 0) {
     $using_fallback = !isset($orders[0]['dish_name']);
     
     if ($using_fallback) {
-        // Fetch dish and customer info for each order
-        foreach ($orders as &$order) {
-            // Get dish info
-            if (!empty($order['dish_id'])) {
-                $dish_result = $conn->query("SELECT d.id, d.name, d.number_of_persons, d.category_id, cat.name as dish_category_name 
-                    FROM dishes d 
-                    LEFT JOIN categories cat ON d.category_id = cat.id 
-                    WHERE d.id = " . intval($order['dish_id']));
-                if ($dish_result && $dish_result->num_rows > 0) {
-                    $dish = $dish_result->fetch_assoc();
-                    $order['dish_name'] = $dish['name'];
-                    $order['dish_id'] = $dish['id'];
-                    // Preserve order's number_of_persons, don't overwrite with dish's default
-                    // Only set if order's number_of_persons is not set
-                    if (empty($order['number_of_persons']) || $order['number_of_persons'] == 0) {
-                        $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
-                    }
-                    $order['dish_category_name'] = $dish['dish_category_name'] ?? 'Uncategorized';
-                    $order['dish_number_of_persons'] = $dish['number_of_persons'] ?? 0;
+        // OPTIMIZED: Batch fetch dish and customer info instead of N+1 queries
+        $dish_ids = array_filter(array_unique(array_column($orders, 'dish_id')));
+        $customer_ids = array_filter(array_unique(array_column($orders, 'customer_id')));
+        
+        // Batch fetch all dishes
+        $dishes_map = [];
+        if (!empty($dish_ids)) {
+            $dish_ids_str = implode(',', array_map('intval', $dish_ids));
+            $dishes_query = "SELECT d.id, d.name, d.number_of_persons, d.category_id, cat.name as dish_category_name 
+                FROM dishes d 
+                LEFT JOIN categories cat ON d.category_id = cat.id 
+                WHERE d.id IN ($dish_ids_str)";
+            $dishes_result = $conn->query($dishes_query);
+            if ($dishes_result) {
+                while ($dish = $dishes_result->fetch_assoc()) {
+                    $dishes_map[$dish['id']] = $dish;
                 }
             }
+        }
+        
+        // Batch fetch all customers
+        $customers_map = [];
+        if (!empty($customer_ids)) {
+            $customer_ids_str = implode(',', array_map('intval', $customer_ids));
+            $customers_query = "SELECT id, name, email FROM users WHERE id IN ($customer_ids_str)";
+            $customers_result = $conn->query($customers_query);
+            if ($customers_result) {
+                while ($cust = $customers_result->fetch_assoc()) {
+                    $customers_map[$cust['id']] = $cust;
+                }
+            }
+        }
+        
+        // Map data to orders
+        foreach ($orders as &$order) {
+            // Get dish info from map
+            if (!empty($order['dish_id']) && isset($dishes_map[$order['dish_id']])) {
+                $dish = $dishes_map[$order['dish_id']];
+                $order['dish_name'] = $dish['name'];
+                $order['dish_id'] = $dish['id'];
+                if (empty($order['number_of_persons']) || $order['number_of_persons'] == 0) {
+                    $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
+                }
+                $order['dish_category_name'] = $dish['dish_category_name'] ?? 'Uncategorized';
+                $order['dish_number_of_persons'] = $dish['number_of_persons'] ?? 0;
+            }
             
-            // Get customer info if customer_id exists
-            if (!empty($order['customer_id'])) {
-                $cust_result = $conn->query("SELECT name, email FROM users WHERE id = " . intval($order['customer_id']));
-                if ($cust_result && $cust_result->num_rows > 0) {
-                    $cust = $cust_result->fetch_assoc();
-                    // Prioritize customer name from users table
-                    $order['user_customer_name'] = $cust['name'];
-                    $order['user_customer_email'] = $cust['email'];
-                    // Keep order_customer_name as fallback
-                    if (empty($order['customer_name'])) {
-                        $order['customer_name'] = $cust['name'];
-                    }
-                    if (empty($order['customer_email']) && empty($order['customer_cell'])) {
-                        $order['customer_email'] = $cust['email'];
-                    }
+            // Get customer info from map
+            if (!empty($order['customer_id']) && isset($customers_map[$order['customer_id']])) {
+                $cust = $customers_map[$order['customer_id']];
+                $order['user_customer_name'] = $cust['name'];
+                $order['user_customer_email'] = $cust['email'];
+                if (empty($order['customer_name'])) {
+                    $order['customer_name'] = $cust['name'];
+                }
+                if (empty($order['customer_email']) && empty($order['customer_cell'])) {
+                    $order['customer_email'] = $cust['email'];
                 }
             }
             
             // Set aliases for consistency
             $order['order_customer_name'] = $order['customer_name'] ?? '';
             $order['order_customer_cell'] = $order['customer_cell'] ?? '';
-            // Ensure user_customer_name is set if customer_id exists
             if (empty($order['user_customer_name']) && !empty($order['customer_id'])) {
                 $order['user_customer_name'] = $order['customer_name'] ?? '';
             }
@@ -672,7 +708,42 @@ if ($result && $result->num_rows > 0) {
         unset($order);
     }
     
-    // Get ingredients for each dish
+    // OPTIMIZED: Batch fetch all dish ingredients instead of N+1 queries
+    $dish_ids_for_ingredients = array_filter(array_unique(array_column($orders, 'dish_id')));
+    $ingredients_map = [];
+    
+    if (!empty($dish_ids_for_ingredients)) {
+        $dish_ids_str = implode(',', array_map('intval', $dish_ids_for_ingredients));
+        $ingredients_query = "SELECT di.dish_id, di.quantity, di.unit, i.name as ingredient_name, i.id as ingredient_id, 
+            i.category_id, c.name as category_name
+            FROM dish_ingredients di
+            LEFT JOIN ingredients i ON di.ingredient_id = i.id
+            LEFT JOIN categories c ON i.category_id = c.id
+            WHERE di.dish_id IN ($dish_ids_str)
+            ORDER BY di.dish_id, c.name, i.name";
+        
+        $ingredients_result = $conn->query($ingredients_query);
+        if ($ingredients_result) {
+            while ($ing = $ingredients_result->fetch_assoc()) {
+                $dish_id = $ing['dish_id'];
+                if (!isset($ingredients_map[$dish_id])) {
+                    $ingredients_map[$dish_id] = [];
+                }
+                // Translate ingredient names and category names if needed
+                if ($currentLang === 'ur') {
+                    if (isset($ing['ingredient_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['ingredient_name'])) {
+                        $ing['ingredient_name'] = translateToUrdu($ing['ingredient_name']);
+                    }
+                    if (isset($ing['category_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['category_name'])) {
+                        $ing['category_name'] = translateToUrdu($ing['category_name']);
+                    }
+                }
+                $ingredients_map[$dish_id][] = $ing;
+            }
+        }
+    }
+    
+    // Map ingredients to orders and translate dish names/notes
     foreach ($orders as &$order) {
         // Translate dish name if needed
         if (isset($order['dish_name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $order['dish_name'])) {
@@ -684,37 +755,9 @@ if ($result && $result->num_rows > 0) {
             $order['notes'] = translateToUrdu($order['notes']);
         }
         
-        $order_ingredients = [];
-        if (isset($order['dish_id']) && $order['dish_id']) {
-            $dish_id = intval($order['dish_id']);
-            $stmt = $conn->prepare("SELECT di.quantity, di.unit, i.name as ingredient_name, i.id as ingredient_id, 
-                i.category_id, c.name as category_name
-                FROM dish_ingredients di
-                LEFT JOIN ingredients i ON di.ingredient_id = i.id
-                LEFT JOIN categories c ON i.category_id = c.id
-                WHERE di.dish_id = ?
-                ORDER BY c.name, i.name");
-            if ($stmt) {
-                $stmt->bind_param("i", $dish_id);
-                $stmt->execute();
-                $ing_result = $stmt->get_result();
-                if ($ing_result && $ing_result->num_rows > 0) {
-                    $order_ingredients = $ing_result->fetch_all(MYSQLI_ASSOC);
-                    // Translate ingredient names and category names if needed
-                    foreach ($order_ingredients as &$ing) {
-                        if (isset($ing['ingredient_name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['ingredient_name'])) {
-                            $ing['ingredient_name'] = translateToUrdu($ing['ingredient_name']);
-                        }
-                        if (isset($ing['category_name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['category_name'])) {
-                            $ing['category_name'] = translateToUrdu($ing['category_name']);
-                        }
-                    }
-                    unset($ing);
-                }
-                $stmt->close();
-            }
-        }
-        $order['ingredients'] = $order_ingredients;
+        // Get ingredients from map
+        $dish_id = isset($order['dish_id']) ? intval($order['dish_id']) : 0;
+        $order['ingredients'] = isset($ingredients_map[$dish_id]) ? $ingredients_map[$dish_id] : [];
     }
     unset($order); // Break the reference
     
@@ -5030,6 +5073,5 @@ function addNewDishRow() {
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
-
 
 

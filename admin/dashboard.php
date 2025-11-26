@@ -11,7 +11,7 @@ requireAdmin();
 
 $conn = getDBConnection();
 
-// Get statistics
+// Get statistics - optimized: combine queries for better performance
 $categories_count = 0;
 $ingredients_count = 0;
 $dishes_count = 0;
@@ -22,46 +22,30 @@ $pending_orders = 0;
 $today_orders = 0;
 $today_revenue = 0;
 
-$result = $conn->query("SELECT COUNT(*) as count FROM categories");
-if ($result && $result->num_rows > 0) {
-    $categories_count = $result->fetch_assoc()['count'] ?? 0;
-}
+// Combined query for basic counts (much faster than separate queries)
+$counts_query = "SELECT 
+    (SELECT COUNT(*) FROM categories) as categories_count,
+    (SELECT COUNT(*) FROM ingredients) as ingredients_count,
+    (SELECT COUNT(*) FROM dishes) as dishes_count,
+    (SELECT COUNT(*) FROM users WHERE role = 'user') as users_count,
+    (SELECT COUNT(*) FROM orders) as orders_count,
+    (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE status = 'delivered') as total_revenue,
+    (SELECT COUNT(*) FROM orders WHERE status = 'pending') as pending_orders,
+    (SELECT COUNT(*) FROM orders WHERE DATE(order_date) = CURDATE()) as today_orders,
+    (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE DATE(order_date) = CURDATE()) as today_revenue";
 
-$result = $conn->query("SELECT COUNT(*) as count FROM ingredients");
-if ($result && $result->num_rows > 0) {
-    $ingredients_count = $result->fetch_assoc()['count'] ?? 0;
-}
-
-$result = $conn->query("SELECT COUNT(*) as count FROM dishes");
-if ($result && $result->num_rows > 0) {
-    $dishes_count = $result->fetch_assoc()['count'] ?? 0;
-}
-
-$result = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
-if ($result && $result->num_rows > 0) {
-    $users_count = $result->fetch_assoc()['count'] ?? 0;
-}
-
-$result = $conn->query("SELECT COUNT(*) as count FROM orders");
-if ($result && $result->num_rows > 0) {
-    $orders_count = $result->fetch_assoc()['count'] ?? 0;
-}
-
-$result = $conn->query("SELECT SUM(total_amount) as total FROM orders WHERE status = 'delivered'");
-if ($result && $result->num_rows > 0) {
-    $total_revenue = $result->fetch_assoc()['total'] ?? 0;
-}
-
-$result = $conn->query("SELECT COUNT(*) as count FROM orders WHERE status = 'pending'");
-if ($result && $result->num_rows > 0) {
-    $pending_orders = $result->fetch_assoc()['count'] ?? 0;
-}
-
-$result = $conn->query("SELECT COUNT(*) as count, SUM(total_amount) as total FROM orders WHERE DATE(order_date) = CURDATE()");
+$result = $conn->query($counts_query);
 if ($result && $result->num_rows > 0) {
     $row = $result->fetch_assoc();
-    $today_orders = $row['count'] ?? 0;
-    $today_revenue = $row['total'] ?? 0;
+    $categories_count = (int)($row['categories_count'] ?? 0);
+    $ingredients_count = (int)($row['ingredients_count'] ?? 0);
+    $dishes_count = (int)($row['dishes_count'] ?? 0);
+    $users_count = (int)($row['users_count'] ?? 0);
+    $orders_count = (int)($row['orders_count'] ?? 0);
+    $total_revenue = (float)($row['total_revenue'] ?? 0);
+    $pending_orders = (int)($row['pending_orders'] ?? 0);
+    $today_orders = (int)($row['today_orders'] ?? 0);
+    $today_revenue = (float)($row['today_revenue'] ?? 0);
 }
 
 $conn->close();

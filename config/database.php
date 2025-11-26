@@ -17,10 +17,20 @@ define('DB_PORT', getenv('DB_PORT') ?: '3306');
  * @return mysqli|false Returns mysqli connection object or false on failure
  */
 function getDBConnection() {
-    // Only check setup once per request
+    // Cache connection per request
+    static $connection = null;
+    if ($connection !== null) {
+        return $connection;
+    }
+    
+    // Only check setup once per request (and only in development)
     static $setup_checked = false;
     
-    if (!$setup_checked) {
+    // Skip setup check in production to improve performance
+    // Setup should be done via migration scripts, not on every request
+    $is_production = (DB_HOST !== 'localhost' && DB_HOST !== '127.0.0.1');
+    
+    if (!$setup_checked && !$is_production) {
         ensureDatabaseSetup();
         $setup_checked = true;
     }
@@ -114,6 +124,8 @@ function getDBConnection() {
         }
     }
     
+    // Cache connection for this request
+    $connection = $conn;
     return $conn;
 }
 
@@ -177,14 +189,15 @@ function ensureDatabaseSetup() {
             }
         }
         
-                // Check which tables exist
-                $required_tables = ['users', 'categories', 'ingredients', 'dishes', 'dish_ingredients', 'orders'];
-                $existing_tables = [];
+                // Check which tables exist - use single query for better performance
+        $required_tables = ['users', 'categories', 'ingredients', 'dishes', 'dish_ingredients', 'orders'];
+        $table_list = "'" . implode("','", array_map([$conn, 'real_escape_string'], $required_tables)) . "'";
+        $result = $conn->query("SHOW TABLES WHERE Tables_in_" . $conn->real_escape_string(DB_NAME) . " IN ($table_list)");
         
-        foreach ($required_tables as $table) {
-            $result = $conn->query("SHOW TABLES LIKE '$table'");
-            if ($result && $result->num_rows > 0) {
-                $existing_tables[] = $table;
+        $existing_tables = [];
+        if ($result) {
+            while ($row = $result->fetch_array()) {
+                $existing_tables[] = $row[0];
             }
         }
         

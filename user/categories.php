@@ -10,11 +10,14 @@ requireLogin();
 
 $conn = getDBConnection();
 
-// Get all categories with counts
+// Get all categories with counts - optimized using LEFT JOIN instead of subqueries
 $categories = $conn->query("SELECT c.*, 
-    (SELECT COUNT(*) FROM ingredients WHERE category_id = c.id) as ingredients_count,
-    (SELECT COUNT(*) FROM dishes WHERE category_id = c.id) as dishes_count
+    COALESCE(COUNT(DISTINCT i.id), 0) as ingredients_count,
+    COALESCE(COUNT(DISTINCT d.id), 0) as dishes_count
     FROM categories c 
+    LEFT JOIN ingredients i ON c.id = i.category_id
+    LEFT JOIN dishes d ON c.id = d.category_id
+    GROUP BY c.id, c.name, c.description, c.created_at
     ORDER BY c.name")->fetch_all(MYSQLI_ASSOC);
 
 // Get category details if selected
