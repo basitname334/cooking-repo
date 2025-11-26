@@ -1507,7 +1507,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                     </div>
                 </div>
 
-                <form method="POST" action="" id="orderForm">
+                <form method="POST" action="" id="orderForm" onsubmit="return validateFormSubmission()">
                     <input type="hidden" name="create_order" value="1" id="createOrderInput">
                     <input type="hidden" name="update_order" value="1" id="updateOrderInput" style="display: none;">
                     <input type="hidden" name="order_number" value="" id="editOrderNumber">
@@ -2472,6 +2472,50 @@ const totalSteps = 4;
 const customersData = <?php echo json_encode($customers); ?>;
 const dishesData = <?php echo json_encode($dishes); ?>;
 
+// Validate form submission - ensure correct mode is set
+function validateFormSubmission() {
+    const createOrderInput = document.getElementById('createOrderInput');
+    const updateOrderInput = document.getElementById('updateOrderInput');
+    const editOrderNumberInput = document.getElementById('editOrderNumber');
+    
+    // Check if we're in update mode
+    const isUpdateMode = updateOrderInput && updateOrderInput.hasAttribute('name') && updateOrderInput.getAttribute('name') === 'update_order';
+    
+    if (isUpdateMode) {
+        // Ensure order_number is set
+        if (!editOrderNumberInput || !editOrderNumberInput.value) {
+            alert('Error: Order number is missing. Please click the Edit button again.');
+            return false;
+        }
+        
+        // Ensure update_order input has name attribute
+        if (!updateOrderInput.hasAttribute('name')) {
+            updateOrderInput.setAttribute('name', 'update_order');
+        }
+        
+        // Ensure create_order input doesn't have name attribute
+        if (createOrderInput && createOrderInput.hasAttribute('name')) {
+            createOrderInput.removeAttribute('name');
+        }
+        
+        console.log('Submitting form in UPDATE mode. Order number:', editOrderNumberInput.value);
+    } else {
+        // Ensure create_order input has name attribute
+        if (createOrderInput && !createOrderInput.hasAttribute('name')) {
+            createOrderInput.setAttribute('name', 'create_order');
+        }
+        
+        // Ensure update_order input doesn't have name attribute
+        if (updateOrderInput && updateOrderInput.hasAttribute('name')) {
+            updateOrderInput.removeAttribute('name');
+        }
+        
+        console.log('Submitting form in CREATE mode');
+    }
+    
+    return true;
+}
+
 // Reset form to create mode
 function resetFormToCreateMode() {
     const createOrderInput = document.getElementById('createOrderInput');
@@ -2481,13 +2525,21 @@ function resetFormToCreateMode() {
     const submitButtonText = document.getElementById('submitButtonText');
     
     if (createOrderInput && updateOrderInput && editOrderNumberInput) {
-        // Show create input, hide update input
-        createOrderInput.style.display = 'block';
+        // Set create_order input properly
         createOrderInput.setAttribute('name', 'create_order');
-        updateOrderInput.style.display = 'none';
+        createOrderInput.value = '1';
+        createOrderInput.style.display = 'block';
+        
+        // Remove update_order input completely
         updateOrderInput.removeAttribute('name');
-        editOrderNumberInput.value = '';
+        updateOrderInput.value = '';
+        updateOrderInput.style.display = 'none';
+        
+        // Clear order number
         editOrderNumberInput.removeAttribute('name');
+        editOrderNumberInput.value = '';
+        
+        console.log('Form reset to create mode');
     }
     
     if (submitButton && submitButtonText) {
@@ -2520,6 +2572,14 @@ function editOrder(orderNumber) {
     const order = ordersData.find(o => o.order_number == orderNumber || o.id == orderNumber);
     if (!order) {
         alert('Order not found.');
+        return;
+    }
+    
+    // Get the actual order number from the order object
+    const actualOrderNumber = order.order_number || orderNumber;
+    
+    if (!actualOrderNumber) {
+        alert('Order number not found in order data.');
         return;
     }
     
@@ -2650,13 +2710,26 @@ function editOrder(orderNumber) {
         const editOrderNumberInput = document.getElementById('editOrderNumber');
         
         if (createOrderInput && updateOrderInput && editOrderNumberInput) {
-            // Hide create input, show update input
-            createOrderInput.style.display = 'none';
-            createOrderInput.removeAttribute('name'); // Remove name so it won't be submitted
+            // Remove create_order input completely to avoid conflicts
+            createOrderInput.removeAttribute('name');
+            createOrderInput.value = '';
+            
+            // Set update_order input properly
+            updateOrderInput.setAttribute('name', 'update_order');
+            updateOrderInput.value = '1';
             updateOrderInput.style.display = 'block';
-            updateOrderInput.setAttribute('name', 'update_order'); // Set name for submission
-            editOrderNumberInput.value = orderNumber;
+            
+            // Set order number - use actualOrderNumber from order object
             editOrderNumberInput.setAttribute('name', 'order_number');
+            editOrderNumberInput.value = actualOrderNumber;
+            
+            console.log('Form switched to update mode. Order number:', actualOrderNumber);
+        } else {
+            console.error('Form elements not found:', {
+                createOrderInput: !!createOrderInput,
+                updateOrderInput: !!updateOrderInput,
+                editOrderNumberInput: !!editOrderNumberInput
+            });
         }
         
         // Update form submit button text if it exists
