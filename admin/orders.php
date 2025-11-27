@@ -4364,13 +4364,17 @@ function printIngredients(orderNumberOrId) {
                                     const newGrams = convertToGrams(quantity, unit);
                                     if (existingGrams !== null && newGrams !== null) {
                                         const totalGrams = existingGrams + newGrams;
-                                        const preferredUnit = existingIng.originalUnit || existingIng.unit || unit || 'g';
+                                        // Preserve original unit from database
+                                        const preferredUnit = existingIng.originalUnit || unit || 'g';
                                         const converted = convertFromGrams(totalGrams, preferredUnit);
                                         
                                         if (converted) {
                                             existingIng.quantity = converted.quantity;
                                             existingIng.unit = converted.unit;
-                                            existingIng.originalUnit = preferredUnit;
+                                            // Keep the original unit from database (don't change it)
+                                            if (!existingIng.originalUnit) {
+                                                existingIng.originalUnit = preferredUnit;
+                                            }
                                         }
                                     }
                                 } else {
@@ -4383,28 +4387,14 @@ function printIngredients(orderNumberOrId) {
                                 }
                             }
                         } else {
-                            // Add new ingredient - preserve the original unit
-                            const preferredUnit = unit || '';
-                            let finalQuantity = quantity;
-                            let finalUnit = preferredUnit;
-                            
-                            // Only convert if it's a weight unit
-                            if (isWeightUnit(unit)) {
-                                const grams = convertToGrams(quantity, unit);
-                                if (grams !== null) {
-                                    const converted = convertFromGrams(grams, preferredUnit);
-                                    if (converted) {
-                                        finalQuantity = converted.quantity;
-                                        finalUnit = converted.unit;
-                                    }
-                                }
-                            }
+                            // Add new ingredient - preserve the original unit from database
+                            const originalUnit = unit || '';
                             
                             ingredientsByDish[extraDishId].categories[categoryId].ingredients[key] = {
                                 ingredient_name: ingredientName,
-                                quantity: finalQuantity,
-                                unit: finalUnit,
-                                originalUnit: preferredUnit
+                                quantity: quantity,
+                                unit: originalUnit, // Keep original unit from database
+                                originalUnit: originalUnit // Store original unit from database
                             };
                         }
                     }
@@ -4548,13 +4538,17 @@ function printIngredients(orderNumberOrId) {
                                 
                                 if (existingGrams !== null && newGrams !== null) {
                                     const totalGrams = existingGrams + newGrams;
-                                    const preferredUnit = existingIng.originalUnit || existingIng.unit || ing.originalUnit || ing.unit || 'g';
+                                    // Preserve original unit from database
+                                    const preferredUnit = existingIng.originalUnit || ing.originalUnit || ing.unit || 'g';
                                     const converted = convertFromGrams(totalGrams, preferredUnit);
                                     
                                     if (converted) {
                                         existingIng.quantity = converted.quantity;
                                         existingIng.unit = converted.unit;
-                                        existingIng.originalUnit = preferredUnit;
+                                        // Keep the original unit from database (don't change it)
+                                        if (!existingIng.originalUnit) {
+                                            existingIng.originalUnit = preferredUnit;
+                                        }
                                     }
                                 }
                             } else {
@@ -4659,12 +4653,20 @@ function printIngredients(orderNumberOrId) {
                         }
                         
                         // Format quantity based on unit type
-                        // Preserve the original unit - don't auto-convert grams to kg
+                        // Use original unit from database, only convert g to kg when >= 1000
                         let unitLower = unit.toLowerCase().trim();
                         const gramUnits = ['g', 'gram', 'grams', 'گرام'];
                         let quantityUnit = '';
                         
-                        // Use the original unit, don't auto-convert
+                        // Only convert g to kg if quantity >= 1000, preserve all other units as-is
+                        const isGramUnit = gramUnits.includes(unitLower) || unit === 'گرام';
+                        if (isGramUnit && quantity >= 1000) {
+                            // Convert grams to kg for display only
+                            quantity = quantity / 1000;
+                            unit = 'kg';
+                            unitLower = 'kg';
+                        }
+                        
                         const finalUnitLower = unitLower;
                         
                         // Special handling for kg/kilogram: split into kilos and grams
