@@ -4069,8 +4069,48 @@ function printIngredients(orderNumberOrId) {
     };
     
     // Unit conversion helper functions
+    // Check if a unit is a weight unit (can be converted to grams)
+    function isWeightUnit(unit) {
+        if (!unit) return false;
+        const unitLower = unit.toLowerCase().trim();
+        const weightUnits = ['kg', 'kilogram', 'kilograms', 'کلو', 'g', 'gram', 'grams', 'گرام', 'mg', 'milligram', 'milligrams', 'oz', 'ounce', 'lb', 'pound'];
+        return weightUnits.includes(unitLower) || unit === 'کلو' || unit === 'گرام';
+    }
+    
+    // Check if units are compatible (same type)
+    function areUnitsCompatible(unit1, unit2) {
+        if (!unit1 || !unit2) return false;
+        const u1 = unit1.toLowerCase().trim();
+        const u2 = unit2.toLowerCase().trim();
+        
+        // If both are weight units, they're compatible
+        if (isWeightUnit(unit1) && isWeightUnit(unit2)) return true;
+        
+        // If both are volume units, they're compatible
+        const volumeUnits = ['liter', 'litre', 'liters', 'litres', 'l', 'ml', 'milliliter', 'milliliters', 'cup', 'tbsp', 'tablespoon', 'tsp', 'teaspoon', 'oz_fluid', 'fl oz'];
+        const isVol1 = volumeUnits.includes(u1);
+        const isVol2 = volumeUnits.includes(u2);
+        if (isVol1 && isVol2) return true;
+        
+        // If both are count units, they're compatible
+        const countUnits = ['piece', 'pieces', 'عدد'];
+        const isCount1 = countUnits.includes(u1);
+        const isCount2 = countUnits.includes(u2);
+        if (isCount1 && isCount2) return true;
+        
+        // If units are exactly the same, they're compatible
+        if (u1 === u2) return true;
+        
+        return false;
+    }
+    
     function convertToGrams(quantity, unit) {
         if (!quantity || isNaN(quantity)) return 0;
+        if (!isWeightUnit(unit)) {
+            // For non-weight units, return null to indicate cannot convert
+            return null;
+        }
+        
         const unitLower = (unit || '').toLowerCase().trim();
         const qty = parseFloat(quantity);
         
@@ -4081,13 +4121,26 @@ function printIngredients(orderNumberOrId) {
             return qty; // already in grams
         } else if (unitLower === 'mg' || unitLower === 'milligram' || unitLower === 'milligrams') {
             return qty / 1000; // mg to grams
+        } else if (unitLower === 'oz' || unitLower === 'ounce') {
+            return qty * 28.3495; // oz to grams
+        } else if (unitLower === 'lb' || unitLower === 'pound') {
+            return qty * 453.592; // lb to grams
         }
-        // For other units, assume they're already in grams or return as-is
+        // For other weight units, assume grams
         return qty;
     }
     
     function convertFromGrams(grams, preferredUnit) {
+        if (grams === null || grams === undefined) {
+            // Cannot convert non-weight units
+            return null;
+        }
         if (!grams || isNaN(grams) || grams === 0) return { quantity: 0, unit: preferredUnit || 'g' };
+        
+        // If preferred unit is not a weight unit, preserve it as-is
+        if (!isWeightUnit(preferredUnit)) {
+            return { quantity: grams, unit: preferredUnit || 'g' };
+        }
         
         const prefUnitLower = (preferredUnit || '').toLowerCase().trim();
         
@@ -4099,6 +4152,16 @@ function printIngredients(orderNumberOrId) {
         // If preferred unit is g/gram/grams/گرام, keep it in grams
         if (prefUnitLower === 'g' || prefUnitLower === 'gram' || prefUnitLower === 'grams' || preferredUnit === 'گرام') {
             return { quantity: grams, unit: 'g' };
+        }
+        
+        // If preferred unit is oz/ounce
+        if (prefUnitLower === 'oz' || prefUnitLower === 'ounce') {
+            return { quantity: grams / 28.3495, unit: 'oz' };
+        }
+        
+        // If preferred unit is lb/pound
+        if (prefUnitLower === 'lb' || prefUnitLower === 'pound') {
+            return { quantity: grams / 453.592, unit: 'lb' };
         }
         
         // If no preferred unit specified, use best fit: kg if >= 1000g, otherwise grams
@@ -4166,41 +4229,69 @@ function printIngredients(orderNumberOrId) {
             
             // Add or update ingredient in category - combine quantities if same ingredient appears
             if (ingredientsByDish[dishKey].categories[categoryId].ingredients[key]) {
-                // FIXED: Convert both quantities to grams before adding, then convert back
                 const existingIng = ingredientsByDish[dishKey].categories[categoryId].ingredients[key];
-                const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
-                const newGrams = convertToGrams(scaledQuantity, ingUnit);
-                const totalGrams = existingGrams + newGrams;
                 
-                // Preserve the original unit preference - use existing unit if it exists, otherwise use the new ingredient's unit
-                const preferredUnit = existingIng.originalUnit || existingIng.unit || ingUnit || 'g';
-                const converted = convertFromGrams(totalGrams, preferredUnit);
-                
-                // Track calculation details
-                const existingCalc = existingIng.calculationDetails || (existingIng.quantity + ' ' + existingIng.unit);
-                const newCalc = scaledQuantity + ' ' + ingUnit;
-                const calcDetails = existingCalc + ' + ' + newCalc + ' = ' + converted.quantity + ' ' + converted.unit;
-                
-                existingIng.quantity = converted.quantity;
-                existingIng.unit = converted.unit;
-                existingIng.originalUnit = preferredUnit;
-                existingIng.calculationDetails = calcDetails;
+                // Check if units are compatible for conversion
+                if (areUnitsCompatible(existingIng.unit, ingUnit)) {
+                    // Units are compatible - convert and combine
+                    if (isWeightUnit(existingIng.unit) && isWeightUnit(ingUnit)) {
+                        // Both are weight units - convert to grams, add, convert back
+                        const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
+                        const newGrams = convertToGrams(scaledQuantity, ingUnit);
+                        const totalGrams = existingGrams + newGrams;
+                        
+                        // Preserve the original unit preference
+                        const preferredUnit = existingIng.originalUnit || existingIng.unit || ingUnit || 'g';
+                        const converted = convertFromGrams(totalGrams, preferredUnit);
+                        
+                        if (converted) {
+                            existingIng.quantity = converted.quantity;
+                            existingIng.unit = converted.unit;
+                            existingIng.originalUnit = preferredUnit;
+                        }
+                    } else {
+                        // Non-weight units - just add quantities if units match exactly
+                        if (existingIng.unit === ingUnit || (!existingIng.unit && !ingUnit)) {
+                            existingIng.quantity = parseFloat(existingIng.quantity) + parseFloat(scaledQuantity);
+                            existingIng.unit = existingIng.unit || ingUnit;
+                            existingIng.originalUnit = existingIng.originalUnit || ingUnit;
+                        } else {
+                            // Units don't match - keep existing, but track separately
+                            existingIng.quantity = parseFloat(existingIng.quantity);
+                            existingIng.unit = existingIng.unit;
+                            existingIng.originalUnit = existingIng.originalUnit || existingIng.unit;
+                        }
+                    }
+                } else {
+                    // Units are not compatible - keep existing unit, don't combine
+                    existingIng.quantity = parseFloat(existingIng.quantity);
+                    existingIng.unit = existingIng.unit;
+                    existingIng.originalUnit = existingIng.originalUnit || existingIng.unit;
+                }
             } else {
                 // Add new ingredient - preserve the original unit
-                const grams = convertToGrams(scaledQuantity, ingUnit);
-                const preferredUnit = ingUnit || 'g';
-                const converted = convertFromGrams(grams, preferredUnit);
+                const preferredUnit = ingUnit || '';
+                let finalQuantity = scaledQuantity;
+                let finalUnit = preferredUnit;
                 
-                // Track calculation: scaled quantity from dish recipe
-                const calcDetails = scaledQuantity + ' ' + ingUnit + ' (from ' + orderQuantity + 'x dish)';
+                // Only convert if it's a weight unit and we want to normalize
+                if (isWeightUnit(ingUnit)) {
+                    const grams = convertToGrams(scaledQuantity, ingUnit);
+                    if (grams !== null) {
+                        const converted = convertFromGrams(grams, preferredUnit);
+                        if (converted) {
+                            finalQuantity = converted.quantity;
+                            finalUnit = converted.unit;
+                        }
+                    }
+                }
                 
                 ingredientsByDish[dishKey].categories[categoryId].ingredients[key] = {
                     ingredient_id: ingredientId,
                     ingredient_name: ingredientName,
-                    quantity: converted.quantity,
-                    unit: converted.unit,
-                    originalUnit: preferredUnit,
-                    calculationDetails: calcDetails
+                    quantity: finalQuantity,
+                    unit: finalUnit,
+                    originalUnit: preferredUnit
                 };
             }
         });
@@ -4275,38 +4366,56 @@ function printIngredients(orderNumberOrId) {
                         // Add or update ingredient in category - FIXED: Convert units before combining
                         if (ingredientsByDish[extraDishId].categories[categoryId].ingredients[key]) {
                             const existingIng = ingredientsByDish[extraDishId].categories[categoryId].ingredients[key];
-                            const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
-                            const newGrams = convertToGrams(quantity, unit);
-                            const totalGrams = existingGrams + newGrams;
                             
-                            // Preserve the original unit preference
-                            const preferredUnit = existingIng.originalUnit || existingIng.unit || unit || 'g';
-                            const converted = convertFromGrams(totalGrams, preferredUnit);
-                            
-                            // Track calculation details
-                            const existingCalc = existingIng.calculationDetails || (existingIng.quantity + ' ' + existingIng.unit);
-                            const newCalc = quantity + ' ' + unit;
-                            const calcDetails = existingCalc + ' + ' + newCalc + ' = ' + converted.quantity + ' ' + converted.unit;
-                            
-                            existingIng.quantity = converted.quantity;
-                            existingIng.unit = converted.unit;
-                            existingIng.originalUnit = preferredUnit;
-                            existingIng.calculationDetails = calcDetails;
+                            // Check if units are compatible
+                            if (areUnitsCompatible(existingIng.unit, unit)) {
+                                if (isWeightUnit(existingIng.unit) && isWeightUnit(unit)) {
+                                    // Both are weight units - convert to grams, add, convert back
+                                    const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
+                                    const newGrams = convertToGrams(quantity, unit);
+                                    if (existingGrams !== null && newGrams !== null) {
+                                        const totalGrams = existingGrams + newGrams;
+                                        const preferredUnit = existingIng.originalUnit || existingIng.unit || unit || 'g';
+                                        const converted = convertFromGrams(totalGrams, preferredUnit);
+                                        
+                                        if (converted) {
+                                            existingIng.quantity = converted.quantity;
+                                            existingIng.unit = converted.unit;
+                                            existingIng.originalUnit = preferredUnit;
+                                        }
+                                    }
+                                } else {
+                                    // Non-weight units - add if units match
+                                    if (existingIng.unit === unit || (!existingIng.unit && !unit)) {
+                                        existingIng.quantity = parseFloat(existingIng.quantity) + parseFloat(quantity);
+                                        existingIng.unit = existingIng.unit || unit;
+                                        existingIng.originalUnit = existingIng.originalUnit || unit;
+                                    }
+                                }
+                            }
                         } else {
                             // Add new ingredient - preserve the original unit
-                            const grams = convertToGrams(quantity, unit);
-                            const preferredUnit = unit || 'g';
-                            const converted = convertFromGrams(grams, preferredUnit);
+                            const preferredUnit = unit || '';
+                            let finalQuantity = quantity;
+                            let finalUnit = preferredUnit;
                             
-                            // Track calculation: extra ingredient
-                            const calcDetails = quantity + ' ' + unit + ' (extra ingredient)';
+                            // Only convert if it's a weight unit
+                            if (isWeightUnit(unit)) {
+                                const grams = convertToGrams(quantity, unit);
+                                if (grams !== null) {
+                                    const converted = convertFromGrams(grams, preferredUnit);
+                                    if (converted) {
+                                        finalQuantity = converted.quantity;
+                                        finalUnit = converted.unit;
+                                    }
+                                }
+                            }
                             
                             ingredientsByDish[extraDishId].categories[categoryId].ingredients[key] = {
                                 ingredient_name: ingredientName,
-                                quantity: converted.quantity,
-                                unit: converted.unit,
-                                originalUnit: preferredUnit,
-                                calculationDetails: calcDetails
+                                quantity: finalQuantity,
+                                unit: finalUnit,
+                                originalUnit: preferredUnit
                             };
                         }
                     }
@@ -4440,34 +4549,43 @@ function printIngredients(orderNumberOrId) {
                     // Combine ingredients with same name/ID within the category - FIXED: Convert units before adding
                     if (ingredientsByCategory[categoryId].ingredients[key]) {
                         const existingIng = ingredientsByCategory[categoryId].ingredients[key];
-                        // Convert both to grams before adding
-                        const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
-                        const newGrams = convertToGrams(parseFloat(ing.quantity) || 0, ing.unit || '');
-                        const totalGrams = existingGrams + newGrams;
                         
-                        // Preserve the original unit preference
-                        const preferredUnit = existingIng.originalUnit || existingIng.unit || ing.originalUnit || ing.unit || 'g';
-                        const converted = convertFromGrams(totalGrams, preferredUnit);
-                        
-                        // Track calculation details
-                        const existingCalc = existingIng.calculationDetails || (existingIng.quantity + ' ' + existingIng.unit);
-                        const newCalc = ing.calculationDetails || (ing.quantity + ' ' + ing.unit);
-                        const calcDetails = existingCalc + ' + ' + newCalc + ' = ' + converted.quantity + ' ' + converted.unit;
-                        
-                        existingIng.quantity = converted.quantity;
-                        existingIng.unit = converted.unit;
-                        existingIng.originalUnit = preferredUnit;
-                        existingIng.calculationDetails = calcDetails;
+                        // Check if units are compatible
+                        if (areUnitsCompatible(existingIng.unit, ing.unit || '')) {
+                            if (isWeightUnit(existingIng.unit) && isWeightUnit(ing.unit || '')) {
+                                // Both are weight units - convert to grams, add, convert back
+                                const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
+                                const newGrams = convertToGrams(parseFloat(ing.quantity) || 0, ing.unit || '');
+                                
+                                if (existingGrams !== null && newGrams !== null) {
+                                    const totalGrams = existingGrams + newGrams;
+                                    const preferredUnit = existingIng.originalUnit || existingIng.unit || ing.originalUnit || ing.unit || 'g';
+                                    const converted = convertFromGrams(totalGrams, preferredUnit);
+                                    
+                                    if (converted) {
+                                        existingIng.quantity = converted.quantity;
+                                        existingIng.unit = converted.unit;
+                                        existingIng.originalUnit = preferredUnit;
+                                    }
+                                }
+                            } else {
+                                // Non-weight units - add if units match
+                                if (existingIng.unit === (ing.unit || '') || (!existingIng.unit && !ing.unit)) {
+                                    existingIng.quantity = parseFloat(existingIng.quantity) + parseFloat(ing.quantity || 0);
+                                    existingIng.unit = existingIng.unit || ing.unit || '';
+                                    existingIng.originalUnit = existingIng.originalUnit || existingIng.unit || ing.originalUnit || ing.unit || '';
+                                }
+                            }
+                        }
                     } else {
-                        // Add new ingredient - preserve original unit and calculation details
-                        const originalUnit = ing.originalUnit || ing.unit || 'g';
+                        // Add new ingredient - preserve original unit
+                        const originalUnit = ing.originalUnit || ing.unit || '';
                         ingredientsByCategory[categoryId].ingredients[key] = {
                             ingredient_id: ingredientId,
                             ingredient_name: ingredientName,
                             quantity: parseFloat(ing.quantity) || 0,
                             unit: ing.unit || '',
-                            originalUnit: originalUnit,
-                            calculationDetails: ing.calculationDetails || ''
+                            originalUnit: originalUnit
                         };
                     }
                 });
@@ -4599,12 +4717,7 @@ function printIngredients(orderNumberOrId) {
                             quantityUnit = displayQuantity + (unitUrdu ? ' ' + unitUrdu : '');
                         }
                         
-                        // Add calculation details for debugging/tracking
-                        const calcDetails = ing.calculationDetails || '';
-                        if (calcDetails) {
-                            // Display calculation details in a readable format
-                            quantityUnit += '<br><span style="font-size: 0.75em; color: #94a3b8; font-style: italic;">' + escapeHtml(calcDetails) + '</span>';
-                        }
+                        // Calculation details are hidden from display as requested
                         const ingredientName = ing.ingredient_name || 'N/A';
                         
                         // Format for 6-column layout: Clean aligned display
