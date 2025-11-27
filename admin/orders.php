@@ -4091,11 +4091,17 @@ function printIngredients(orderNumberOrId) {
         
         const prefUnitLower = (preferredUnit || '').toLowerCase().trim();
         
-        // If preferred unit is kg and quantity is >= 1000g, use kg
-        if ((prefUnitLower === 'kg' || prefUnitLower === 'kilogram' || preferredUnit === 'کلو') && grams >= 1000) {
+        // Preserve the preferred unit if it's kg/kilogram/کلو
+        if (prefUnitLower === 'kg' || prefUnitLower === 'kilogram' || prefUnitLower === 'kilograms' || preferredUnit === 'کلو') {
             return { quantity: grams / 1000, unit: 'kg' };
         }
-        // If quantity is >= 1000g, convert to kg for readability
+        
+        // If preferred unit is g/gram/grams/گرام, keep it in grams
+        if (prefUnitLower === 'g' || prefUnitLower === 'gram' || prefUnitLower === 'grams' || preferredUnit === 'گرام') {
+            return { quantity: grams, unit: 'g' };
+        }
+        
+        // If no preferred unit specified, use best fit: kg if >= 1000g, otherwise grams
         if (grams >= 1000) {
             return { quantity: grams / 1000, unit: 'kg' };
         }
@@ -4166,23 +4172,35 @@ function printIngredients(orderNumberOrId) {
                 const newGrams = convertToGrams(scaledQuantity, ingUnit);
                 const totalGrams = existingGrams + newGrams;
                 
-                // Convert back to appropriate unit (prefer the existing unit if it's kg, otherwise use best fit)
-                const preferredUnit = (existingIng.unit && (existingIng.unit.toLowerCase().includes('kg') || existingIng.unit === 'کلو')) 
-                    ? existingIng.unit : ingUnit;
+                // Preserve the original unit preference - use existing unit if it exists, otherwise use the new ingredient's unit
+                const preferredUnit = existingIng.originalUnit || existingIng.unit || ingUnit || 'g';
                 const converted = convertFromGrams(totalGrams, preferredUnit);
+                
+                // Track calculation details
+                const existingCalc = existingIng.calculationDetails || (existingIng.quantity + ' ' + existingIng.unit);
+                const newCalc = scaledQuantity + ' ' + ingUnit;
+                const calcDetails = existingCalc + ' + ' + newCalc + ' = ' + converted.quantity + ' ' + converted.unit;
                 
                 existingIng.quantity = converted.quantity;
                 existingIng.unit = converted.unit;
+                existingIng.originalUnit = preferredUnit;
+                existingIng.calculationDetails = calcDetails;
             } else {
-                // Add new ingredient - convert to appropriate unit if needed
+                // Add new ingredient - preserve the original unit
                 const grams = convertToGrams(scaledQuantity, ingUnit);
-                const converted = convertFromGrams(grams, ingUnit);
+                const preferredUnit = ingUnit || 'g';
+                const converted = convertFromGrams(grams, preferredUnit);
+                
+                // Track calculation: scaled quantity from dish recipe
+                const calcDetails = scaledQuantity + ' ' + ingUnit + ' (from ' + orderQuantity + 'x dish)';
                 
                 ingredientsByDish[dishKey].categories[categoryId].ingredients[key] = {
                     ingredient_id: ingredientId,
                     ingredient_name: ingredientName,
                     quantity: converted.quantity,
-                    unit: converted.unit
+                    unit: converted.unit,
+                    originalUnit: preferredUnit,
+                    calculationDetails: calcDetails
                 };
             }
         });
@@ -4261,22 +4279,34 @@ function printIngredients(orderNumberOrId) {
                             const newGrams = convertToGrams(quantity, unit);
                             const totalGrams = existingGrams + newGrams;
                             
-                            // Convert back to appropriate unit
-                            const preferredUnit = (existingIng.unit && (existingIng.unit.toLowerCase().includes('kg') || existingIng.unit === 'کلو')) 
-                                ? existingIng.unit : unit;
+                            // Preserve the original unit preference
+                            const preferredUnit = existingIng.originalUnit || existingIng.unit || unit || 'g';
                             const converted = convertFromGrams(totalGrams, preferredUnit);
+                            
+                            // Track calculation details
+                            const existingCalc = existingIng.calculationDetails || (existingIng.quantity + ' ' + existingIng.unit);
+                            const newCalc = quantity + ' ' + unit;
+                            const calcDetails = existingCalc + ' + ' + newCalc + ' = ' + converted.quantity + ' ' + converted.unit;
                             
                             existingIng.quantity = converted.quantity;
                             existingIng.unit = converted.unit;
+                            existingIng.originalUnit = preferredUnit;
+                            existingIng.calculationDetails = calcDetails;
                         } else {
-                            // Add new ingredient - convert to appropriate unit if needed
+                            // Add new ingredient - preserve the original unit
                             const grams = convertToGrams(quantity, unit);
-                            const converted = convertFromGrams(grams, unit);
+                            const preferredUnit = unit || 'g';
+                            const converted = convertFromGrams(grams, preferredUnit);
+                            
+                            // Track calculation: extra ingredient
+                            const calcDetails = quantity + ' ' + unit + ' (extra ingredient)';
                             
                             ingredientsByDish[extraDishId].categories[categoryId].ingredients[key] = {
                                 ingredient_name: ingredientName,
                                 quantity: converted.quantity,
-                                unit: converted.unit
+                                unit: converted.unit,
+                                originalUnit: preferredUnit,
+                                calculationDetails: calcDetails
                             };
                         }
                     }
@@ -4407,17 +4437,37 @@ function printIngredients(orderNumberOrId) {
                     const ingredientName = ing.ingredient_name || 'N/A';
                     const key = ingredientId > 0 ? ingredientId : ingredientName.toLowerCase().trim();
                     
-                    // Combine ingredients with same name/ID within the category
+                    // Combine ingredients with same name/ID within the category - FIXED: Convert units before adding
                     if (ingredientsByCategory[categoryId].ingredients[key]) {
-                        // Add quantities if same ingredient
-                        ingredientsByCategory[categoryId].ingredients[key].quantity += parseFloat(ing.quantity) || 0;
+                        const existingIng = ingredientsByCategory[categoryId].ingredients[key];
+                        // Convert both to grams before adding
+                        const existingGrams = convertToGrams(existingIng.quantity, existingIng.unit);
+                        const newGrams = convertToGrams(parseFloat(ing.quantity) || 0, ing.unit || '');
+                        const totalGrams = existingGrams + newGrams;
+                        
+                        // Preserve the original unit preference
+                        const preferredUnit = existingIng.originalUnit || existingIng.unit || ing.originalUnit || ing.unit || 'g';
+                        const converted = convertFromGrams(totalGrams, preferredUnit);
+                        
+                        // Track calculation details
+                        const existingCalc = existingIng.calculationDetails || (existingIng.quantity + ' ' + existingIng.unit);
+                        const newCalc = ing.calculationDetails || (ing.quantity + ' ' + ing.unit);
+                        const calcDetails = existingCalc + ' + ' + newCalc + ' = ' + converted.quantity + ' ' + converted.unit;
+                        
+                        existingIng.quantity = converted.quantity;
+                        existingIng.unit = converted.unit;
+                        existingIng.originalUnit = preferredUnit;
+                        existingIng.calculationDetails = calcDetails;
                     } else {
-                        // Add new ingredient
+                        // Add new ingredient - preserve original unit and calculation details
+                        const originalUnit = ing.originalUnit || ing.unit || 'g';
                         ingredientsByCategory[categoryId].ingredients[key] = {
                             ingredient_id: ingredientId,
                             ingredient_name: ingredientName,
                             quantity: parseFloat(ing.quantity) || 0,
-                            unit: ing.unit || ''
+                            unit: ing.unit || '',
+                            originalUnit: originalUnit,
+                            calculationDetails: ing.calculationDetails || ''
                         };
                     }
                 });
@@ -4501,25 +4551,13 @@ function printIngredients(orderNumberOrId) {
                         }
                         
                         // Format quantity based on unit type
+                        // Preserve the original unit - don't auto-convert grams to kg
                         let unitLower = unit.toLowerCase().trim();
                         const gramUnits = ['g', 'gram', 'grams', 'گرام'];
                         let quantityUnit = '';
                         
-                        // Check if unit is grams (English or Urdu) - handle both English and Urdu units
-                        const isGramUnit = gramUnits.includes(unitLower) || unit === 'گرام' || unit.trim() === 'گرام';
-                        
-                        // Convert large gram values to kg for better readability
-                        if (isGramUnit && quantity >= 1000) {
-                            const gramsValue = parseFloat(quantity);
-                            if (!isNaN(gramsValue)) {
-                                quantity = gramsValue / 1000;
-                                unit = 'kg';
-                                unitLower = 'kg';
-                            }
-                        }
-                        
-                        // Update unitLower after potential conversion
-                        const finalUnitLower = unit.toLowerCase().trim();
+                        // Use the original unit, don't auto-convert
+                        const finalUnitLower = unitLower;
                         
                         // Special handling for kg/kilogram: split into kilos and grams
                         if (finalUnitLower === 'kg' || finalUnitLower === 'kilogram' || finalUnitLower === 'kilograms' || unit === 'کلو') {
@@ -4543,7 +4581,7 @@ function printIngredients(orderNumberOrId) {
                             const hasNumericQuantity = !isNaN(numericQuantity);
                             
                             if (hasNumericQuantity) {
-                                // Check if unit is grams (English or Urdu) - use finalUnitLower after conversion
+                                // Check if unit is grams (English or Urdu)
                                 const isGramUnitFinal = gramUnits.includes(finalUnitLower) || unit === 'گرام' || unit.trim() === 'گرام';
                                 if (isGramUnitFinal) {
                                     // For grams, show as integer if whole number, otherwise show with decimals
@@ -4559,6 +4597,13 @@ function printIngredients(orderNumberOrId) {
                             
                             const unitUrdu = translateUnitToUrdu(unit);
                             quantityUnit = displayQuantity + (unitUrdu ? ' ' + unitUrdu : '');
+                        }
+                        
+                        // Add calculation details for debugging/tracking
+                        const calcDetails = ing.calculationDetails || '';
+                        if (calcDetails) {
+                            // Display calculation details in a readable format
+                            quantityUnit += '<br><span style="font-size: 0.75em; color: #94a3b8; font-style: italic;">' + escapeHtml(calcDetails) + '</span>';
                         }
                         const ingredientName = ing.ingredient_name || 'N/A';
                         
