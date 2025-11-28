@@ -482,6 +482,40 @@ include __DIR__ . '/../includes/header.php';
                                           placeholder="Describe this dish, its taste, and cooking style..."><?php echo htmlspecialchars($edit_dish['description'] ?? ''); ?></textarea>
                             </div>
                             
+                            <!-- Category -->
+                            <div class="mb-3">
+                                <label for="category_id" class="form-label fw-semibold">
+                                    <i class="bi bi-folder me-1 text-primary"></i>
+                                    Category
+                                </label>
+                                <div class="d-flex gap-2">
+                                    <div class="searchable-select-wrapper flex-grow-1">
+                                        <input type="text" class="form-control searchable-select-input" 
+                                               placeholder="Search categories..." 
+                                               autocomplete="off"
+                                               style="display: none;">
+                                        <select class="form-select searchable-select" id="category_id" name="category_id">
+                                            <option value=""><?php echo empty($edit_dish['category_id']) ? 'No Category - Click to Add' : 'Select Category'; ?></option>
+                                            <?php foreach ($categories as $cat): ?>
+                                                <option value="<?php echo $cat['id']; ?>" 
+                                                        <?php echo (isset($edit_dish['category_id']) && $edit_dish['category_id'] == $cat['id']) ? 'selected' : ''; ?>
+                                                        data-search="<?php echo htmlspecialchars(strtolower($cat['name'])); ?>">
+                                                    <?php echo htmlspecialchars($cat['name']); ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addCategoryModal" data-context="dish" title="Add New Category">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                                <?php if (empty($edit_dish['category_id'])): ?>
+                                    <small class="form-text text-warning">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>This dish has no category. Please add one.
+                                    </small>
+                                <?php endif; ?>
+                            </div>
+                            
                             <!-- Dish Image -->
                             <div class="mb-3">
                                 <label for="dish_image" class="form-label fw-semibold">
@@ -1450,8 +1484,8 @@ function initSearchableSelect(selectElement) {
 document.addEventListener('DOMContentLoaded', function() {
     // Category field removed - no longer initializing dish category select
     
-    // Initialize existing ingredient selects
-    document.querySelectorAll('.ingredient-category-select, .ingredient-select').forEach(select => {
+    // Initialize existing ingredient selects and dish category select
+    document.querySelectorAll('.ingredient-category-select, .ingredient-select, #category_id').forEach(select => {
         initSearchableSelect(select);
     });
     
@@ -2294,8 +2328,26 @@ function selectCategory(categoryId, categoryName) {
                 categorySelect.dispatchEvent(new Event('change'));
             }
         }
-    } else {
-        // Category field removed - no longer updating dish category select
+    } else if (categoryModalContext === 'dish') {
+        // Update dish category select
+        const dishCategorySelect = document.getElementById('category_id');
+        if (dishCategorySelect) {
+            // Check if option exists, if not add it
+            let option = dishCategorySelect.querySelector(`option[value="${categoryId}"]`);
+            if (!option) {
+                option = document.createElement('option');
+                option.value = categoryId;
+                option.textContent = categoryName;
+                option.setAttribute('data-search', categoryName.toLowerCase());
+                // Insert before the last option (which might be empty)
+                dishCategorySelect.appendChild(option);
+            }
+            dishCategorySelect.value = categoryId;
+            // Re-initialize searchable select if it exists
+            if (dishCategorySelect.classList.contains('searchable-select')) {
+                initSearchableSelect(dishCategorySelect);
+            }
+        }
     }
     
     // Close modal
@@ -2526,9 +2578,9 @@ window.saveCategory = function() {
             successDiv.textContent = 'Category added successfully!';
             successDiv.style.display = 'block';
             
-            // Add to all category selects (dish category field removed, only ingredient categories remain)
+            // Add to all category selects (dish category and ingredient categories)
             const category = data.category;
-            const categorySelects = document.querySelectorAll('.ingredient-category-select, #newIngredientCategory');
+            const categorySelects = document.querySelectorAll('.ingredient-category-select, #newIngredientCategory, #category_id');
             
             categorySelects.forEach(select => {
                 const option = document.createElement('option');
@@ -2536,6 +2588,10 @@ window.saveCategory = function() {
                 option.textContent = category.name;
                 option.setAttribute('data-search', category.name.toLowerCase());
                 select.appendChild(option);
+                // Re-initialize searchable select if it exists
+                if (select.classList.contains('searchable-select')) {
+                    initSearchableSelect(select);
+                }
             });
             
             // Add to modal categories list

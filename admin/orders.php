@@ -677,9 +677,19 @@ foreach ($previous_customer_names as $prev_cust) {
 // Sort by name
 ksort($all_customer_names);
 
+// Get all categories for dish selection modal
+$dish_categories = [];
+$cat_result = $conn->query("SELECT DISTINCT c.id, c.name, c.description 
+    FROM categories c 
+    INNER JOIN dishes d ON d.category_id = c.id 
+    ORDER BY c.name");
+if ($cat_result && $cat_result->num_rows > 0) {
+    $dish_categories = $cat_result->fetch_all(MYSQLI_ASSOC);
+}
+
 // Get all dishes for dropdown with images and categories
 $dishes = [];
-$result = $conn->query("SELECT d.id, d.name, d.image, d.base_unit, c.name as category_name 
+$result = $conn->query("SELECT d.id, d.name, d.image, d.base_unit, d.category_id, c.name as category_name 
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
     ORDER BY d.name");
@@ -2023,45 +2033,93 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
+                <!-- Back Button (shown when viewing dishes) -->
+                <div id="backToCategoriesBtn" class="mb-3" style="display: none;">
+                    <button type="button" class="btn btn-outline-secondary" onclick="showCategoriesInModal()">
+                        <i class="bi bi-arrow-left me-2"></i>Back to Categories
+                    </button>
+                </div>
+                
                 <!-- Search Bar -->
                 <div class="mb-4">
                     <div class="input-group input-group-lg">
                         <span class="input-group-text" style="background: #f8fafc; border-right: none;">
                             <i class="bi bi-search text-muted"></i>
                         </span>
-                        <input type="text" class="form-control" id="dishSearchInput" placeholder="Search dishes by name or category..." 
-                               style="border-left: none; border-right: none;" oninput="filterDishesInModal(this.value)">
+                        <input type="text" class="form-control" id="dishSearchInput" placeholder="Search..." 
+                               style="border-left: none; border-right: none;" oninput="filterItemsInModal(this.value)">
                         <button class="btn btn-outline-secondary" type="button" onclick="clearDishSearch()">
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
                 </div>
                 
-                <!-- Category Filter -->
-                <div class="mb-4">
-                    <div class="d-flex flex-wrap gap-2" id="categoryFilters">
-                        <button class="btn btn-sm rounded-pill category-filter active" data-category="all" onclick="filterByCategory('all')">
-                            All Categories
-                        </button>
-                        <?php
-                        $categories = [];
-                        foreach ($dishes as $dish) {
-                            $catName = $dish['category_name'] ?? 'Uncategorized';
-                            if (!in_array($catName, $categories)) {
-                                $categories[] = $catName;
-                            }
-                        }
-                        foreach ($categories as $catName):
-                        ?>
-                            <button class="btn btn-sm rounded-pill category-filter" data-category="<?php echo htmlspecialchars($catName); ?>" onclick="filterByCategory('<?php echo htmlspecialchars($catName); ?>')">
-                                <?php echo htmlspecialchars($catName); ?>
-                            </button>
-                        <?php endforeach; ?>
-                    </div>
+                <!-- Categories Grid (shown first) -->
+                <div id="modalCategoriesGrid" class="row g-3">
+                    <?php foreach ($dish_categories as $cat): ?>
+                        <div class="col-md-4 col-lg-3 modal-category-item" 
+                             data-category-id="<?php echo $cat['id']; ?>"
+                             data-category-name="<?php echo htmlspecialchars($cat['name']); ?>"
+                             onclick="selectCategoryInModal(<?php echo $cat['id']; ?>, '<?php echo htmlspecialchars(addslashes($cat['name'])); ?>')">
+                            <div class="card h-100 shadow-sm border-0 category-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
+                                <div class="w-100 d-flex align-items-center justify-content-center" 
+                                     style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="bi bi-folder-fill text-white" style="font-size: 4rem;"></i>
+                                </div>
+                                <div class="card-body p-3">
+                                    <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
+                                        <?php echo htmlspecialchars($cat['name']); ?>
+                                    </h6>
+                                    <?php if (!empty($cat['description'])): ?>
+                                        <small class="text-muted d-block">
+                                            <?php echo htmlspecialchars($cat['description']); ?>
+                                        </small>
+                                    <?php endif; ?>
+                                    <div class="mt-2">
+                                        <span class="badge bg-primary rounded-pill">
+                                            <i class="bi bi-arrow-right me-1"></i>View Dishes
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                    <!-- Uncategorized option -->
+                    <?php
+                    $uncategorized_dishes = array_filter($dishes, function($dish) {
+                        return empty($dish['category_id']);
+                    });
+                    if (!empty($uncategorized_dishes)):
+                    ?>
+                        <div class="col-md-4 col-lg-3 modal-category-item" 
+                             data-category-id="0"
+                             data-category-name="Uncategorized"
+                             onclick="selectCategoryInModal(0, 'Uncategorized')">
+                            <div class="card h-100 shadow-sm border-0 category-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
+                                <div class="w-100 d-flex align-items-center justify-content-center" 
+                                     style="height: 200px; background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
+                                    <i class="bi bi-folder-x text-white" style="font-size: 4rem;"></i>
+                                </div>
+                                <div class="card-body p-3">
+                                    <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
+                                        Uncategorized
+                                    </h6>
+                                    <small class="text-muted d-block">
+                                        Dishes without category
+                                    </small>
+                                    <div class="mt-2">
+                                        <span class="badge bg-secondary rounded-pill">
+                                            <i class="bi bi-arrow-right me-1"></i>View Dishes
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 
-                <!-- Dishes Grid -->
-                <div class="row g-3" id="modalDishesGrid">
+                <!-- Dishes Grid (hidden initially, shown after category selection) -->
+                <div id="modalDishesGrid" class="row g-3" style="display: none;">
                     <?php foreach ($dishes as $dish): 
                         $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
                         $image_exists = !empty($dish['image']) && file_exists(__DIR__ . '/../' . $dish['image']);
@@ -2069,6 +2127,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                         <div class="col-md-4 col-lg-3 modal-dish-item" 
                              data-dish-id="<?php echo $dish['id']; ?>"
                              data-dish-name="<?php echo htmlspecialchars($dish['name']); ?>"
+                             data-category-id="<?php echo $dish['category_id'] ?? '0'; ?>"
                              data-category="<?php echo htmlspecialchars($dish['category_name'] ?? 'Uncategorized'); ?>"
                              onclick="selectDishFromModal(<?php echo $dish['id']; ?>, '<?php echo htmlspecialchars(addslashes($dish['name'])); ?>')">
                             <div class="card h-100 shadow-sm border-0 dish-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
@@ -2106,9 +2165,9 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                 </div>
                 
                 <!-- No Results Message -->
-                <div id="noDishesFound" class="text-center py-5" style="display: none;">
+                <div id="noItemsFound" class="text-center py-5" style="display: none;">
                     <i class="bi bi-search" style="font-size: 4rem; color: #cbd5e1;"></i>
-                    <p class="text-muted mt-3">No dishes found matching your search.</p>
+                    <p class="text-muted mt-3">No items found matching your search.</p>
                 </div>
             </div>
             <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
@@ -5530,12 +5589,13 @@ function formatDateTimeForPrint(dateString) {
 
 // Dish Selection Modal Functions
 let dishSelectionModal = null;
-let currentCategoryFilter = 'all';
+let currentSelectedCategoryId = null;
 let currentDishRowIndex = 0;
 
 // Open dish selection modal
 function openDishSelectionModal(rowIndex) {
     currentDishRowIndex = rowIndex || 0;
+    currentSelectedCategoryId = null;
     
     if (!dishSelectionModal) {
         const modalElement = document.getElementById('dishSelectionModal');
@@ -5545,55 +5605,118 @@ function openDishSelectionModal(rowIndex) {
     }
     if (dishSelectionModal) {
         dishSelectionModal.show();
-        // Reset filters
-        const searchInput = document.getElementById('dishSearchInput');
-        if (searchInput) searchInput.value = '';
-        filterByCategory('all');
+        // Reset to show categories
+        showCategoriesInModal();
     }
 }
 
-// Filter dishes in modal by search term
-function filterDishesInModal(searchTerm) {
-    const searchLower = searchTerm.toLowerCase().trim();
-    const dishItems = document.querySelectorAll('.modal-dish-item');
-    let visibleCount = 0;
+// Show categories in modal
+function showCategoriesInModal() {
+    currentSelectedCategoryId = null;
+    const categoriesGrid = document.getElementById('modalCategoriesGrid');
+    const dishesGrid = document.getElementById('modalDishesGrid');
+    const backBtn = document.getElementById('backToCategoriesBtn');
+    const searchInput = document.getElementById('dishSearchInput');
     
+    if (categoriesGrid) categoriesGrid.style.display = 'block';
+    if (dishesGrid) dishesGrid.style.display = 'none';
+    if (backBtn) backBtn.style.display = 'none';
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.placeholder = 'Search categories...';
+    }
+    
+    // Update modal title
+    const modalTitle = document.getElementById('dishSelectionModalLabel');
+    if (modalTitle) {
+        modalTitle.innerHTML = '<i class="bi bi-folder me-2"></i>Select Category';
+    }
+    
+    filterItemsInModal('');
+}
+
+// Select category in modal and show dishes
+function selectCategoryInModal(categoryId, categoryName) {
+    currentSelectedCategoryId = categoryId;
+    const categoriesGrid = document.getElementById('modalCategoriesGrid');
+    const dishesGrid = document.getElementById('modalDishesGrid');
+    const backBtn = document.getElementById('backToCategoriesBtn');
+    const searchInput = document.getElementById('dishSearchInput');
+    
+    if (categoriesGrid) categoriesGrid.style.display = 'none';
+    if (dishesGrid) dishesGrid.style.display = 'block';
+    if (backBtn) backBtn.style.display = 'block';
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.placeholder = 'Search dishes...';
+    }
+    
+    // Update modal title
+    const modalTitle = document.getElementById('dishSelectionModalLabel');
+    if (modalTitle) {
+        modalTitle.innerHTML = `<i class="bi bi-egg-fried me-2"></i>Select Dish - ${categoryName}`;
+    }
+    
+    // Filter dishes by category
+    const dishItems = document.querySelectorAll('.modal-dish-item');
     dishItems.forEach(item => {
-        const dishName = item.getAttribute('data-dish-name').toLowerCase();
-        const category = item.getAttribute('data-category').toLowerCase();
-        const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
-        const matchesCategory = currentCategoryFilter === 'all' || item.getAttribute('data-category') === currentCategoryFilter;
-        
-        if (matchesSearch && matchesCategory) {
-            item.classList.remove('hidden');
-            visibleCount++;
+        const itemCategoryId = item.getAttribute('data-category-id');
+        if (categoryId == 0) {
+            // Show uncategorized dishes
+            item.style.display = (!itemCategoryId || itemCategoryId == '0') ? 'block' : 'none';
         } else {
-            item.classList.add('hidden');
+            // Show dishes from selected category
+            item.style.display = (itemCategoryId == categoryId) ? 'block' : 'none';
         }
     });
     
+    filterItemsInModal('');
+}
+
+// Filter items in modal (categories or dishes) by search term
+function filterItemsInModal(searchTerm) {
+    const searchLower = searchTerm.toLowerCase().trim();
+    let visibleCount = 0;
+    
+    if (currentSelectedCategoryId === null) {
+        // Filtering categories
+        const categoryItems = document.querySelectorAll('.modal-category-item');
+        categoryItems.forEach(item => {
+            const categoryName = item.getAttribute('data-category-name').toLowerCase();
+            const matchesSearch = !searchTerm || categoryName.includes(searchLower);
+            
+            if (matchesSearch) {
+                item.style.display = 'block';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    } else {
+        // Filtering dishes
+        const dishItems = document.querySelectorAll('.modal-dish-item');
+        dishItems.forEach(item => {
+            // Only filter visible dishes (already filtered by category)
+            if (item.style.display === 'none') return;
+            
+            const dishName = item.getAttribute('data-dish-name').toLowerCase();
+            const category = item.getAttribute('data-category').toLowerCase();
+            const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
+            
+            if (matchesSearch) {
+                item.style.display = 'block';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+    
     // Show/hide no results message
-    const noResults = document.getElementById('noDishesFound');
+    const noResults = document.getElementById('noItemsFound');
     if (noResults) {
         noResults.style.display = visibleCount === 0 ? 'block' : 'none';
     }
-}
-
-// Filter by category
-function filterByCategory(category) {
-    currentCategoryFilter = category;
-    
-    // Update active button
-    document.querySelectorAll('.category-filter').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.getAttribute('data-category') === category) {
-            btn.classList.add('active');
-        }
-    });
-    
-    // Apply filters
-    const searchTerm = document.getElementById('dishSearchInput')?.value || '';
-    filterDishesInModal(searchTerm);
 }
 
 // Clear search
@@ -5601,7 +5724,7 @@ function clearDishSearch() {
     const searchInput = document.getElementById('dishSearchInput');
     if (searchInput) {
         searchInput.value = '';
-        filterDishesInModal('');
+        filterItemsInModal('');
     }
 }
 
