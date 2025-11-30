@@ -2545,23 +2545,29 @@ document.getElementById('searchIngredientsModal').addEventListener('input', func
 
 // Function to save category
 window.saveCategory = function() {
-    const name = document.getElementById('newCategoryName').value.trim();
-    const description = document.getElementById('newCategoryDescription').value.trim();
+    const name = document.getElementById('newCategoryName')?.value.trim() || '';
+    const description = document.getElementById('newCategoryDescription')?.value.trim() || '';
     const errorDiv = document.getElementById('addCategoryError');
     const successDiv = document.getElementById('addCategorySuccess');
     
     // Hide previous messages
-    errorDiv.style.display = 'none';
-    successDiv.style.display = 'none';
+    if (errorDiv) errorDiv.style.display = 'none';
+    if (successDiv) successDiv.style.display = 'none';
     
     if (!name) {
-        errorDiv.textContent = 'Category name is required';
-        errorDiv.style.display = 'block';
+        if (errorDiv) {
+            errorDiv.textContent = 'Category name is required';
+            errorDiv.style.display = 'block';
+        }
         return;
     }
     
     // Disable submit button
-    const submitBtn = event.target;
+    const submitBtn = event?.target || document.getElementById('saveCategoryBtn');
+    if (!submitBtn) {
+        console.error('Submit button not found');
+        return;
+    }
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
     
@@ -2630,27 +2636,38 @@ window.saveCategory = function() {
             reloadIngredientsAndWait();
             
             // Reset form but don't close modal - let user see the new category
-            document.getElementById('addCategoryForm').reset();
-            errorDiv.style.display = 'none';
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            const form = document.getElementById('addCategoryForm');
+            if (form) form.reset();
+            if (errorDiv) errorDiv.style.display = 'none';
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            }
             
             // Auto-select the newly added category after a short delay
             setTimeout(() => {
                 selectCategory(category.id, category.name);
             }, 500);
         } else {
-            errorDiv.textContent = data.error || 'Failed to add category';
-            errorDiv.style.display = 'block';
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            if (errorDiv) {
+                errorDiv.textContent = data.error || 'Failed to add category';
+                errorDiv.style.display = 'block';
+            }
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            }
         }
     })
     .catch(error => {
-        errorDiv.textContent = 'Error: ' + error.message;
-        errorDiv.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+        if (errorDiv) {
+            errorDiv.textContent = 'Error: ' + error.message;
+            errorDiv.style.display = 'block';
+        }
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+        }
     });
 };
 
