@@ -2588,8 +2588,10 @@ window.saveCategory = function() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            successDiv.textContent = 'Category added successfully!';
-            successDiv.style.display = 'block';
+            if (successDiv) {
+                successDiv.textContent = 'Category added successfully!';
+                successDiv.style.display = 'block';
+            }
             
             // Add to category selects based on context
             const category = data.category;
