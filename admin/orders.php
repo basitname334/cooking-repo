@@ -1771,11 +1771,15 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-semibold small">
-                                                <?php e('unit_label'); ?>
+                                                <?php e('unit_label'); ?> <span class="text-danger">*</span>
                                             </label>
-                                            <input type="text" class="form-control extra-ingredient-unit" 
-                                                   name="extra_ingredients[0][unit]" 
-                                                   placeholder="<?php echo t('unit_placeholder', 'kg, g, pieces, etc.'); ?>">
+                                            <select class="form-select extra-ingredient-unit" name="extra_ingredients[0][unit]" required>
+                                                <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
+                                                <option value="کلو">کلو</option>
+                                                <option value="گرام">گرام</option>
+                                                <option value="عدد">عدد</option>
+                                                <option value="گچھی">گچھی</option>
+                                            </select>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small d-block">&nbsp;</label>
@@ -3805,11 +3809,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold small">
-                            ${reviewTranslations.unit_label || 'Unit'}
+                            ${reviewTranslations.unit_label || 'Unit'} <span class="text-danger">*</span>
                         </label>
-                        <input type="text" class="form-control extra-ingredient-unit" 
-                               name="extra_ingredients[${extraIngredientRowCount}][unit]" 
-                               placeholder="${reviewTranslations.unit_placeholder || 'kg, g, pieces, etc.'}">
+                        <select class="form-select extra-ingredient-unit" name="extra_ingredients[${extraIngredientRowCount}][unit]" required>
+                            <option value="">${reviewTranslations.select_unit || 'Select Unit'}</option>
+                            <option value="کلو">کلو</option>
+                            <option value="گرام">گرام</option>
+                            <option value="عدد">عدد</option>
+                            <option value="گچھی">گچھی</option>
+                        </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label fw-semibold small d-block">&nbsp;</label>
@@ -3822,15 +3830,19 @@ document.addEventListener('DOMContentLoaded', function() {
             
             extraIngredientsContainer.appendChild(newRow);
             
-            // Auto-fill unit when ingredient is selected
+            // Auto-fill unit when ingredient is selected (if unit matches one of the dropdown options)
             const select = newRow.querySelector('.extra-ingredient-select');
-            const unitInput = newRow.querySelector('.extra-ingredient-unit');
-            if (select && unitInput) {
+            const unitSelect = newRow.querySelector('.extra-ingredient-unit');
+            if (select && unitSelect) {
                 select.addEventListener('change', function() {
                     const ingredientId = this.value;
                     const ingredient = ingredientsData.find(i => i.id == ingredientId);
                     if (ingredient && ingredient.unit) {
-                        unitInput.value = ingredient.unit;
+                        // Check if the ingredient unit matches one of the dropdown options
+                        const validUnits = ['کلو', 'گرام', 'عدد', 'گچھی'];
+                        if (validUnits.includes(ingredient.unit)) {
+                            unitSelect.value = ingredient.unit;
+                        }
                     }
                 });
             }
@@ -3851,13 +3863,17 @@ document.addEventListener('DOMContentLoaded', function() {
         // Auto-fill unit for existing rows
         document.querySelectorAll('.extra-ingredient-select').forEach(function(select) {
             const row = select.closest('.extra-ingredient-row');
-            const unitInput = row ? row.querySelector('.extra-ingredient-unit') : null;
-            if (select && unitInput) {
+            const unitSelect = row ? row.querySelector('.extra-ingredient-unit') : null;
+            if (select && unitSelect) {
                 select.addEventListener('change', function() {
                     const ingredientId = this.value;
                     const ingredient = ingredientsData.find(i => i.id == ingredientId);
                     if (ingredient && ingredient.unit) {
-                        unitInput.value = ingredient.unit;
+                        // Check if the ingredient unit matches one of the dropdown options
+                        const validUnits = ['کلو', 'گرام', 'عدد', 'گچھی'];
+                        if (validUnits.includes(ingredient.unit)) {
+                            unitSelect.value = ingredient.unit;
+                        }
                     }
                 });
             }

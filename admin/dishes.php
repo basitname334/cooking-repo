@@ -280,9 +280,12 @@ if (isset($_GET['edit'])) {
     }
 }
 
-// Get all categories for dropdown with error handling
+// Get all dish categories for dropdown with error handling (only categories used by dishes)
 $categories = [];
-$result = $conn->query("SELECT * FROM categories ORDER BY name");
+$result = $conn->query("SELECT DISTINCT c.* 
+    FROM categories c 
+    INNER JOIN dishes d ON d.category_id = c.id 
+    ORDER BY c.name");
 if ($result && $result->num_rows > 0) {
     $categories = $result->fetch_all(MYSQLI_ASSOC);
 }
@@ -2256,7 +2259,11 @@ function loadCategoriesForModal() {
                      window.location.pathname.includes('/user/') || 
                      window.location.pathname.includes('/auth/') ? '../' : '';
     
-    fetch(basePath + 'api/get_categories.php')
+    // Determine type based on context
+    const type = categoryModalContext === 'dish' ? 'dish' : (categoryModalContext === 'ingredient' ? 'ingredient' : 'all');
+    const url = basePath + 'api/get_categories.php?type=' + type;
+    
+    fetch(url)
         .then(response => response.json())
         .then(categories => {
             allCategoriesData = categories;
@@ -2578,21 +2585,36 @@ window.saveCategory = function() {
             successDiv.textContent = 'Category added successfully!';
             successDiv.style.display = 'block';
             
-            // Add to all category selects (dish category and ingredient categories)
+            // Add to category selects based on context
             const category = data.category;
-            const categorySelects = document.querySelectorAll('.ingredient-category-select, #newIngredientCategory, #category_id');
             
-            categorySelects.forEach(select => {
-                const option = document.createElement('option');
-                option.value = category.id;
-                option.textContent = category.name;
-                option.setAttribute('data-search', category.name.toLowerCase());
-                select.appendChild(option);
-                // Re-initialize searchable select if it exists
-                if (select.classList.contains('searchable-select')) {
-                    initSearchableSelect(select);
+            if (categoryModalContext === 'dish') {
+                // Add to dish category select only
+                const dishCategorySelect = document.getElementById('category_id');
+                if (dishCategorySelect) {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.name;
+                    option.setAttribute('data-search', category.name.toLowerCase());
+                    dishCategorySelect.appendChild(option);
+                    if (dishCategorySelect.classList.contains('searchable-select')) {
+                        initSearchableSelect(dishCategorySelect);
+                    }
                 }
-            });
+            } else if (categoryModalContext === 'ingredient') {
+                // Add to ingredient category selects only
+                const ingredientCategorySelects = document.querySelectorAll('.ingredient-category-select, #newIngredientCategory');
+                ingredientCategorySelects.forEach(select => {
+                    const option = document.createElement('option');
+                    option.value = category.id;
+                    option.textContent = category.name;
+                    option.setAttribute('data-search', category.name.toLowerCase());
+                    select.appendChild(option);
+                    if (select.classList.contains('searchable-select')) {
+                        initSearchableSelect(select);
+                    }
+                });
+            }
             
             // Add to modal categories list
             allCategoriesData.push(category);
