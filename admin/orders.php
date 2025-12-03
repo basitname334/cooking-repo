@@ -5582,7 +5582,7 @@ function printOrder(orderNumberOrId) {
                     `;
                     }).join('')}
                 </div>
-                ${order.notes ? `<div class="notes"><strong>${translations.notes}:</strong> ${order.notes}</div>` : ''}
+                ${order.notes ? '<div class="notes"><strong>' + (translations.notes || 'Notes') + ':</strong> ' + order.notes + '</div>' : ''}
             </div>
             <div class="total-section">
                 <div class="total-row">
