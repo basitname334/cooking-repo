@@ -1818,17 +1818,23 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                 <label class="form-label fw-semibold">
                                     کپڑا ململ
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[cloth_malmal]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[cloth_malmal]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
                                     میچ باکس
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[match_box]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[match_box]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
@@ -1857,41 +1863,56 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                 <label class="form-label fw-semibold">
                                     صوبی(لوہے والی )
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[sobi_iron]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[sobi_iron]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
                                     سٹیم پتیلہ جال ڈھکن
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[steam_pot_with_lid]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[steam_pot_with_lid]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
                                     دیگ
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[deg]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[deg]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
                                     کڑاہی
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[karahi]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[karahi]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
                                     چولہے
                                 </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[chulhe]" 
-                                       placeholder="0" step="1" min="0" value="0">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[chulhe]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
