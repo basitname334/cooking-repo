@@ -1771,9 +1771,9 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-semibold small">
-                                                <?php e('unit_label'); ?> <span class="text-danger">*</span>
+                                                <?php e('unit_label'); ?>
                                             </label>
-                                            <select class="form-select extra-ingredient-unit" name="extra_ingredients[0][unit]" required>
+                                            <select class="form-select extra-ingredient-unit" name="extra_ingredients[0][unit]">
                                                 <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
                                                 <option value="کلو">کلو</option>
                                                 <option value="گرام">گرام</option>
@@ -3815,9 +3815,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold small">
-                            ${reviewTranslations.unit_label || 'Unit'} <span class="text-danger">*</span>
+                            ${reviewTranslations.unit_label || 'Unit'}
                         </label>
-                        <select class="form-select extra-ingredient-unit" name="extra_ingredients[${extraIngredientRowCount}][unit]" required>
+                        <select class="form-select extra-ingredient-unit" name="extra_ingredients[${extraIngredientRowCount}][unit]">
                             <option value="">${reviewTranslations.select_unit || 'Select Unit'}</option>
                             <option value="کلو">کلو</option>
                             <option value="گرام">گرام</option>
