@@ -306,7 +306,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <div class="page-header-details">
         <div class="row g-3 align-items-center">
-            <div class="col-lg-9">
+            <div class="col-lg-6">
                 <div class="search-modern">
                     <div class="input-group border-0">
                         <span class="input-group-text bg-transparent border-0" style="color: #6366f1;">
@@ -321,6 +321,13 @@ include __DIR__ . '/../includes/header.php';
                         </button>
                     </div>
                 </div>
+            </div>
+            <div class="col-lg-3">
+                <a href="ingredients_print.php" target="_blank" class="btn btn-success rounded-pill w-100 d-flex align-items-center justify-content-center gap-2">
+                    <i class="bi bi-printer-fill"></i>
+                    <span>Print & Share</span>
+                </a>
+                <small class="text-muted d-block text-center mt-1" style="font-size: 0.75rem;">Opens printable view with share options</small>
             </div>
             <div class="col-lg-3 actions-dropdown">
                 <div class="dropdown">

@@ -2438,6 +2438,12 @@ $visible_orders_count = count($paginated_orders);
                                                     style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-printer-fill"></i>
                                             </button>
+                                            <button type="button" class="btn btn-sm btn-warning flex-fill" 
+                                                    title="Share Order" 
+                                                    onclick="shareOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-share-fill"></i>
+                                            </button>
                                             <a href="?delete=<?php echo $grouped_order['id']; ?>" class="btn btn-sm btn-danger" 
                                                title="<?php e('delete'); ?>" 
                                                onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');"
@@ -5570,6 +5576,31 @@ function printOrder(orderNumberOrId) {
     `);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 250);
+}
+
+// Share order details using Web Share API or clipboard fallback
+function shareOrder(orderNumber) {
+    const previewUrl = new URL('order_preview.php', window.location.href);
+    previewUrl.searchParams.set('order_number', orderNumber);
+    const shareData = {
+        title: `Order ${orderNumber}`,
+        text: `Order details for ${orderNumber}`,
+        url: previewUrl.toString()
+    };
+
+    if (navigator.share) {
+        navigator.share(shareData).catch(err => {
+            if (err.name !== 'AbortError') {
+                alert('Sharing failed. Please copy the link instead.');
+            }
+        });
+    } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(previewUrl.toString())
+            .then(() => alert('Link copied to clipboard!'))
+            .catch(() => alert('Unable to copy link. Please copy it manually: ' + previewUrl.toString()));
+    } else {
+        alert('Sharing is not supported in this browser.');
+    }
 }
 
 // Helper functions to format date and time for print
