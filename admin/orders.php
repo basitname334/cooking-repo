@@ -5198,13 +5198,51 @@ function printIngredients(orderNumberOrId) {
             </div>
             
             <div class="print-btn no-print">
-                <button onclick="window.print()">${translations.print}</button>
-                <button onclick="window.close()">${translations.close}</button>
+                <button onclick="window.print()" style="margin-right: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                    <i class="bi bi-printer-fill" style="margin-right: 5px;"></i>${translations.print || 'Print'}
+                </button>
+                <button onclick="shareIngredientsPDFForOrder('${order.order_number || '#' + order.id}')" style="margin-right: 10px; padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                    <i class="bi bi-share-fill" style="margin-right: 5px;"></i>Share PDF
+                </button>
+                <button onclick="window.close()" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
+                    ${translations.close || 'Close'}
+                </button>
             </div>
         </body>
         </html>
     `);
     printWindow.document.close();
+    
+    // Add share function to the print window
+    printWindow.shareIngredientsPDFForOrder = function(orderNumber) {
+        // First, trigger print dialog so user can save as PDF
+        printWindow.print();
+        
+        // After a short delay, show share options
+        setTimeout(() => {
+            const shareTitle = (translations.ingredients_list || 'Ingredients List') + ' - ' + (translations.order_id || 'Order ID') + ' ' + orderNumber;
+            const shareText = (translations.ingredients_share_text || 'Ingredients list for order') + ' ' + orderNumber + '. Please save as PDF from the print dialog and share it.';
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: shareTitle,
+                    text: shareText,
+                    url: printWindow.location.href
+                }).catch(err => {
+                    if (err.name !== 'AbortError') {
+                        alert('Please save the PDF from the print dialog, then share it manually.');
+                    }
+                });
+            } else if (navigator.clipboard) {
+                navigator.clipboard.writeText(printWindow.location.href)
+                    .then(() => alert('Link copied! Please save as PDF from print dialog (Ctrl+P > Save as PDF), then share the PDF file.'))
+                    .catch(() => alert('Please save as PDF from the print dialog (Ctrl+P > Save as PDF), then share the PDF file.'));
+            } else {
+                alert('Please save as PDF from the print dialog (Ctrl+P or Cmd+P > Save as PDF), then share the PDF file manually.');
+            }
+        }, 500);
+    };
+    
     setTimeout(() => printWindow.print(), 250);
 }
 

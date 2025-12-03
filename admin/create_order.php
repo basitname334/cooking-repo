@@ -805,7 +805,7 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                     <?php endforeach; ?>
                     <!-- Uncategorized option -->
-                    <?php
+                        <?php
                     $uncategorized_dishes = array_filter($dishes, function($dish) {
                         return empty($dish['category_id']);
                     });
@@ -819,7 +819,7 @@ include __DIR__ . '/../includes/header.php';
                                 <div class="w-100 d-flex align-items-center justify-content-center" 
                                      style="height: 200px; background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
                                     <i class="bi bi-folder-x text-white" style="font-size: 4rem;"></i>
-                                </div>
+                    </div>
                                 <div class="card-body p-3">
                                     <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
                                         Uncategorized
@@ -1324,21 +1324,21 @@ function filterItemsInModal(searchTerm) {
     } else {
         // Filtering dishes
         const dishItems = document.querySelectorAll('.modal-dish-item');
-        dishItems.forEach(item => {
+    dishItems.forEach(item => {
             // Only filter visible dishes (already filtered by category)
             if (item.style.display === 'none') return;
             
-            const dishName = item.getAttribute('data-dish-name').toLowerCase();
-            const category = item.getAttribute('data-category').toLowerCase();
-            const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
-            
+        const dishName = item.getAttribute('data-dish-name').toLowerCase();
+        const category = item.getAttribute('data-category').toLowerCase();
+        const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
+        
             if (matchesSearch) {
                 item.style.display = 'block';
-                visibleCount++;
-            } else {
+            visibleCount++;
+        } else {
                 item.style.display = 'none';
-            }
-        });
+        }
+    });
     }
     
     // Show/hide no results message

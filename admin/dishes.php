@@ -2556,8 +2556,8 @@ window.saveCategory = function() {
     
     if (!name) {
         if (errorDiv) {
-            errorDiv.textContent = 'Category name is required';
-            errorDiv.style.display = 'block';
+        errorDiv.textContent = 'Category name is required';
+        errorDiv.style.display = 'block';
         }
         return;
     }
@@ -2589,8 +2589,8 @@ window.saveCategory = function() {
     .then(data => {
         if (data.success) {
             if (successDiv) {
-                successDiv.textContent = 'Category added successfully!';
-                successDiv.style.display = 'block';
+            successDiv.textContent = 'Category added successfully!';
+            successDiv.style.display = 'block';
             }
             
             // Add to category selects based on context
@@ -2613,15 +2613,15 @@ window.saveCategory = function() {
                 // Add to ingredient category selects only
                 const ingredientCategorySelects = document.querySelectorAll('.ingredient-category-select, #newIngredientCategory');
                 ingredientCategorySelects.forEach(select => {
-                    const option = document.createElement('option');
-                    option.value = category.id;
-                    option.textContent = category.name;
-                    option.setAttribute('data-search', category.name.toLowerCase());
-                    select.appendChild(option);
+                const option = document.createElement('option');
+                option.value = category.id;
+                option.textContent = category.name;
+                option.setAttribute('data-search', category.name.toLowerCase());
+                select.appendChild(option);
                     if (select.classList.contains('searchable-select')) {
                         initSearchableSelect(select);
                     }
-                });
+            });
             }
             
             // Add to modal categories list
@@ -2642,8 +2642,8 @@ window.saveCategory = function() {
             if (form) form.reset();
             if (errorDiv) errorDiv.style.display = 'none';
             if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
             }
             
             // Auto-select the newly added category after a short delay
@@ -2652,23 +2652,23 @@ window.saveCategory = function() {
             }, 500);
         } else {
             if (errorDiv) {
-                errorDiv.textContent = data.error || 'Failed to add category';
-                errorDiv.style.display = 'block';
+            errorDiv.textContent = data.error || 'Failed to add category';
+            errorDiv.style.display = 'block';
             }
             if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
             }
         }
     })
     .catch(error => {
         if (errorDiv) {
-            errorDiv.textContent = 'Error: ' + error.message;
-            errorDiv.style.display = 'block';
+        errorDiv.textContent = 'Error: ' + error.message;
+        errorDiv.style.display = 'block';
         }
         if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>Add Category';
         }
     });
 };
