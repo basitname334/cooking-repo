@@ -5198,36 +5198,9 @@ function printIngredients(orderNumberOrId) {
             </div>
             
             <div class="print-btn no-print">
-                <div style="margin-bottom: 0.75rem;">
-                    <button onclick="shareIngredientsForOrder()" style="border-radius: 999px; padding: 0.35rem 0.9rem; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer;">
-                        ${translations.share || 'Share / Copy Link'}
-                    </button>
-                </div>
                 <button onclick="window.print()">${translations.print}</button>
                 <button onclick="window.close()">${translations.close}</button>
             </div>
-            <script>
-                function shareIngredientsForOrder() {
-                    const shareTitle = '${translations.ingredients_list || 'Ingredients List'} - ${translations.order_id} ${order.order_number || '#' + order.id}';
-                    const shareText = '${translations.ingredients_share_text || 'Ingredients list for order'} ${order.order_number || '#' + order.id}';
-                    const shareUrl = window.location.href;
-                    const shareData = { title: shareTitle, text: shareText, url: shareUrl };
-                    
-                    if (navigator.share) {
-                        navigator.share(shareData).catch(err => {
-                            if (err.name !== 'AbortError') {
-                                alert('${translations.share_failed || 'Sharing failed. Please use Print > Save as PDF and share manually.'}');
-                            }
-                        });
-                    } else if (navigator.clipboard) {
-                        navigator.clipboard.writeText(shareUrl)
-                            .then(() => alert('${translations.link_copied || 'Link copied to clipboard! You can now share it.'}'))
-                            .catch(() => alert('${translations.copy_failed || 'Unable to copy link. Please copy it manually from the address bar.'}'));
-                    } else {
-                        alert('${translations.share_not_supported || 'Sharing is not supported in this browser. Please use Print > Save as PDF and share manually.'}');
-                    }
-                }
-            </script>
         </body>
         </html>
     `);
