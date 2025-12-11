@@ -376,7 +376,7 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <div class="text-center p-3 border rounded">
-                        <div class="fw-bold text-muted mb-2">Match Box</div>
+                        <div class="fw-bold text-muted mb-2">ماچس</div>
                         <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['match_box_quantity'] ?? 0); ?></div>
                     </div>
                 </div>

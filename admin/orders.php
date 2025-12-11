@@ -3352,7 +3352,7 @@ function updateReview() {
                 const key = itemName[1];
                 const nameMap = {
                     'cloth_malmal': reviewTranslations.cloth_malmal || 'کپڑا ململ',
-                    'match_box': reviewTranslations.match_box || 'میچ باکس',
+                    'match_box': reviewTranslations.match_box || 'ماچس',
                     'surrf': reviewTranslations.surrf || 'سرف',
                     'wood': reviewTranslations.wood || 'لکڑی',
                     'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)',
@@ -4092,7 +4092,7 @@ try {
         'extra_ingredients' => $urduTranslations['extra_ingredients'] ?? 'اضافی اجزاء',
         'additional_items' => $urduTranslations['additional_items'] ?? 'اضافی اشیاء',
         'cloth_malmal' => $urduTranslations['cloth_malmal'] ?? 'کپڑا ململ',
-        'match_box' => $urduTranslations['match_box'] ?? 'میچ باکس',
+        'match_box' => $urduTranslations['match_box'] ?? 'ماچس',
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
         'wood' => $urduTranslations['wood'] ?? 'لکڑی',
         'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
@@ -4144,7 +4144,7 @@ try {
         'extra_ingredients' => 'اضافی اجزاء',
         'additional_items' => 'اضافی اشیاء',
         'cloth_malmal' => 'کپڑا ململ',
-        'match_box' => 'میچ باکس',
+        'match_box' => 'ماچس',
         'surrf' => 'سرف',
         'wood' => 'لکڑی',
         'sponjis_iron' => 'اسپنجز (آئرن)',
@@ -4591,7 +4591,7 @@ function printIngredients(orderNumberOrId) {
             if (extraIngredientsData && extraIngredientsData.additional_items && typeof extraIngredientsData.additional_items === 'object') {
                 const additionalItemsMap = {
                     'cloth_malmal': translations.cloth_malmal || 'کپڑا ململ',
-                    'match_box': translations.match_box || 'میچ باکس',
+                    'match_box': translations.match_box || 'ماچس',
                     'surrf': translations.surrf || 'سرف',
                     'wood': translations.wood || 'لکڑی',
                     'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)',
