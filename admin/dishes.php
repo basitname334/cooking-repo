@@ -1602,6 +1602,34 @@ document.addEventListener('DOMContentLoaded', function() {
     if (container) {
         observer.observe(container, { childList: true, subtree: true });
     }
+    
+    // Handle form submission - remove required from disabled/hidden fields
+    const dishForm = document.getElementById('dishForm');
+    if (dishForm) {
+        dishForm.addEventListener('submit', function(e) {
+            // Remove required attribute from disabled or hidden fields
+            const allRequiredFields = dishForm.querySelectorAll('[required]');
+            allRequiredFields.forEach(field => {
+                // Check if field is disabled or hidden
+                if (field.disabled || field.offsetParent === null || field.style.display === 'none') {
+                    field.removeAttribute('required');
+                }
+            });
+            
+            // Also check parent elements - if parent is hidden, remove required
+            allRequiredFields.forEach(field => {
+                let parent = field.parentElement;
+                while (parent && parent !== dishForm) {
+                    const computedStyle = window.getComputedStyle(parent);
+                    if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
+                        field.removeAttribute('required');
+                        break;
+                    }
+                    parent = parent.parentElement;
+                }
+            });
+        });
+    }
 });
 
 // Search functionality
@@ -1749,7 +1777,7 @@ window.addIngredientRow = function() {
                                                    placeholder="Search..." 
                                                    autocomplete="off"
                                                    style="display: none;">
-                                            <select class="form-select searchable-select ingredient-select" name="ingredients[]" required>
+                                            <select class="form-select searchable-select ingredient-select" name="ingredients[]" disabled>
                                                 <option value="">Select Category First</option>
                                             </select>
                                         </div>
@@ -1899,6 +1927,8 @@ window.loadIngredientsForRow = function(rowId, categoryId) {
     if (!categoryId || categoryId === '') {
         ingredientSelect.innerHTML = '<option value="">Select Category First</option>';
         ingredientSelect.disabled = true;
+        // Remove required attribute when disabled to prevent validation errors
+        ingredientSelect.removeAttribute('required');
         return;
     }
     
@@ -1913,6 +1943,8 @@ window.loadIngredientsForRow = function(rowId, categoryId) {
     
     ingredientSelect.innerHTML = options;
     ingredientSelect.disabled = false;
+    // Add required attribute back when enabled
+    ingredientSelect.setAttribute('required', 'required');
     
     // Re-initialize searchable select for the new options
     initSearchableSelect(ingredientSelect);
