@@ -747,7 +747,8 @@ if ($recent_result && $recent_result->num_rows > 0) {
 // Pagination & view settings
 $default_items_per_page = 12; // Number of orders per page when viewing all
 $recent_items_limit = 2; // Number of orders to show on the main view
-$items_per_page = $default_items_per_page;
+// Get items per page from URL parameter, default to 12
+$items_per_page = isset($_GET['per_page']) ? max(5, min(100, intval($_GET['per_page']))) : $default_items_per_page;
 $current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $view_mode = (isset($_GET['view']) && $_GET['view'] === 'all') ? 'all' : 'recent';
 $order_number_search = isset($_GET['order_number']) ? trim($_GET['order_number']) : '';
@@ -778,10 +779,10 @@ $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.u
     LEFT JOIN dishes d ON o.dish_id = d.id
     LEFT JOIN categories cat ON d.category_id = cat.id";
     
-    // Add search filter if active
+    // Add search filter if active - search by order number or phone number
     if ($is_search_active && !empty($order_number_search)) {
         $escaped_search = $conn->real_escape_string($order_number_search);
-        $query .= " WHERE o.order_number LIKE '%$escaped_search%'";
+        $query .= " WHERE (o.order_number LIKE '%$escaped_search%' OR o.customer_cell LIKE '%$escaped_search%')";
     }
     
     $query .= " ORDER BY 
@@ -1010,15 +1011,17 @@ if ($result && $result->num_rows > 0) {
     $display_orders = $all_grouped_orders;
     $overall_orders_count = count($all_grouped_orders);
 
-    // Apply order number search on full dataset
+    // Apply order number search on full dataset - search by order number, ID, or phone number
     if ($is_search_active) {
         $searchTerm = strtolower($order_number_search);
         $display_orders = array_values(array_filter($display_orders, function($order) use ($searchTerm) {
             $orderNumber = strtolower($order['order_number'] ?? '');
             $orderId = (string)($order['id'] ?? '');
+            $phoneNumber = strtolower($order['customer_cell'] ?? '');
             return ($searchTerm === '' ||
                 strpos($orderNumber, $searchTerm) !== false ||
-                strpos(strtolower($orderId), $searchTerm) !== false);
+                strpos(strtolower($orderId), $searchTerm) !== false ||
+                strpos($phoneNumber, $searchTerm) !== false);
         }));
     }
 
@@ -1827,7 +1830,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">
-                                    میچ باکس
+                                    ماچس
                                 </label>
                                 <div class="input-group">
                                     <input type="number" class="form-control additional-item" 
@@ -2253,7 +2256,7 @@ $visible_orders_count = count($paginated_orders);
                             </span>
                             <input type="text" class="form-control border-start-0" name="order_number" 
                                    value="<?php echo htmlspecialchars($order_number_search); ?>"
-                                   placeholder="Search by order number..." autocomplete="off">
+                                   placeholder="Search by order number or phone..." autocomplete="off">
                             <button class="btn btn-primary" type="submit">
                                 <i class="bi bi-search"></i>
                             </button>
@@ -2265,17 +2268,30 @@ $visible_orders_count = count($paginated_orders);
                         </form>
                     </div>
                     <?php if ($view_mode === 'all' && !$is_search_active): ?>
-                        <div class="flex-grow-1" style="max-width: 400px;">
-                            <div class="input-group">
-                                <span class="input-group-text bg-white border-end-0">
-                                    <i class="bi bi-search text-muted"></i>
-                                </span>
-                                <input type="text" class="form-control border-start-0" id="searchOrders" 
-                                       placeholder="Search orders by customer, dish, or ID..." 
-                                       autocomplete="off">
-                                <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchOrders" style="display: none;">
-                                    <i class="bi bi-x-lg"></i>
-                                </button>
+                        <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center">
+                            <div class="flex-grow-1" style="max-width: 400px;">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white border-end-0">
+                                        <i class="bi bi-search text-muted"></i>
+                                    </span>
+                                    <input type="text" class="form-control border-start-0" id="searchOrders" 
+                                           placeholder="Search orders by customer, phone, dish, or ID..." 
+                                           autocomplete="off">
+                                    <button class="btn btn-outline-secondary border-start-0" type="button" id="clearSearchOrders" style="display: none;">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Items per page filter buttons -->
+                            <div class="btn-group" role="group" aria-label="Items per page">
+                                <button type="button" class="btn btn-sm <?php echo $items_per_page == 5 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
+                                        onclick="window.location.href='?view=all&per_page=5&page=1'">5</button>
+                                <button type="button" class="btn btn-sm <?php echo $items_per_page == 10 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
+                                        onclick="window.location.href='?view=all&per_page=10&page=1'">10</button>
+                                <button type="button" class="btn btn-sm <?php echo $items_per_page == 20 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
+                                        onclick="window.location.href='?view=all&per_page=20&page=1'">20</button>
+                                <button type="button" class="btn btn-sm <?php echo $items_per_page == 50 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
+                                        onclick="window.location.href='?view=all&per_page=50&page=1'">50</button>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -2323,11 +2339,43 @@ $visible_orders_count = count($paginated_orders);
                             return $icons[$status] ?? 'question-circle';
                         }
                         ?>
-                        <?php foreach ($paginated_orders as $grouped_order): ?>
+                        <?php 
+                        // Group orders by date
+                        $orders_by_date = [];
+                        foreach ($paginated_orders as $grouped_order) {
+                            $order_date = !empty($grouped_order['order_date']) ? date('Y-m-d', strtotime($grouped_order['order_date'])) : date('Y-m-d');
+                            if (!isset($orders_by_date[$order_date])) {
+                                $orders_by_date[$order_date] = [];
+                            }
+                            $orders_by_date[$order_date][] = $grouped_order;
+                        }
+                        // Sort dates descending (newest first)
+                        krsort($orders_by_date);
+                        ?>
+                        <?php 
+                        $is_first_date = true;
+                        foreach ($orders_by_date as $date_key => $date_orders): 
+                        ?>
+                            <!-- Date Header -->
+                            <div class="col-12 mb-3 <?php echo $is_first_date ? '' : 'mt-4'; ?> date-header">
+                                <div class="d-flex align-items-center">
+                                    <hr class="flex-grow-1 me-3">
+                                    <h6 class="mb-0 fw-bold text-muted">
+                                        <i class="bi bi-calendar3 me-2"></i>
+                                        <?php echo date('F d, Y', strtotime($date_key)); ?>
+                                    </h6>
+                                    <hr class="flex-grow-1 ms-3">
+                                </div>
+                            </div>
+                            <?php 
+                            $is_first_date = false;
+                            foreach ($date_orders as $grouped_order): 
+                            ?>
                                 <div class="col-lg-4 col-md-6 col-xl-3 order-item" 
                                  data-id="<?php echo $grouped_order['id']; ?>" 
                                  data-order-number="<?php echo htmlspecialchars($grouped_order['order_number']); ?>"
                                  data-customer="<?php echo strtolower(htmlspecialchars($grouped_order['customer_name'])); ?>"
+                                 data-phone="<?php echo strtolower(htmlspecialchars($grouped_order['customer_cell'] ?? '')); ?>"
                                  data-status="<?php echo $grouped_order['status']; ?>">
                                 <div class="card border-0 shadow-sm h-100 order-card">
                                     <div class="card-header bg-white">
@@ -2475,6 +2523,7 @@ $visible_orders_count = count($paginated_orders);
                                     </div>
                                 </div>
                             </div>
+                            <?php endforeach; ?>
                         <?php endforeach; ?>
                     </div>
                     <div id="noOrdersResults" class="text-center py-5" style="display: none;">
@@ -2489,7 +2538,7 @@ $visible_orders_count = count($paginated_orders);
                             <ul class="pagination justify-content-center">
                                 <!-- Previous Button -->
                                 <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
-                                    <a class="page-link" href="?page=<?php echo max(1, $current_page - 1); ?>" aria-label="Previous">
+                                    <a class="page-link" href="?view=all&per_page=<?php echo $items_per_page; ?>&page=<?php echo max(1, $current_page - 1); ?>" aria-label="Previous">
                                         <span aria-hidden="true">&laquo;</span>
                                     </a>
                                 </li>
@@ -2501,7 +2550,7 @@ $visible_orders_count = count($paginated_orders);
                                 
                                 if ($start_page > 1): ?>
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=1">1</a>
+                                        <a class="page-link" href="?view=all&per_page=<?php echo $items_per_page; ?>&page=1">1</a>
                                     </li>
                                     <?php if ($start_page > 2): ?>
                                         <li class="page-item disabled">
@@ -2512,7 +2561,7 @@ $visible_orders_count = count($paginated_orders);
                                 
                                 <?php for ($i = $start_page; $i <= $end_page; $i++): ?>
                                     <li class="page-item <?php echo $i == $current_page ? 'active' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                        <a class="page-link" href="?view=all&per_page=<?php echo $items_per_page; ?>&page=<?php echo $i; ?>"><?php echo $i; ?></a>
                                     </li>
                                 <?php endfor; ?>
                                 
@@ -2523,13 +2572,13 @@ $visible_orders_count = count($paginated_orders);
                                         </li>
                                     <?php endif; ?>
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
+                                        <a class="page-link" href="?view=all&per_page=<?php echo $items_per_page; ?>&page=<?php echo $total_pages; ?>"><?php echo $total_pages; ?></a>
                                     </li>
                                 <?php endif; ?>
                                 
                                 <!-- Next Button -->
                                 <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
-                                    <a class="page-link" href="?page=<?php echo min($total_pages, $current_page + 1); ?>" aria-label="Next">
+                                    <a class="page-link" href="?view=all&per_page=<?php echo $items_per_page; ?>&page=<?php echo min($total_pages, $current_page + 1); ?>" aria-label="Next">
                                         <span aria-hidden="true">&raquo;</span>
                                     </a>
                                 </li>
@@ -3920,29 +3969,64 @@ document.addEventListener('DOMContentLoaded', function() {
             let visibleCount = 0;
             
             if (searchTerm === '') {
-                // Show all orders
+                // Show all orders and date headers
                 orderItems.forEach(item => {
                     item.style.display = '';
                     visibleCount++;
+                });
+                const dateHeaders = document.querySelectorAll('.date-header');
+                dateHeaders.forEach(header => {
+                    header.style.display = '';
                 });
                 clearSearchBtn.style.display = 'none';
                 if (noOrdersResults) noOrdersResults.style.display = 'none';
                 if (ordersList) ordersList.style.display = '';
             } else {
-                // Filter orders
+                // Filter orders - also hide/show date headers
+                const dateHeaders = document.querySelectorAll('.date-header');
+                let hasVisibleOrdersForDate = {};
+                
                 orderItems.forEach(item => {
                     const orderNumber = item.getAttribute('data-order-number') || '';
                     const orderId = item.getAttribute('data-id') || '';
                     const customerName = item.getAttribute('data-customer') || '';
+                    const phoneNumber = item.getAttribute('data-phone') || '';
                     
-                    // Search in order number, customer name, or order ID
+                    // Get the date header for this order item
+                    let dateHeader = null;
+                    let currentElement = item.previousElementSibling;
+                    while (currentElement) {
+                        if (currentElement.classList && currentElement.classList.contains('date-header')) {
+                            dateHeader = currentElement;
+                            break;
+                        }
+                        currentElement = currentElement.previousElementSibling;
+                    }
+                    
+                    // Search in order number, customer name, phone number, or order ID
                     if (orderNumber.toLowerCase().includes(searchTerm) || 
                         orderId.includes(searchTerm) || 
-                        customerName.includes(searchTerm)) {
+                        customerName.includes(searchTerm) ||
+                        phoneNumber.includes(searchTerm)) {
                         item.style.display = '';
                         visibleCount++;
+                        // Mark that this date has visible orders
+                        if (dateHeader) {
+                            const dateKey = dateHeader.textContent.trim();
+                            hasVisibleOrdersForDate[dateKey] = true;
+                        }
                     } else {
                         item.style.display = 'none';
+                    }
+                });
+                
+                // Hide date headers that have no visible orders
+                dateHeaders.forEach(header => {
+                    const dateKey = header.textContent.trim();
+                    if (!hasVisibleOrdersForDate[dateKey]) {
+                        header.style.display = 'none';
+                    } else {
+                        header.style.display = '';
                     }
                 });
                 
