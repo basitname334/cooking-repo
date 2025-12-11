@@ -34,7 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] === UPLOAD_ERR_OK) {
         $upload_dir = __DIR__ . '/../uploads/dishes/';
         if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0755, true);
+            if (!mkdir($upload_dir, 0755, true)) {
+                $error = 'Failed to create upload directory.';
+            }
+        }
+        
+        // Ensure directory is writable
+        if (!is_writable($upload_dir)) {
+            chmod($upload_dir, 0755);
         }
         
         $file_extension = strtolower(pathinfo($_FILES['dish_image']['name'], PATHINFO_EXTENSION));
@@ -44,16 +51,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $file_name = uniqid('dish_', true) . '.' . $file_extension;
             $target_path = $upload_dir . $file_name;
             
-            if (move_uploaded_file($_FILES['dish_image']['tmp_name'], $target_path)) {
-                $image_path = 'uploads/dishes/' . $file_name;
+            // Check if temp file exists and is readable
+            if (!is_uploaded_file($_FILES['dish_image']['tmp_name'])) {
+                $error = 'Uploaded file is not valid or has been moved.';
+            } elseif (!file_exists($_FILES['dish_image']['tmp_name'])) {
+                $error = 'Temporary file does not exist.';
             } else {
-                $error = 'Failed to upload image.';
+                // Move the uploaded file
+                if (move_uploaded_file($_FILES['dish_image']['tmp_name'], $target_path)) {
+                    // Verify file was moved successfully
+                    if (file_exists($target_path)) {
+                        // Set proper file permissions (readable by web server and owner)
+                        // 0644 = owner read/write, group/others read
+                        if (!chmod($target_path, 0644)) {
+                            error_log('Warning: Failed to set permissions on uploaded file: ' . $target_path);
+                        }
+                        
+                        // Also ensure directory permissions are correct
+                        if (!is_writable($upload_dir)) {
+                            chmod($upload_dir, 0755);
+                        }
+                        
+                        // Verify file is readable and get file size
+                        if (is_readable($target_path)) {
+                            $file_size = filesize($target_path);
+                            if ($file_size > 0) {
+                                $image_path = 'uploads/dishes/' . $file_name;
+                                // Log successful upload for debugging
+                                error_log('Image uploaded successfully: ' . $image_path . ' (Size: ' . $file_size . ' bytes)');
+                            } else {
+                                $error = 'Uploaded file is empty.';
+                                unlink($target_path);
+                            }
+                        } else {
+                            $error = 'Uploaded file is not readable. Please check file permissions.';
+                            // Clean up the file if it's not readable
+                            if (file_exists($target_path)) {
+                                unlink($target_path);
+                            }
+                        }
+                    } else {
+                        $error = 'File was moved but does not exist at target location.';
+                    }
+                } else {
+                    $error = 'Failed to move uploaded file. Check directory permissions and disk space.';
+                    // Log additional error information
+                    error_log('Image upload failed. Temp file: ' . $_FILES['dish_image']['tmp_name'] . ', Target: ' . $target_path);
+                    error_log('Upload error: ' . $_FILES['dish_image']['error']);
+                    error_log('Directory writable: ' . (is_writable($upload_dir) ? 'yes' : 'no'));
+                    error_log('Disk free space: ' . disk_free_space($upload_dir));
+                    error_log('Temp file exists: ' . (file_exists($_FILES['dish_image']['tmp_name']) ? 'yes' : 'no'));
+                    error_log('Temp file readable: ' . (is_readable($_FILES['dish_image']['tmp_name']) ? 'yes' : 'no'));
+                }
             }
         } else {
             $error = 'Invalid image format. Allowed formats: JPG, JPEG, PNG, GIF, WEBP';
         }
     } elseif (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] !== UPLOAD_ERR_NO_FILE) {
-        $error = 'Error uploading image: ' . $_FILES['dish_image']['error'];
+        $upload_errors = [
+            UPLOAD_ERR_INI_SIZE => 'File exceeds upload_max_filesize directive.',
+            UPLOAD_ERR_FORM_SIZE => 'File exceeds MAX_FILE_SIZE directive.',
+            UPLOAD_ERR_PARTIAL => 'File was only partially uploaded.',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder.',
+            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk.',
+            UPLOAD_ERR_EXTENSION => 'File upload stopped by extension.'
+        ];
+        $error_code = $_FILES['dish_image']['error'];
+        $error = 'Error uploading image: ' . ($upload_errors[$error_code] ?? 'Unknown error (' . $error_code . ')');
     }
     
     if (empty($name)) {
@@ -127,7 +192,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $existing_stmt->execute();
                     $existing_result = $existing_stmt->get_result();
                     if ($existing_row = $existing_result->fetch_assoc()) {
-                        $image_path = $existing_row['image'];
+                        $existing_image = $existing_row['image'];
+                        // Verify the existing image file still exists
+                        if (!empty($existing_image)) {
+                            $existing_image_path = __DIR__ . '/../' . $existing_image;
+                            if (file_exists($existing_image_path) && is_readable($existing_image_path)) {
+                                $image_path = $existing_image;
+                            } else {
+                                // File doesn't exist or is not readable, set to null
+                                error_log('Warning: Existing image file not found or not readable: ' . $existing_image_path);
+                                $image_path = null;
+                            }
+                        } else {
+                            $image_path = null;
+                        }
                     }
                     $existing_stmt->close();
                 } else {
@@ -138,11 +216,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $old_result = $old_stmt->get_result();
                     if ($old_row = $old_result->fetch_assoc() && !empty($old_row['image'])) {
                         $old_image_path = __DIR__ . '/../' . $old_row['image'];
-                        if (file_exists($old_image_path)) {
-                            unlink($old_image_path);
+                        // Only delete if it's different from the new image
+                        if ($old_image_path !== __DIR__ . '/../' . $image_path && file_exists($old_image_path)) {
+                            if (!unlink($old_image_path)) {
+                                error_log('Warning: Failed to delete old image file: ' . $old_image_path);
+                            }
                         }
                     }
                     $old_stmt->close();
+                    
+                    // Verify the new image file exists before saving
+                    $new_image_path = __DIR__ . '/../' . $image_path;
+                    if (!file_exists($new_image_path) || !is_readable($new_image_path)) {
+                        error_log('Error: New image file does not exist or is not readable: ' . $new_image_path);
+                        throw new Exception('Uploaded image file is not accessible. Please try uploading again.');
+                    }
                 }
                 
                 // Update existing dish

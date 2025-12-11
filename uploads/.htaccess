@@ -1,11 +1,15 @@
 # Allow access to image files for display
+# This must come first to allow image files
 <FilesMatch "\.(jpg|jpeg|png|gif|webp|JPG|JPEG|PNG|GIF|WEBP)$">
-    Order Allow,Deny
-    Allow from all
+    Require all granted
 </FilesMatch>
 
-# Deny direct access to other uploaded files
+# Deny direct access to other uploaded files (non-image files)
 # Allow only through PHP scripts
-Order Deny,Allow
-Deny from all
+<FilesMatch "\.(?!jpg|jpeg|png|gif|webp|JPG|JPEG|PNG|GIF|WEBP)">
+    Require all denied
+</FilesMatch>
+
+# Default: Allow all (for Apache 2.4+)
+Require all granted
 
