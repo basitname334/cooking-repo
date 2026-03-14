@@ -12,7 +12,7 @@
    - Schema setup now runs in **all** environments (local and production) on first use.
    - `ensureAdminUser()` first checks for the `users` table; if it is missing, it creates it and inserts the default admin, then continues.
 
----
+---sche
 
 ## What was changed
 
