@@ -2,11 +2,12 @@
 
 # Go to: Your Web Service → Environment → Add Environment Variable
 
-DB_HOST=mysql-36bf6fed-zainkhalid0347-58f4.i.aivencloud.com
+# Aiven MySQL - paste these into Render Dashboard → Environment
+DB_HOST=mysql-171fcef-abasit5612345-6512.f.aivencloud.com
 DB_USER=avnadmin
-DB_PASS=AVNS_tGhVB4Sijemqa7ffP4M
+DB_PASS=AVNS_3oTGjybOv7VFQnkkSt7
 DB_NAME=defaultdb
-DB_PORT=18568
+DB_PORT=16867
 DB_SSL_REQUIRED=true
 
 # Instructions:
