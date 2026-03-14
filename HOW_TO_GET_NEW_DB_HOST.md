@@ -30,7 +30,7 @@ Your app needs these env vars: `DB_HOST`, `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_P
    DB_HOST=<paste the new Host from Aiven>
    DB_PORT=<paste the Port>
    DB_USER=avnadmin
-   DB_PASS=<paste the Password>
+   DB_PASS=<paste the Password>hjgcfggh
    DB_NAME=defaultdb
    DB_SSL_REQUIRED=true
    ```
