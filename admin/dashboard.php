@@ -31,12 +31,11 @@ $counts_query = "SELECT
     (SELECT COUNT(*) FROM orders) as orders_count,
     (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE status = 'delivered') as total_revenue,
     (SELECT COUNT(*) FROM orders WHERE status = 'pending') as pending_orders,
-    (SELECT COUNT(*) FROM orders WHERE DATE(order_date) = CURDATE()) as today_orders,
-    (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE DATE(order_date) = CURDATE()) as today_revenue";
+    (SELECT COUNT(*) FROM orders WHERE order_date::date = CURRENT_DATE) as today_orders,
+    (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE order_date::date = CURRENT_DATE) as today_revenue";
 
-$result = $conn->query($counts_query);
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
+$row = db_fetch($conn, $counts_query);
+if ($row !== null) {
     $categories_count = (int)($row['categories_count'] ?? 0);
     $ingredients_count = (int)($row['ingredients_count'] ?? 0);
     $dishes_count = (int)($row['dishes_count'] ?? 0);
@@ -47,8 +46,6 @@ if ($result && $result->num_rows > 0) {
     $today_orders = (int)($row['today_orders'] ?? 0);
     $today_revenue = (float)($row['today_revenue'] ?? 0);
 }
-
-$conn->close();
 
 $pageTitle = 'Dashboard';
 include __DIR__ . '/../includes/header.php';

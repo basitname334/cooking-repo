@@ -16,54 +16,52 @@ $dish_ingredients = [];
 
 if (isset($_GET['id'])) {
     $dish_id = intval($_GET['id']);
-    $stmt = $conn->prepare("SELECT d.*, c.name as category_name FROM dishes d 
-        LEFT JOIN categories c ON d.category_id = c.id 
-        WHERE d.id = ?");
-    $stmt->bind_param("i", $dish_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $selected_dish = $result->fetch_assoc();
-    $stmt->close();
-    
+    $selected_dish = db_fetch(
+        $conn,
+        'SELECT d.*, c.name as category_name FROM dishes d
+         LEFT JOIN categories c ON d.category_id = c.id
+         WHERE d.id = ?',
+        [$dish_id]
+    );
+
     if ($selected_dish) {
         // Get dish ingredients with quantities
-        $stmt = $conn->prepare("SELECT di.*, i.name as ingredient_name, i.unit 
-            FROM dish_ingredients di 
-            JOIN ingredients i ON di.ingredient_id = i.id 
-            WHERE di.dish_id = ? 
-            ORDER BY i.name");
-        $stmt->bind_param("i", $dish_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $dish_ingredients = $result->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
+        $dish_ingredients = db_fetch_all(
+            $conn,
+            'SELECT di.*, i.name as ingredient_name, i.unit
+             FROM dish_ingredients di
+             JOIN ingredients i ON di.ingredient_id = i.id
+             WHERE di.dish_id = ?
+             ORDER BY i.name',
+            [$dish_id]
+        );
     }
 }
 
 // Get all dishes grouped by category
-$categories = $conn->query("SELECT DISTINCT c.id, c.name 
-    FROM categories c 
-    JOIN dishes d ON c.id = d.category_id 
-    ORDER BY c.name")->fetch_all(MYSQLI_ASSOC);
+$categories = db_fetch_all(
+    $conn,
+    'SELECT DISTINCT c.id, c.name
+     FROM categories c
+     JOIN dishes d ON c.id = d.category_id
+     ORDER BY c.name'
+);
 
 $dishes_by_category = [];
 foreach ($categories as $category) {
-    $stmt = $conn->prepare("SELECT d.*, 
-        (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
-        FROM dishes d 
-        WHERE d.category_id = ? 
-        ORDER BY d.name");
-    $stmt->bind_param("i", $category['id']);
-    $stmt->execute();
-    $result = $stmt->get_result();
     $dishes_by_category[$category['id']] = [
         'category' => $category,
-        'dishes' => $result->fetch_all(MYSQLI_ASSOC)
+        'dishes' => db_fetch_all(
+            $conn,
+            'SELECT d.*,
+                (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
+             FROM dishes d
+             WHERE d.category_id = ?
+             ORDER BY d.name',
+            [$category['id']]
+        )
     ];
-    $stmt->close();
 }
-
-$conn->close();
 
 $pageTitle = 'Dishes';
 include __DIR__ . '/../includes/header.php';

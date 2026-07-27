@@ -11,95 +11,35 @@ requireAdmin();
 $conn = getDBConnection();
 
 // Get statistics
-$categories_count = 0;
-$ingredients_count = 0;
-$dishes_count = 0;
-$customers_count = 0;
-$orders_count = 0;
-$total_revenue = 0;
-$pending_orders = 0;
-$delivered_orders = 0;
-
-// Get categories count
-$result = $conn->query("SELECT COUNT(*) as count FROM categories");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $categories_count = $row['count'] ?? 0;
-}
-
-// Get ingredients count
-$result = $conn->query("SELECT COUNT(*) as count FROM ingredients");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $ingredients_count = $row['count'] ?? 0;
-}
-
-// Get dishes count
-$result = $conn->query("SELECT COUNT(*) as count FROM dishes");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $dishes_count = $row['count'] ?? 0;
-}
-
-// Get customers count
-$result = $conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $customers_count = $row['count'] ?? 0;
-}
-
-// Get orders statistics
-$result = $conn->query("SELECT COUNT(*) as count FROM orders");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $orders_count = $row['count'] ?? 0;
-}
-
-// Get total revenue (from delivered orders)
-$result = $conn->query("SELECT SUM(total_amount) as total FROM orders WHERE status = 'delivered'");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $total_revenue = $row['total'] ?? 0;
-}
-
-// Get pending orders count
-$result = $conn->query("SELECT COUNT(*) as count FROM orders WHERE status = 'pending'");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $pending_orders = $row['count'] ?? 0;
-}
-
-// Get delivered orders count
-$result = $conn->query("SELECT COUNT(*) as count FROM orders WHERE status = 'delivered'");
-if ($result && $result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $delivered_orders = $row['count'] ?? 0;
-}
+$categories_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM categories')['count'] ?? 0);
+$ingredients_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM ingredients')['count'] ?? 0);
+$dishes_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM dishes')['count'] ?? 0);
+$customers_count = (int) (db_fetch($conn, "SELECT COUNT(*) as count FROM users WHERE role = 'user'")['count'] ?? 0);
+$orders_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM orders')['count'] ?? 0);
+$total_revenue = db_fetch($conn, "SELECT SUM(total_amount) as total FROM orders WHERE status = 'delivered'")['total'] ?? 0;
+$pending_orders = (int) (db_fetch($conn, "SELECT COUNT(*) as count FROM orders WHERE status = 'pending'")['count'] ?? 0);
+$delivered_orders = (int) (db_fetch($conn, "SELECT COUNT(*) as count FROM orders WHERE status = 'delivered'")['count'] ?? 0);
 
 // Get recent orders
-$recent_orders = [];
-$result = $conn->query("SELECT o.*, u.name as customer_name, d.name as dish_name
-    FROM orders o
-    LEFT JOIN users u ON o.customer_id = u.id
-    LEFT JOIN dishes d ON o.dish_id = d.id
-    ORDER BY o.order_date DESC LIMIT 10");
-if ($result && $result->num_rows > 0) {
-    $recent_orders = $result->fetch_all(MYSQLI_ASSOC);
-}
+$recent_orders = db_fetch_all(
+    $conn,
+    'SELECT o.*, u.name as customer_name, d.name as dish_name
+     FROM orders o
+     LEFT JOIN users u ON o.customer_id = u.id
+     LEFT JOIN dishes d ON o.dish_id = d.id
+     ORDER BY o.order_date DESC LIMIT 10'
+);
 
 // Get top dishes
-$top_dishes = [];
-$result = $conn->query("SELECT d.name, COUNT(o.id) as order_count, SUM(o.quantity) as total_quantity, SUM(o.total_amount) as total_revenue
-    FROM dishes d
-    LEFT JOIN orders o ON d.id = o.dish_id
-    GROUP BY d.id
-    ORDER BY order_count DESC, total_revenue DESC
-    LIMIT 5");
-if ($result && $result->num_rows > 0) {
-    $top_dishes = $result->fetch_all(MYSQLI_ASSOC);
-}
-
-$conn->close();
+$top_dishes = db_fetch_all(
+    $conn,
+    'SELECT d.name, COUNT(o.id) as order_count, SUM(o.quantity) as total_quantity, SUM(o.total_amount) as total_revenue
+     FROM dishes d
+     LEFT JOIN orders o ON d.id = o.dish_id
+     GROUP BY d.id, d.name
+     ORDER BY order_count DESC, total_revenue DESC
+     LIMIT 5'
+);
 
 $pageTitle = 'Reports';
 include __DIR__ . '/../includes/header.php';

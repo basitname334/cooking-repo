@@ -29,39 +29,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_customer'])) {
     } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';
     } else {
-        // Check if email already exists
-        $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-        if ($stmt) {
-            $stmt->bind_param("s", $email);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            
-            if ($result->num_rows > 0) {
+        try {
+            // Check if email already exists
+            $existing = db_fetch($conn, 'SELECT id FROM users WHERE email = ?', [$email]);
+
+            if ($existing !== null) {
                 $error = 'Email already registered. Please use a different email.';
-                $stmt->close();
             } else {
-                $stmt->close();
-                
                 // Hash password and insert user
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, 'user')");
-                if ($stmt) {
-                    $stmt->bind_param("sss", $name, $email, $hashed_password);
-                    
-                    if ($stmt->execute()) {
-                        $success = 'Customer created successfully!';
-                        header('Location: customers.php?success=1&created=1');
-                        exit();
-                    } else {
-                        $error = 'Failed to create customer: ' . $stmt->error;
-                    }
-                    $stmt->close();
-                } else {
-                    $error = 'Failed to prepare insert query: ' . $conn->error;
-                }
+                db_exec(
+                    $conn,
+                    "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, 'user')",
+                    [$name, $email, $hashed_password]
+                );
+                $success = 'Customer created successfully!';
+                header('Location: customers.php?success=1&created=1');
+                exit();
             }
-        } else {
-            $error = 'Failed to prepare select query: ' . $conn->error;
+        } catch (PDOException $e) {
+            $error = 'Failed to create customer: ' . $e->getMessage();
         }
     }
 }
@@ -70,17 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_customer'])) {
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
     // Only allow deleting users (not admins)
-    $stmt = $conn->prepare("DELETE FROM users WHERE id = ? AND role = 'user'");
-    if ($stmt) {
-        $stmt->bind_param("i", $id);
-        if ($stmt->execute()) {
-            $success = 'Customer deleted successfully!';
-            header('Location: customers.php?success=1&deleted=1');
-            exit();
-        } else {
-            $error = 'Failed to delete customer: ' . $stmt->error;
-        }
-        $stmt->close();
+    try {
+        db_exec($conn, "DELETE FROM users WHERE id = ? AND role = 'user'", [$id]);
+        $success = 'Customer deleted successfully!';
+        header('Location: customers.php?success=1&deleted=1');
+        exit();
+    } catch (PDOException $e) {
+        $error = 'Failed to delete customer: ' . $e->getMessage();
     }
 }
 
@@ -94,13 +77,10 @@ if (isset($_GET['success'])) {
 }
 
 // Get all customers (users with role='user')
-$customers = [];
-$result = $conn->query("SELECT id, name, email, created_at FROM users WHERE role = 'user' ORDER BY created_at DESC");
-if ($result && $result->num_rows > 0) {
-    $customers = $result->fetch_all(MYSQLI_ASSOC);
-}
-
-$conn->close();
+$customers = db_fetch_all(
+    $conn,
+    "SELECT id, name, email, created_at FROM users WHERE role = 'user' ORDER BY created_at DESC"
+);
 
 $pageTitle = 'Manage Customers';
 include __DIR__ . '/../includes/header.php';

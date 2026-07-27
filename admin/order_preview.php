@@ -19,20 +19,16 @@ if (empty($order_number)) {
 }
 
 // Get order details
-$orders = [];
-$result = $conn->prepare("SELECT o.*, d.name as dish_name, d.image as dish_image, u.name as user_name 
-    FROM orders o 
-    LEFT JOIN dishes d ON o.dish_id = d.id 
-    LEFT JOIN users u ON o.customer_id = u.id 
-    WHERE o.order_number = ? 
-    ORDER BY o.id");
-$result->bind_param("s", $order_number);
-$result->execute();
-$orders_result = $result->get_result();
-if ($orders_result && $orders_result->num_rows > 0) {
-    $orders = $orders_result->fetch_all(MYSQLI_ASSOC);
-}
-$result->close();
+$orders = db_fetch_all(
+    $conn,
+    'SELECT o.*, d.name as dish_name, d.image as dish_image, u.name as user_name
+     FROM orders o
+     LEFT JOIN dishes d ON o.dish_id = d.id
+     LEFT JOIN users u ON o.customer_id = u.id
+     WHERE o.order_number = ?
+     ORDER BY o.id',
+    [$order_number]
+);
 
 if (empty($orders)) {
     header('Location: orders.php');
@@ -47,9 +43,11 @@ $dish_ids = array_unique(array_column($orders, 'dish_id'));
 $ingredients = [];
 
 if (!empty($dish_ids)) {
-    $placeholders = str_repeat('?,', count($dish_ids) - 1) . '?';
-    $ingredients_query = $conn->prepare("
-        SELECT 
+    $placeholders = implode(',', array_fill(0, count($dish_ids), '?'));
+    $params = array_merge([$order_number], array_values($dish_ids));
+    $ingredients = db_fetch_all(
+        $conn,
+        "SELECT
             i.id,
             i.name as ingredient_name,
             i.category_id,
@@ -58,20 +56,14 @@ if (!empty($dish_ids)) {
             di.quantity as base_quantity,
             di.unit as base_unit,
             o.quantity as order_quantity
-        FROM dish_ingredients di
-        INNER JOIN ingredients i ON di.ingredient_id = i.id
-        INNER JOIN categories c ON i.category_id = c.id
-        INNER JOIN orders o ON di.dish_id = o.dish_id AND o.order_number = ?
-        WHERE di.dish_id IN ($placeholders)
-        ORDER BY c.name, i.name
-    ");
-    $ingredients_query->bind_param("s" . str_repeat("i", count($dish_ids)), $order_number, ...$dish_ids);
-    $ingredients_query->execute();
-    $ingredients_result = $ingredients_query->get_result();
-    if ($ingredients_result && $ingredients_result->num_rows > 0) {
-        $ingredients = $ingredients_result->fetch_all(MYSQLI_ASSOC);
-    }
-    $ingredients_query->close();
+         FROM dish_ingredients di
+         INNER JOIN ingredients i ON di.ingredient_id = i.id
+         INNER JOIN categories c ON i.category_id = c.id
+         INNER JOIN orders o ON di.dish_id = o.dish_id AND o.order_number = ?
+         WHERE di.dish_id IN ($placeholders)
+         ORDER BY c.name, i.name",
+        $params
+    );
 }
 
 // Helper function to convert units to grams (base unit)

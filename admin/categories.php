@@ -27,34 +27,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($name)) {
         $error = t('category_name_required');
     } else {
-        if ($category_id) {
-            // Update existing category
-            $stmt = $conn->prepare("UPDATE categories SET name = ?, description = ? WHERE id = ?");
-            $stmt->bind_param("ssi", $name, $description, $category_id);
-            
-            if ($stmt->execute()) {
+        try {
+            if ($category_id) {
+                // Update existing category
+                db_exec($conn, "UPDATE categories SET name = ?, description = ? WHERE id = ?", [$name, $description, $category_id]);
                 $success = t('category_updated');
-                // Redirect to refresh the list and prevent form resubmission
                 header('Location: categories.php?success=1&edited=1');
                 exit();
             } else {
-                $error = t('failed_to_update') . ' ' . t('categories_title') . ': ' . $stmt->error . ' ' . t('may_already_exist');
-            }
-            $stmt->close();
-        } else {
-            // Create new category
-            $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
-            $stmt->bind_param("ss", $name, $description);
-            
-            if ($stmt->execute()) {
+                // Create new category
+                db_exec($conn, "INSERT INTO categories (name, description) VALUES (?, ?)", [$name, $description]);
                 $success = t('category_created');
-                // Redirect to refresh the list and prevent form resubmission
                 header('Location: categories.php?success=1');
                 exit();
-            } else {
-                $error = t('failed_to_create') . ' ' . t('categories_title') . ': ' . $stmt->error . ' ' . t('may_already_exist');
             }
-            $stmt->close();
+        } catch (PDOException $e) {
+            if ($category_id) {
+                $error = t('failed_to_update') . ' ' . t('categories_title') . ': ' . $e->getMessage() . ' ' . t('may_already_exist');
+            } else {
+                $error = t('failed_to_create') . ' ' . t('categories_title') . ': ' . $e->getMessage() . ' ' . t('may_already_exist');
+            }
         }
     }
 }
@@ -63,27 +55,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['delete_all']) && $_GET['delete_all'] === '1') {
     // Double confirmation via POST to prevent accidental deletion
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete_all'])) {
-        $conn->begin_transaction();
         try {
+            $conn->beginTransaction();
             // Delete all dish_ingredients first (due to foreign key constraint)
-            $conn->query("DELETE FROM dish_ingredients");
-            
+            $conn->exec("DELETE FROM dish_ingredients");
             // Delete all ingredients (due to foreign key constraint)
-            $conn->query("DELETE FROM ingredients");
-            
+            $conn->exec("DELETE FROM ingredients");
             // Delete all dishes (due to foreign key constraint)
-            $conn->query("DELETE FROM dishes");
-            
+            $conn->exec("DELETE FROM dishes");
             // Delete all categories
-            $conn->query("DELETE FROM categories");
-            
+            $conn->exec("DELETE FROM categories");
             $conn->commit();
-            $conn->close();
             $success = 'All categories and related data have been deleted successfully!';
             header('Location: categories.php?success=1&deleted_all=1');
             exit();
         } catch (Exception $e) {
-            $conn->rollback();
+            if ($conn->inTransaction()) {
+                $conn->rollBack();
+            }
             $error = 'Failed to delete all data: ' . $e->getMessage();
         }
     } else {
@@ -95,18 +84,14 @@ if (isset($_GET['delete_all']) && $_GET['delete_all'] === '1') {
 // Handle delete
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
-    $stmt = $conn->prepare("DELETE FROM categories WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    
-    if ($stmt->execute()) {
+    try {
+        db_exec($conn, "DELETE FROM categories WHERE id = ?", [$id]);
         $success = t('category_deleted');
-        // Redirect to refresh the list
         header('Location: categories.php?success=1&deleted=1');
         exit();
-    } else {
-        $error = t('failed_to_delete') . ' ' . t('categories_title') . ': ' . $stmt->error . ' ' . t('may_have_associated');
+    } catch (PDOException $e) {
+        $error = t('failed_to_delete') . ' ' . t('categories_title') . ': ' . $e->getMessage() . ' ' . t('may_have_associated');
     }
-    $stmt->close();
 }
 
 // Handle success message from redirect
@@ -126,73 +111,46 @@ if (isset($_GET['success'])) {
 $edit_category = null;
 if (isset($_GET['edit'])) {
     $id = intval($_GET['edit']);
-    $stmt = $conn->prepare("SELECT * FROM categories WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $edit_category = $result->fetch_assoc();
-    $stmt->close();
+    $edit_category = db_fetch($conn, "SELECT * FROM categories WHERE id = ?", [$id]);
 }
 
 // Get all categories with error handling
 $categories = [];
 
-// First check if ingredients and dishes tables exist
-$ingredients_table_exists = false;
-$dishes_table_exists = false;
+$ingredients_table_exists = db_table_exists($conn, 'ingredients');
+$dishes_table_exists = db_table_exists($conn, 'dishes');
 
-$check_result = $conn->query("SHOW TABLES LIKE 'ingredients'");
-if ($check_result && $check_result->num_rows > 0) {
-    $ingredients_table_exists = true;
-}
-
-$check_result = $conn->query("SHOW TABLES LIKE 'dishes'");
-if ($check_result && $check_result->num_rows > 0) {
-    $dishes_table_exists = true;
-}
-
-// Build query based on which tables exist
-if ($ingredients_table_exists && $dishes_table_exists) {
-    // Both tables exist - use full query with counts
-    $result = $conn->query("SELECT c.*, 
-        (SELECT COUNT(*) FROM ingredients WHERE category_id = c.id) as ingredients_count,
-        (SELECT COUNT(*) FROM dishes WHERE category_id = c.id) as dishes_count
-        FROM categories c ORDER BY c.name");
-} elseif ($ingredients_table_exists) {
-    // Only ingredients table exists
-    $result = $conn->query("SELECT c.*, 
-        (SELECT COUNT(*) FROM ingredients WHERE category_id = c.id) as ingredients_count,
-        0 as dishes_count
-        FROM categories c ORDER BY c.name");
-} elseif ($dishes_table_exists) {
-    // Only dishes table exists
-    $result = $conn->query("SELECT c.*, 
-        0 as ingredients_count,
-        (SELECT COUNT(*) FROM dishes WHERE category_id = c.id) as dishes_count
-        FROM categories c ORDER BY c.name");
-} else {
-    // Neither table exists - just get categories
-    $result = $conn->query("SELECT c.*, 0 as ingredients_count, 0 as dishes_count FROM categories c ORDER BY c.name");
-}
-
-if ($result) {
-    // Get all rows even if table is empty (for proper display)
-    if ($result->num_rows > 0) {
-        $categories = $result->fetch_all(MYSQLI_ASSOC);
+try {
+    // Build query based on which tables exist
+    if ($ingredients_table_exists && $dishes_table_exists) {
+        $categories = db_fetch_all($conn, "SELECT c.*, 
+            (SELECT COUNT(*) FROM ingredients WHERE category_id = c.id) as ingredients_count,
+            (SELECT COUNT(*) FROM dishes WHERE category_id = c.id) as dishes_count
+            FROM categories c ORDER BY c.name");
+    } elseif ($ingredients_table_exists) {
+        $categories = db_fetch_all($conn, "SELECT c.*, 
+            (SELECT COUNT(*) FROM ingredients WHERE category_id = c.id) as ingredients_count,
+            0 as dishes_count
+            FROM categories c ORDER BY c.name");
+    } elseif ($dishes_table_exists) {
+        $categories = db_fetch_all($conn, "SELECT c.*, 
+            0 as ingredients_count,
+            (SELECT COUNT(*) FROM dishes WHERE category_id = c.id) as dishes_count
+            FROM categories c ORDER BY c.name");
+    } else {
+        $categories = db_fetch_all($conn, "SELECT c.*, 0 as ingredients_count, 0 as dishes_count FROM categories c ORDER BY c.name");
     }
-} else {
+} catch (PDOException $e) {
     // Query failed - try simpler query without subqueries
-    $result = $conn->query("SELECT * FROM categories ORDER BY name");
-    if ($result) {
-        $categories = $result->fetch_all(MYSQLI_ASSOC);
-        // Add default counts
+    try {
+        $categories = db_fetch_all($conn, "SELECT * FROM categories ORDER BY name");
         foreach ($categories as &$category) {
             $category['ingredients_count'] = 0;
             $category['dishes_count'] = 0;
         }
-    } else {
-        // Both queries failed - show error
-        $error = 'Failed to load categories: ' . $conn->error;
+        unset($category);
+    } catch (PDOException $e2) {
+        $error = 'Failed to load categories: ' . $e2->getMessage();
     }
 }
 
@@ -203,11 +161,6 @@ $total_dishes = 0;
 foreach ($categories as $cat) {
     $total_ingredients += intval($cat['ingredients_count'] ?? 0);
     $total_dishes += intval($cat['dishes_count'] ?? 0);
-}
-
-// Close connection after getting all data
-if (isset($conn) && !isset($show_delete_all_confirmation)) {
-    $conn->close();
 }
 
 $pageTitle = t('categories_title');

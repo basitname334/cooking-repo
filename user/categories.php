@@ -11,14 +11,17 @@ requireLogin();
 $conn = getDBConnection();
 
 // Get all categories with counts - optimized using LEFT JOIN instead of subqueries
-$categories = $conn->query("SELECT c.*, 
-    COALESCE(COUNT(DISTINCT i.id), 0) as ingredients_count,
-    COALESCE(COUNT(DISTINCT d.id), 0) as dishes_count
-    FROM categories c 
-    LEFT JOIN ingredients i ON c.id = i.category_id
-    LEFT JOIN dishes d ON c.id = d.category_id
-    GROUP BY c.id, c.name, c.description, c.created_at
-    ORDER BY c.name")->fetch_all(MYSQLI_ASSOC);
+$categories = db_fetch_all(
+    $conn,
+    'SELECT c.*,
+        COALESCE(COUNT(DISTINCT i.id), 0) as ingredients_count,
+        COALESCE(COUNT(DISTINCT d.id), 0) as dishes_count
+     FROM categories c
+     LEFT JOIN ingredients i ON c.id = i.category_id
+     LEFT JOIN dishes d ON c.id = d.category_id
+     GROUP BY c.id, c.name, c.description, c.created_at
+     ORDER BY c.name'
+);
 
 // Get category details if selected
 $selected_category = null;
@@ -27,33 +30,24 @@ $category_dishes = [];
 
 if (isset($_GET['id'])) {
     $category_id = intval($_GET['id']);
-    $stmt = $conn->prepare("SELECT * FROM categories WHERE id = ?");
-    $stmt->bind_param("i", $category_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $selected_category = $result->fetch_assoc();
-    $stmt->close();
-    
+    $selected_category = db_fetch($conn, 'SELECT * FROM categories WHERE id = ?', [$category_id]);
+
     if ($selected_category) {
         // Get ingredients for this category
-        $stmt = $conn->prepare("SELECT * FROM ingredients WHERE category_id = ? ORDER BY name");
-        $stmt->bind_param("i", $category_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $category_ingredients = $result->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
-        
+        $category_ingredients = db_fetch_all(
+            $conn,
+            'SELECT * FROM ingredients WHERE category_id = ? ORDER BY name',
+            [$category_id]
+        );
+
         // Get dishes for this category
-        $stmt = $conn->prepare("SELECT * FROM dishes WHERE category_id = ? ORDER BY name");
-        $stmt->bind_param("i", $category_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $category_dishes = $result->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
+        $category_dishes = db_fetch_all(
+            $conn,
+            'SELECT * FROM dishes WHERE category_id = ? ORDER BY name',
+            [$category_id]
+        );
     }
 }
-
-$conn->close();
 
 $pageTitle = 'Categories';
 include __DIR__ . '/../includes/header.php';

@@ -34,45 +34,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($conn === false) {
             $error = 'Database connection failed. Please try again later.';
         } else {
-            // Ensure admin user exists with correct password
-            ensureAdminUser($conn);
-            
-            $stmt = $conn->prepare("SELECT id, name, email, password, role FROM users WHERE email = ?");
-            
-            // Check if prepare() succeeded
-            if ($stmt === false) {
-                $error = 'Database error: ' . $conn->error . '. Tables are being created automatically. Please try again.';
-                error_log("Login prepare error: " . $conn->error);
-                $conn->close();
-            } else {
-                $stmt->bind_param("s", $email);
-                $stmt->execute();
-                $result = $stmt->get_result();
+            try {
+                // Ensure admin user exists with correct password
+                ensureAdminUser($conn);
                 
-                if ($result->num_rows === 1) {
-                    $user = $result->fetch_assoc();
-                    if (password_verify($password, $user['password'])) {
-                        // Set session variables
-                        $_SESSION['user_id'] = $user['id'];
-                        $_SESSION['user_name'] = $user['name'];
-                        $_SESSION['user_email'] = $user['email'];
-                        $_SESSION['user_role'] = $user['role'];
-                        
-                        // Redirect based on role
-                        if ($user['role'] === 'admin') {
-                            header('Location: ../admin/dashboard.php');
-                        } else {
-                            header('Location: ../user/dashboard.php');
-                        }
-                        exit();
+                $user = db_fetch(
+                    $conn,
+                    'SELECT id, name, email, password, role FROM users WHERE email = ?',
+                    [$email]
+                );
+                
+                if ($user !== null && password_verify($password, $user['password'])) {
+                    // Set session variables
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['user_name'] = $user['name'];
+                    $_SESSION['user_email'] = $user['email'];
+                    $_SESSION['user_role'] = $user['role'];
+                    
+                    // Redirect based on role
+                    if ($user['role'] === 'admin') {
+                        header('Location: ../admin/dashboard.php');
                     } else {
-                        $error = t('invalid_credentials');
+                        header('Location: ../user/dashboard.php');
                     }
+                    exit();
                 } else {
                     $error = t('invalid_credentials');
                 }
-                $stmt->close();
-                $conn->close();
+            } catch (PDOException $e) {
+                $error = 'Database error: ' . $e->getMessage() . '. Tables are being created automatically. Please try again.';
+                error_log('Login error: ' . $e->getMessage());
             }
         }
     }
@@ -86,7 +77,7 @@ include __DIR__ . '/../includes/header.php';
     <div class="col-md-5">
         <div class="card shadow-2xl border-0" style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-radius: 24px; overflow: hidden;">
             <div class="card-header text-center py-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; position: relative;">
-                <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,<svg width=\"100\" height=\"100\" xmlns=\"http://www.w3.org/2000/svg\"><defs><pattern id=\"grid\" width=\"40\" height=\"40\" patternUnits=\"userSpaceOnUse\"><path d=\"M 40 0 L 0 0 0 40\" fill=\"none\" stroke=\"rgba(255,255,255,0.1)\" stroke-width=\"1\"/></pattern></defs><rect width=\"100\" height=\"100\" fill=\"url(%23grid)\" /></svg>'); opacity: 0.3;"></div>
+                <div style="position: absolute; inset: 0; opacity: 0.3; background-image: linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px); background-size: 40px 40px;"></div>
                 <div class="d-flex align-items-center justify-content-center mb-3 position-relative" style="z-index: 1;">
                     <img src="../images/logo.jpg" alt="Logo" style="height: 60px; width: auto; border-radius: 16px; margin-right: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
                     <h3 class="mb-0 fw-bold text-white"><i class="bi bi-box-arrow-in-right me-2"></i><?php e('login'); ?></h3>

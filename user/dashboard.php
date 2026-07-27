@@ -11,11 +11,9 @@ requireLogin();
 $conn = getDBConnection();
 
 // Get statistics
-$categories_count = $conn->query("SELECT COUNT(*) as count FROM categories")->fetch_assoc()['count'];
-$ingredients_count = $conn->query("SELECT COUNT(*) as count FROM ingredients")->fetch_assoc()['count'];
-$dishes_count = $conn->query("SELECT COUNT(*) as count FROM dishes")->fetch_assoc()['count'];
-
-$conn->close();
+$categories_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM categories')['count'] ?? 0);
+$ingredients_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM ingredients')['count'] ?? 0);
+$dishes_count = (int) (db_fetch($conn, 'SELECT COUNT(*) as count FROM dishes')['count'] ?? 0);
 
 $pageTitle = 'User Dashboard';
 include __DIR__ . '/../includes/header.php';

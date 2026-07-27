@@ -10,34 +10,38 @@ require_once __DIR__ . '/../config/language.php';
 header('Content-Type: application/json');
 
 $conn = getDBConnection();
+if ($conn === false) {
+    echo json_encode([]);
+    exit;
+}
 
 // Get current language
 $currentLang = getCurrentLanguage();
 
 // First, get all categories (even if they have no ingredients)
-$categoriesResult = $conn->query("SELECT id, name FROM categories ORDER BY name");
 $allCategories = [];
-if ($categoriesResult) {
-    while ($catRow = $categoriesResult->fetch_assoc()) {
-        $catId = $catRow['id'];
-        $catName = $catRow['name'];
-        
-        // Translate category name if needed
-        if ($currentLang === 'ur' && !empty($catName) && !preg_match('/[\x{0600}-\x{06FF}]/u', $catName)) {
-            $catName = translateToUrdu($catName);
-        }
-        
-        $allCategories[$catId] = [
-            'id' => $catId,
-            'name' => $catName
-        ];
+foreach (db_fetch_all($conn, 'SELECT id, name FROM categories ORDER BY name') as $catRow) {
+    $catId = $catRow['id'];
+    $catName = $catRow['name'];
+
+    // Translate category name if needed
+    if ($currentLang === 'ur' && !empty($catName) && !preg_match('/[\x{0600}-\x{06FF}]/u', $catName)) {
+        $catName = translateToUrdu($catName);
     }
+
+    $allCategories[$catId] = [
+        'id' => $catId,
+        'name' => $catName
+    ];
 }
 
 // Get all ingredients with category information
-$result = $conn->query("SELECT i.*, c.id as cat_id, c.name as category_name FROM ingredients i 
-    LEFT JOIN categories c ON i.category_id = c.id 
-    ORDER BY c.name, i.name");
+$rows = db_fetch_all(
+    $conn,
+    'SELECT i.*, c.id as cat_id, c.name as category_name FROM ingredients i
+     LEFT JOIN categories c ON i.category_id = c.id
+     ORDER BY c.name, i.name'
+);
 
 $ingredientsByCategory = [];
 
@@ -46,34 +50,32 @@ foreach ($allCategories as $catId => $catInfo) {
     $ingredientsByCategory[$catId] = [];
 }
 
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
-        $categoryId = $row['cat_id'];
-        if ($categoryId && !isset($ingredientsByCategory[$categoryId])) {
-            $ingredientsByCategory[$categoryId] = [];
+foreach ($rows as $row) {
+    $categoryId = $row['cat_id'];
+    if ($categoryId && !isset($ingredientsByCategory[$categoryId])) {
+        $ingredientsByCategory[$categoryId] = [];
+    }
+
+    if ($categoryId) {
+        // Translate ingredient name if needed (if stored in English but Urdu is selected)
+        $ingredientName = $row['name'];
+        // Only translate if current language is Urdu and text appears to be in English
+        if ($currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ingredientName)) {
+            $ingredientName = translateToUrdu($ingredientName);
         }
-        
-        if ($categoryId) {
-            // Translate ingredient name if needed (if stored in English but Urdu is selected)
-            $ingredientName = $row['name'];
-            // Only translate if current language is Urdu and text appears to be in English
-            if ($currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ingredientName)) {
-                $ingredientName = translateToUrdu($ingredientName);
-            }
-            
-            // Translate category name if needed
-            $categoryName = $row['category_name'];
-            if ($currentLang === 'ur' && !empty($categoryName) && !preg_match('/[\x{0600}-\x{06FF}]/u', $categoryName)) {
-                $categoryName = translateToUrdu($categoryName);
-            }
-            
-            $ingredientsByCategory[$categoryId][] = [
-                'id' => $row['id'],
-                'name' => $ingredientName,
-                'unit' => $row['unit'],
-                'category_name' => $categoryName ?: $allCategories[$categoryId]['name']
-            ];
+
+        // Translate category name if needed
+        $categoryName = $row['category_name'];
+        if ($currentLang === 'ur' && !empty($categoryName) && !preg_match('/[\x{0600}-\x{06FF}]/u', $categoryName)) {
+            $categoryName = translateToUrdu($categoryName);
         }
+
+        $ingredientsByCategory[$categoryId][] = [
+            'id' => $row['id'],
+            'name' => $ingredientName,
+            'unit' => $row['unit'],
+            'category_name' => $categoryName ?: $allCategories[$categoryId]['name']
+        ];
     }
 }
 
@@ -89,8 +91,6 @@ foreach ($ingredientsByCategory as $catId => $ingredients) {
         unset($ing);
     }
 }
-
-$conn->close();
 
 echo json_encode($ingredientsByCategory);
 ?>

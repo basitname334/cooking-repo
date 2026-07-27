@@ -12,31 +12,31 @@ $conn = getDBConnection();
 
 $ingredients_by_category = [];
 
-$query = $conn->query("SELECT c.id as category_id, c.name as category_name, c.description,
-    i.id as ingredient_id, i.name as ingredient_name
-    FROM categories c
-    LEFT JOIN ingredients i ON i.category_id = c.id
-    ORDER BY c.name, i.name");
+$rows = db_fetch_all(
+    $conn,
+    'SELECT c.id as category_id, c.name as category_name, c.description,
+        i.id as ingredient_id, i.name as ingredient_name
+     FROM categories c
+     LEFT JOIN ingredients i ON i.category_id = c.id
+     ORDER BY c.name, i.name'
+);
 
-if ($query && $query->num_rows > 0) {
-    while ($row = $query->fetch_assoc()) {
-        $cat_id = $row['category_id'];
-        if (!isset($ingredients_by_category[$cat_id])) {
-            $ingredients_by_category[$cat_id] = [
-                'name' => $row['category_name'] ?: 'Uncategorized',
-                'description' => $row['description'] ?: '',
-                'ingredients' => []
-            ];
-        }
+foreach ($rows as $row) {
+    $cat_id = $row['category_id'];
+    if (!isset($ingredients_by_category[$cat_id])) {
+        $ingredients_by_category[$cat_id] = [
+            'name' => $row['category_name'] ?: 'Uncategorized',
+            'description' => $row['description'] ?: '',
+            'ingredients' => []
+        ];
+    }
 
-        if (!empty($row['ingredient_id'])) {
-            $ingredients_by_category[$cat_id]['ingredients'][] = $row['ingredient_name'];
-        }
+    if (!empty($row['ingredient_id'])) {
+        $ingredients_by_category[$cat_id]['ingredients'][] = $row['ingredient_name'];
     }
 }
 
 $generated_at = date('Y-m-d H:i');
-$conn->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">

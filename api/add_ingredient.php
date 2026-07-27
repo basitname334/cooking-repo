@@ -29,52 +29,42 @@ if (empty($name) || $category_id <= 0) {
 }
 
 $conn = getDBConnection();
-
-// Check if ingredient already exists
-$stmt = $conn->prepare("SELECT id FROM ingredients WHERE name = ?");
-$stmt->bind_param("s", $name);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result->num_rows > 0) {
-    $stmt->close();
-    $conn->close();
-    echo json_encode(['success' => false, 'error' => 'Ingredient already exists']);
+if ($conn === false) {
+    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
     exit;
 }
-$stmt->close();
 
-// Create new ingredient (set unit to empty string)
-$unit = '';
-$stmt = $conn->prepare("INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?)");
-$stmt->bind_param("sis", $name, $category_id, $unit);
+try {
+    // Check if ingredient already exists
+    $existing = db_fetch($conn, 'SELECT id FROM ingredients WHERE name = ?', [$name]);
+    if ($existing !== null) {
+        echo json_encode(['success' => false, 'error' => 'Ingredient already exists']);
+        exit;
+    }
 
-if ($stmt->execute()) {
-    $ingredient_id = $stmt->insert_id;
-    $stmt->close();
-    
+    // Create new ingredient (set unit to empty string)
+    $unit = '';
+    $ingredient_id = db_insert(
+        $conn,
+        'INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?) RETURNING id',
+        [$name, $category_id, $unit]
+    );
+
     // Get category name
-    $stmt = $conn->prepare("SELECT name FROM categories WHERE id = ?");
-    $stmt->bind_param("i", $category_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $category = $result->fetch_assoc();
+    $category = db_fetch($conn, 'SELECT name FROM categories WHERE id = ?', [$category_id]);
     $category_name = $category['name'] ?? '';
-    $stmt->close();
-    
+
     // Get current language for translation
     $currentLang = getCurrentLanguage();
     $ingredientName = $name;
     if ($currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ingredientName)) {
         $ingredientName = translateToUrdu($ingredientName);
     }
-    
+
     if ($currentLang === 'ur' && !empty($category_name) && !preg_match('/[\x{0600}-\x{06FF}]/u', $category_name)) {
         $category_name = translateToUrdu($category_name);
     }
-    
-    $conn->close();
-    
+
     echo json_encode([
         'success' => true,
         'ingredient' => [
@@ -85,11 +75,7 @@ if ($stmt->execute()) {
             'unit' => $unit
         ]
     ]);
-} else {
-    $error = $stmt->error;
-    $stmt->close();
-    $conn->close();
-    echo json_encode(['success' => false, 'error' => 'Failed to create ingredient: ' . $error]);
+} catch (PDOException $e) {
+    echo json_encode(['success' => false, 'error' => 'Failed to create ingredient: ' . $e->getMessage()]);
 }
 ?>
-

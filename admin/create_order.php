@@ -21,19 +21,23 @@ $required_columns = [
     'customer_cell' => "VARCHAR(20) DEFAULT NULL",
     'delivery_date' => "DATE DEFAULT NULL",
     'delivery_time' => "TIME DEFAULT NULL",
-    'shift' => "ENUM('afternoon', 'evening') DEFAULT NULL",
+    'shift' => "VARCHAR(20) DEFAULT NULL",
     'number_of_persons' => "INT DEFAULT NULL",
     'cloth_malmal_quantity' => "INT DEFAULT 0",
     'match_box_quantity' => "INT DEFAULT 0",
     'surrf_quantity' => "INT DEFAULT 0",
     'sponjis_quantity' => "INT DEFAULT 0",
-    'wood_quantity' => "INT DEFAULT 0"
+    'wood_quantity' => "INT DEFAULT 0",
+    'order_date' => "TIMESTAMP DEFAULT NULL"
 ];
 
 foreach ($required_columns as $column => $definition) {
-    $result = $conn->query("SHOW COLUMNS FROM `orders` LIKE '$column'");
-    if (!$result || $result->num_rows == 0) {
-        $conn->query("ALTER TABLE `orders` ADD COLUMN `$column` $definition");
+    if (!db_column_exists($conn, 'orders', $column)) {
+        try {
+            $conn->exec("ALTER TABLE orders ADD COLUMN {$column} {$definition}");
+        } catch (PDOException $e) {
+            error_log('create_order migration failed: ' . $e->getMessage());
+        }
     }
 }
 
@@ -82,49 +86,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         // Combine order date and time
         $order_datetime = $order_date . ' ' . $order_time . ':00';
         
-        // Check if order_date column exists, if not add it
-        $check_order_date = $conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_date'");
-        if (!$check_order_date || $check_order_date->num_rows == 0) {
-            $conn->query("ALTER TABLE `orders` ADD COLUMN `order_date` DATETIME DEFAULT NULL AFTER `customer_cell`");
-        }
-        
         // Create order records for each dish
         $orders_created = 0;
         foreach ($dishes_data as $dish_info) {
-            // Handle nullable customer_id - use 0 if not set (will be stored as NULL in DB)
-            $final_customer_id = ($customer_id > 0) ? $customer_id : 0;
+            $final_customer_id = ($customer_id > 0) ? $customer_id : null;
             
-            $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
-                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons,
-                cloth_malmal_quantity, match_box_quantity, surrf_quantity, sponjis_quantity, wood_quantity) 
-                VALUES (?, NULLIF(?, 0), ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            
-            if ($stmt) {
-                $stmt->bind_param("siidsssssiiiiii", 
-                    $order_number,
-                    $final_customer_id,
-                    $dish_info['dish_id'], 
-                    $dish_info['quantity'], 
-                    $customer_name,
-                    $customer_cell,
-                    $order_datetime,
-                    $delivery_date,
-                    $delivery_time,
-                    $shift,
-                    $number_of_persons,
-                    $cloth_malmal_quantity,
-                    $match_box_quantity,
-                    $surrf_quantity,
-                    $sponjis_quantity,
-                    $wood_quantity
+            try {
+                db_exec(
+                    $conn,
+                    "INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                        customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons,
+                        cloth_malmal_quantity, match_box_quantity, surrf_quantity, sponjis_quantity, wood_quantity) 
+                        VALUES (?, ?, ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        $order_number,
+                        $final_customer_id,
+                        $dish_info['dish_id'],
+                        $dish_info['quantity'],
+                        $customer_name,
+                        $customer_cell,
+                        $order_datetime,
+                        $delivery_date,
+                        $delivery_time,
+                        $shift,
+                        $number_of_persons,
+                        $cloth_malmal_quantity,
+                        $match_box_quantity,
+                        $surrf_quantity,
+                        $sponjis_quantity,
+                        $wood_quantity
+                    ]
                 );
-                
-                if ($stmt->execute()) {
-                    $orders_created++;
-                } else {
-                    $error = 'Failed to create order: ' . $stmt->error;
-                }
-                $stmt->close();
+                $orders_created++;
+            } catch (PDOException $e) {
+                $error = 'Failed to create order: ' . $e->getMessage();
             }
         }
         
@@ -137,55 +132,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
 }
 
 // Get all customers (users with role='user') with their last used cell number from orders
-$customers = [];
-$customers_query = "SELECT u.id, u.name, u.email, 
+$customers = db_fetch_all(
+    $conn,
+    "SELECT u.id, u.name, u.email, 
     (SELECT o.customer_cell FROM orders o WHERE o.customer_id = u.id ORDER BY o.order_date DESC LIMIT 1) as last_cell
     FROM users u 
     WHERE u.role = 'user' 
-    ORDER BY u.name";
-$customers_result = $conn->query($customers_query);
-if ($customers_result && $customers_result->num_rows > 0) {
-    $customers = $customers_result->fetch_all(MYSQLI_ASSOC);
-}
+    ORDER BY u.name"
+);
 
 // Get all categories for dish selection modal
-$dish_categories = [];
-$cat_result = $conn->query("SELECT DISTINCT c.id, c.name, c.description 
+$dish_categories = db_fetch_all(
+    $conn,
+    "SELECT DISTINCT c.id, c.name, c.description 
     FROM categories c 
     INNER JOIN dishes d ON d.category_id = c.id 
-    ORDER BY c.name");
-if ($cat_result && $cat_result->num_rows > 0) {
-    $dish_categories = $cat_result->fetch_all(MYSQLI_ASSOC);
-}
+    ORDER BY c.name"
+);
 
 // Get all dishes with images
-$dishes = [];
-$result = $conn->query("SELECT d.*, d.category_id, c.name as category_name 
+$dishes = db_fetch_all(
+    $conn,
+    "SELECT d.*, d.category_id, c.name as category_name 
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
-    ORDER BY d.name");
-if ($result && $result->num_rows > 0) {
-    $dishes = $result->fetch_all(MYSQLI_ASSOC);
-}
+    ORDER BY d.name"
+);
 
 // Get previously used dishes from recent orders (last 30 days)
-$previously_used_dishes = [];
-$recent_orders_query = "SELECT DISTINCT o.dish_id, d.*, c.name as category_name,
+$previously_used_dishes = db_fetch_all(
+    $conn,
+    "SELECT o.dish_id, d.*, c.name as category_name,
     COUNT(o.id) as order_count,
     MAX(o.order_date) as last_used_date
     FROM orders o
     INNER JOIN dishes d ON o.dish_id = d.id
     LEFT JOIN categories c ON d.category_id = c.id
-    WHERE o.order_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-    GROUP BY o.dish_id, d.id
+    WHERE o.order_date >= (NOW() - INTERVAL '30 days')
+    GROUP BY o.dish_id, d.id, c.name
     ORDER BY order_count DESC, last_used_date DESC
-    LIMIT 20";
-$recent_result = $conn->query($recent_orders_query);
-if ($recent_result && $recent_result->num_rows > 0) {
-    $previously_used_dishes = $recent_result->fetch_all(MYSQLI_ASSOC);
-}
-
-$conn->close();
+    LIMIT 20"
+);
 
 $pageTitle = 'Create Order';
 include __DIR__ . '/../includes/header.php';

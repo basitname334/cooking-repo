@@ -26,44 +26,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($name) || $category_id <= 0) {
         $error = 'Ingredient name and category are required.';
     } else {
-        if ($ingredient_id) {
-            // Update existing ingredient (keep existing unit)
-            $stmt = $conn->prepare("UPDATE ingredients SET name = ?, category_id = ? WHERE id = ?");
-            
-            if ($stmt === false) {
-                $error = 'Failed to prepare update query: ' . $conn->error;
+        try {
+            if ($ingredient_id) {
+                // Update existing ingredient (keep existing unit)
+                db_exec($conn, "UPDATE ingredients SET name = ?, category_id = ? WHERE id = ?", [$name, $category_id, $ingredient_id]);
+                $success = 'Ingredient updated successfully!';
+                header('Location: ingredients.php?success=1&edited=1');
+                exit();
             } else {
-                $stmt->bind_param("sii", $name, $category_id, $ingredient_id);
-                
-                if ($stmt->execute()) {
-                    $success = 'Ingredient updated successfully!';
-                    // Redirect to refresh the list
-                    header('Location: ingredients.php?success=1&edited=1');
-                    exit();
-                } else {
-                    $error = 'Failed to update ingredient: ' . $stmt->error;
-                }
-                $stmt->close();
+                // Create new ingredient (set unit to empty string)
+                $unit = '';
+                db_exec($conn, "INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?)", [$name, $category_id, $unit]);
+                $success = 'Ingredient created successfully!';
+                header('Location: ingredients.php?success=1');
+                exit();
             }
-        } else {
-            // Create new ingredient (set unit to empty string)
-            $unit = ''; // Set empty unit
-            $stmt = $conn->prepare("INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?)");
-            
-            if ($stmt === false) {
-                $error = 'Failed to prepare insert query: ' . $conn->error . ' Make sure the ingredients table exists.';
+        } catch (PDOException $e) {
+            if ($ingredient_id) {
+                $error = 'Failed to update ingredient: ' . $e->getMessage();
             } else {
-                $stmt->bind_param("sis", $name, $category_id, $unit);
-                
-                if ($stmt->execute()) {
-                    $success = 'Ingredient created successfully!';
-                    // Redirect to refresh the list
-                    header('Location: ingredients.php?success=1');
-                    exit();
-                } else {
-                    $error = 'Failed to create ingredient: ' . $stmt->error;
-                }
-                $stmt->close();
+                $error = 'Failed to create ingredient: ' . $e->getMessage() . ' Make sure the ingredients table exists.';
             }
         }
     }
@@ -74,21 +56,20 @@ $show_delete_all_confirmation = false;
 if (isset($_GET['delete_all']) && $_GET['delete_all'] === '1') {
     // Double confirmation via POST to prevent accidental deletion
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_delete_all'])) {
-        $conn->begin_transaction();
         try {
+            $conn->beginTransaction();
             // Delete all dish_ingredients first (due to foreign key constraint)
-            $conn->query("DELETE FROM dish_ingredients");
-            
+            $conn->exec("DELETE FROM dish_ingredients");
             // Delete all ingredients
-            $conn->query("DELETE FROM ingredients");
-            
+            $conn->exec("DELETE FROM ingredients");
             $conn->commit();
-            $conn->close();
             $success = 'All ingredients have been deleted successfully!';
             header('Location: ingredients.php?success=1&deleted_all=1');
             exit();
         } catch (Exception $e) {
-            $conn->rollback();
+            if ($conn->inTransaction()) {
+                $conn->rollBack();
+            }
             $error = 'Failed to delete all ingredients: ' . $e->getMessage();
         }
     } else {
@@ -100,22 +81,13 @@ if (isset($_GET['delete_all']) && $_GET['delete_all'] === '1') {
 // Handle delete
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
-    $stmt = $conn->prepare("DELETE FROM ingredients WHERE id = ?");
-    
-    if ($stmt === false) {
-        $error = 'Failed to prepare delete query: ' . $conn->error;
-    } else {
-        $stmt->bind_param("i", $id);
-        
-        if ($stmt->execute()) {
-            $success = 'Ingredient deleted successfully!';
-            // Redirect to refresh the list
-            header('Location: ingredients.php?success=1&deleted=1');
-            exit();
-        } else {
-            $error = 'Failed to delete ingredient: ' . $stmt->error;
-        }
-        $stmt->close();
+    try {
+        db_exec($conn, "DELETE FROM ingredients WHERE id = ?", [$id]);
+        $success = 'Ingredient deleted successfully!';
+        header('Location: ingredients.php?success=1&deleted=1');
+        exit();
+    } catch (PDOException $e) {
+        $error = 'Failed to delete ingredient: ' . $e->getMessage();
     }
 }
 
@@ -136,43 +108,24 @@ if (isset($_GET['success'])) {
 $edit_ingredient = null;
 if (isset($_GET['edit'])) {
     $id = intval($_GET['edit']);
-    $stmt = $conn->prepare("SELECT * FROM ingredients WHERE id = ?");
-    
-    if ($stmt === false) {
-        $error = 'Failed to prepare select query: ' . $conn->error;
-    } else {
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $edit_ingredient = $result->fetch_assoc();
-        $stmt->close();
+    try {
+        $edit_ingredient = db_fetch($conn, "SELECT * FROM ingredients WHERE id = ?", [$id]);
+    } catch (PDOException $e) {
+        $error = 'Failed to prepare select query: ' . $e->getMessage();
     }
 }
 
 // Get all categories for dropdown with error handling
-$categories = [];
-$result = $conn->query("SELECT * FROM categories ORDER BY name");
-if ($result && $result->num_rows > 0) {
-    $categories = $result->fetch_all(MYSQLI_ASSOC);
-}
+$categories = db_fetch_all($conn, "SELECT * FROM categories ORDER BY name");
 
 // Get all ingredients with category names with error handling
-$ingredients = [];
-$result = $conn->query("SELECT i.*, c.name as category_name 
+$ingredients = db_fetch_all($conn, "SELECT i.*, c.name as category_name 
     FROM ingredients i 
     LEFT JOIN categories c ON i.category_id = c.id 
     ORDER BY c.name, i.name");
-if ($result && $result->num_rows > 0) {
-    $ingredients = $result->fetch_all(MYSQLI_ASSOC);
-}
 
 // Get count for delete all confirmation
 $total_ingredients = count($ingredients);
-
-// Close connection after getting all data
-if (isset($conn) && !isset($show_delete_all_confirmation)) {
-    $conn->close();
-}
 
 $pageTitle = 'Manage Ingredients';
 include __DIR__ . '/../includes/header.php';

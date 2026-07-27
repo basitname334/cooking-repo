@@ -30,37 +30,33 @@ if (empty($name)) {
 }
 
 $conn = getDBConnection();
-
-// Check if category already exists
-$stmt = $conn->prepare("SELECT id FROM categories WHERE name = ?");
-$stmt->bind_param("s", $name);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result->num_rows > 0) {
-    $stmt->close();
-    $conn->close();
-    echo json_encode(['success' => false, 'error' => 'Category already exists']);
+if ($conn === false) {
+    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
     exit;
 }
-$stmt->close();
 
-// Create new category
-$stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
-$stmt->bind_param("ss", $name, $description);
+try {
+    // Check if category already exists
+    $existing = db_fetch($conn, 'SELECT id FROM categories WHERE name = ?', [$name]);
+    if ($existing !== null) {
+        echo json_encode(['success' => false, 'error' => 'Category already exists']);
+        exit;
+    }
 
-if ($stmt->execute()) {
-    $category_id = $stmt->insert_id;
-    $stmt->close();
-    $conn->close();
-    
+    // Create new category
+    $category_id = db_insert(
+        $conn,
+        'INSERT INTO categories (name, description) VALUES (?, ?) RETURNING id',
+        [$name, $description]
+    );
+
     // Get current language for translation
     $currentLang = getCurrentLanguage();
     $categoryName = $name;
     if ($currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $categoryName)) {
         $categoryName = translateToUrdu($categoryName);
     }
-    
+
     echo json_encode([
         'success' => true,
         'category' => [
@@ -69,11 +65,7 @@ if ($stmt->execute()) {
             'description' => $description
         ]
     ]);
-} else {
-    $error = $stmt->error;
-    $stmt->close();
-    $conn->close();
-    echo json_encode(['success' => false, 'error' => 'Failed to create category: ' . $error]);
+} catch (PDOException $e) {
+    echo json_encode(['success' => false, 'error' => 'Failed to create category: ' . $e->getMessage()]);
 }
 ?>
-
