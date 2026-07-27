@@ -170,11 +170,6 @@ function ensureDatabaseSetup(mysqli $conn): void {
         }
     }
 
-    if (count($existing_tables) === count($required_tables)) {
-        $setup_done = true;
-        return;
-    }
-
     // Create tables in dependency order with proper error handling
     $sqls = [
         'users' => "CREATE TABLE IF NOT EXISTS `users` (
@@ -207,6 +202,10 @@ function ensureDatabaseSetup(mysqli $conn): void {
             `name` VARCHAR(100) NOT NULL,
             `description` TEXT,
             `category_id` INT NOT NULL,
+            `number_of_persons` INT DEFAULT 1,
+            `base_quantity` DECIMAL(10,2) DEFAULT 1.00,
+            `base_unit` VARCHAR(50) DEFAULT 'serving',
+            `image` VARCHAR(255) DEFAULT NULL,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -225,13 +224,16 @@ function ensureDatabaseSetup(mysqli $conn): void {
 
         'orders' => "CREATE TABLE IF NOT EXISTS `orders` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `order_number` VARCHAR(50) DEFAULT NULL,
             `customer_id` INT NOT NULL,
             `dish_id` INT NOT NULL,
             `quantity` DECIMAL(10, 2) NOT NULL,
+            `unit` VARCHAR(50) DEFAULT NULL,
             `total_amount` DECIMAL(10, 2) NOT NULL,
             `order_date` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             `status` ENUM('pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled') DEFAULT 'pending',
             `notes` TEXT,
+            `extra_ingredients` TEXT,
             FOREIGN KEY (`customer_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
             FOREIGN KEY (`dish_id`) REFERENCES `dishes`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -246,14 +248,202 @@ function ensureDatabaseSetup(mysqli $conn): void {
         }
     }
 
-    // Optional: add unit column to dish_ingredients if missing (migration)
-    $res = @$conn->query("SHOW COLUMNS FROM `dish_ingredients` LIKE 'unit'");
-    if ($res && $res->num_rows === 0) {
-        @$conn->query("ALTER TABLE `dish_ingredients` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`");
+    db_run_column_migrations($conn);
+    ensureAdminUser($conn);
+    ensureSeedData($conn);
+    $setup_done = true;
+}
+
+/**
+ * Add columns the app expects if an older schema is missing them.
+ */
+function db_run_column_migrations(mysqli $conn): void {
+    $migrations = [
+        "SHOW COLUMNS FROM `dish_ingredients` LIKE 'unit'" =>
+            "ALTER TABLE `dish_ingredients` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`",
+        "SHOW COLUMNS FROM `dishes` LIKE 'number_of_persons'" =>
+            "ALTER TABLE `dishes` ADD COLUMN `number_of_persons` INT DEFAULT 1",
+        "SHOW COLUMNS FROM `dishes` LIKE 'base_quantity'" =>
+            "ALTER TABLE `dishes` ADD COLUMN `base_quantity` DECIMAL(10,2) DEFAULT 1.00",
+        "SHOW COLUMNS FROM `dishes` LIKE 'base_unit'" =>
+            "ALTER TABLE `dishes` ADD COLUMN `base_unit` VARCHAR(50) DEFAULT 'serving'",
+        "SHOW COLUMNS FROM `dishes` LIKE 'image'" =>
+            "ALTER TABLE `dishes` ADD COLUMN `image` VARCHAR(255) DEFAULT NULL",
+        "SHOW COLUMNS FROM `orders` LIKE 'order_number'" =>
+            "ALTER TABLE `orders` ADD COLUMN `order_number` VARCHAR(50) DEFAULT NULL AFTER `id`",
+        "SHOW COLUMNS FROM `orders` LIKE 'unit'" =>
+            "ALTER TABLE `orders` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`",
+        "SHOW COLUMNS FROM `orders` LIKE 'extra_ingredients'" =>
+            "ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT",
+    ];
+
+    foreach ($migrations as $check => $alter) {
+        $res = @$conn->query($check);
+        if ($res && $res->num_rows === 0) {
+            @$conn->query($alter);
+        }
+    }
+}
+
+/**
+ * Seed demo data once when categories table is empty.
+ * Idempotent: skips if any category already exists.
+ */
+function ensureSeedData(mysqli $conn): void {
+    static $seeded = false;
+    if ($seeded) {
+        return;
     }
 
-    ensureAdminUser($conn);
-    $setup_done = true;
+    $res = @$conn->query("SELECT COUNT(*) AS c FROM `categories`");
+    if (!$res) {
+        return;
+    }
+    $row = $res->fetch_assoc();
+    if ((int) ($row['c'] ?? 0) > 0) {
+        $seeded = true;
+        return;
+    }
+
+    $conn->begin_transaction();
+    try {
+        $categories = [
+            ['Spices', 'Spices and dry masala'],
+            ['Meat', 'Chicken, mutton and other meats'],
+            ['Vegetables', 'Fresh vegetables'],
+            ['Dairy & Bakery', 'Milk, yogurt, custard and bakery items'],
+            ['Staples', 'Rice, oil and cooking staples'],
+        ];
+
+        $catStmt = $conn->prepare("INSERT INTO `categories` (name, description) VALUES (?, ?)");
+        if (!$catStmt) {
+            throw new RuntimeException('Seed categories prepare failed: ' . $conn->error);
+        }
+        $catIds = [];
+        foreach ($categories as [$name, $desc]) {
+            $catStmt->bind_param('ss', $name, $desc);
+            $catStmt->execute();
+            $catIds[$name] = (int) $conn->insert_id;
+        }
+        $catStmt->close();
+
+        $ingredients = [
+            ['Chicken', 'Meat', 'kg'],
+            ['Basmati Rice', 'Staples', 'kg'],
+            ['Onion', 'Vegetables', 'kg'],
+            ['Tomato', 'Vegetables', 'kg'],
+            ['Garlic', 'Vegetables', 'g'],
+            ['Ginger', 'Vegetables', 'g'],
+            ['Green Chili', 'Vegetables', 'g'],
+            ['Coriander', 'Vegetables', 'g'],
+            ['Salt', 'Spices', 'g'],
+            ['Red Chili Powder', 'Spices', 'g'],
+            ['Cumin', 'Spices', 'g'],
+            ['Garam Masala', 'Spices', 'g'],
+            ['Yogurt', 'Dairy & Bakery', 'kg'],
+            ['Milk', 'Dairy & Bakery', 'L'],
+            ['Sugar', 'Staples', 'kg'],
+            ['Custard Powder', 'Dairy & Bakery', 'g'],
+            ['Cooking Oil', 'Staples', 'L'],
+        ];
+
+        $ingStmt = $conn->prepare("INSERT INTO `ingredients` (name, category_id, unit) VALUES (?, ?, ?)");
+        if (!$ingStmt) {
+            throw new RuntimeException('Seed ingredients prepare failed: ' . $conn->error);
+        }
+        $ingIds = [];
+        foreach ($ingredients as [$name, $catName, $unit]) {
+            $catId = $catIds[$catName];
+            $ingStmt->bind_param('sis', $name, $catId, $unit);
+            $ingStmt->execute();
+            $ingIds[$name] = (int) $conn->insert_id;
+        }
+        $ingStmt->close();
+
+        $dishes = [
+            ['Chicken Biryani', 'Classic chicken biryani', 'Meat', 50, 10.00, 'kg'],
+            ['Chicken Qorma', 'Rich chicken qorma', 'Meat', 100, 10.00, 'kg'],
+            ['Custard', 'Vanilla custard dessert', 'Dairy & Bakery', 100, 10.00, 'portion'],
+        ];
+
+        $dishStmt = $conn->prepare(
+            "INSERT INTO `dishes` (name, description, category_id, number_of_persons, base_quantity, base_unit)
+             VALUES (?, ?, ?, ?, ?, ?)"
+        );
+        if (!$dishStmt) {
+            throw new RuntimeException('Seed dishes prepare failed: ' . $conn->error);
+        }
+        $dishIds = [];
+        foreach ($dishes as [$name, $desc, $catName, $persons, $baseQty, $baseUnit]) {
+            $catId = $catIds[$catName];
+            $dishStmt->bind_param('ssiids', $name, $desc, $catId, $persons, $baseQty, $baseUnit);
+            $dishStmt->execute();
+            $dishIds[$name] = (int) $conn->insert_id;
+        }
+        $dishStmt->close();
+
+        $links = [
+            ['Chicken Biryani', 'Chicken', 5.00, 'kg'],
+            ['Chicken Biryani', 'Basmati Rice', 10.00, 'kg'],
+            ['Chicken Biryani', 'Onion', 2.00, 'kg'],
+            ['Chicken Biryani', 'Yogurt', 1.00, 'kg'],
+            ['Chicken Biryani', 'Salt', 40.00, 'g'],
+            ['Chicken Biryani', 'Garam Masala', 20.00, 'g'],
+            ['Chicken Biryani', 'Cooking Oil', 1.00, 'L'],
+            ['Chicken Qorma', 'Chicken', 8.00, 'kg'],
+            ['Chicken Qorma', 'Onion', 3.00, 'kg'],
+            ['Chicken Qorma', 'Tomato', 2.00, 'kg'],
+            ['Chicken Qorma', 'Yogurt', 2.00, 'kg'],
+            ['Chicken Qorma', 'Ginger', 200.00, 'g'],
+            ['Chicken Qorma', 'Garlic', 200.00, 'g'],
+            ['Chicken Qorma', 'Red Chili Powder', 50.00, 'g'],
+            ['Chicken Qorma', 'Cooking Oil', 1.50, 'L'],
+            ['Custard', 'Milk', 10.00, 'L'],
+            ['Custard', 'Sugar', 2.00, 'kg'],
+            ['Custard', 'Custard Powder', 500.00, 'g'],
+        ];
+
+        $linkStmt = $conn->prepare(
+            "INSERT INTO `dish_ingredients` (dish_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)"
+        );
+        if (!$linkStmt) {
+            throw new RuntimeException('Seed dish_ingredients prepare failed: ' . $conn->error);
+        }
+        foreach ($links as [$dishName, $ingName, $qty, $unit]) {
+            $dishId = $dishIds[$dishName];
+            $ingId = $ingIds[$ingName];
+            $linkStmt->bind_param('iids', $dishId, $ingId, $qty, $unit);
+            $linkStmt->execute();
+        }
+        $linkStmt->close();
+
+        // Demo customer (role=user)
+        $email = 'customer@example.com';
+        $check = $conn->prepare("SELECT id FROM `users` WHERE email = ?");
+        if ($check) {
+            $check->bind_param('s', $email);
+            $check->execute();
+            $exists = $check->get_result();
+            $check->close();
+            if ($exists && $exists->num_rows === 0) {
+                $name = 'Demo Customer';
+                $role = 'user';
+                $hash = password_hash('customer123', PASSWORD_DEFAULT);
+                $ins = $conn->prepare("INSERT INTO `users` (name, email, password, role) VALUES (?, ?, ?, ?)");
+                if ($ins) {
+                    $ins->bind_param('ssss', $name, $email, $hash, $role);
+                    $ins->execute();
+                    $ins->close();
+                }
+            }
+        }
+
+        $conn->commit();
+        $seeded = true;
+    } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('ensureSeedData failed: ' . $e->getMessage());
+    }
 }
 
 /**
