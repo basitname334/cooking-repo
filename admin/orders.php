@@ -1,626 +1,403 @@
 <?php
 /**
  * Orders Management Page
- * View and manage customer orders
+ * View and manage customer orders (PostgreSQL / PDO)
  */
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/language.php';
 
-// Allow both admin and regular users to access orders page
 requireLogin();
 
 $conn = getDBConnection();
 $error = '';
 $success = '';
 
-// Set execution time limit for Render (30 seconds)
 @set_time_limit(30);
 
-// Wrap schema modifications in try-catch to prevent crashes
-// Cache schema check to avoid running on every request
-static $schema_checked = false;
-if (!$schema_checked) {
-    $schema_checked = true;
-    try {
-        // Check and add order_number column if it doesn't exist
-        $result = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_number'");
-        if ($result && $result->num_rows == 0) {
-        @$conn->query("ALTER TABLE `orders` ADD COLUMN `order_number` VARCHAR(50) DEFAULT NULL AFTER `id`");
-        @$conn->query("ALTER TABLE `orders` ADD INDEX `idx_order_number` (`order_number`)");
-        // Generate order numbers for existing orders (limit to prevent timeout)
-        @$conn->query("UPDATE `orders` SET `order_number` = CONCAT('ORD-', LPAD(`id`, 6, '0')) WHERE `order_number` IS NULL LIMIT 1000");
-    }
-    
-    // Update orders table schema if needed - add required columns for order form
-    $required_columns = [
-        'customer_name' => "VARCHAR(100) DEFAULT NULL",
-        'customer_cell' => "VARCHAR(20) DEFAULT NULL",
-        'delivery_date' => "DATE DEFAULT NULL",
-        'delivery_time' => "TIME DEFAULT NULL",
-        'shift' => "ENUM('afternoon', 'evening') DEFAULT NULL",
-        'number_of_persons' => "INT DEFAULT NULL"
-    ];
-    
-    foreach ($required_columns as $column => $definition) {
-        $result = @$conn->query("SHOW COLUMNS FROM `orders` LIKE '$column'");
-        if ($result && $result->num_rows == 0) {
-            @$conn->query("ALTER TABLE `orders` ADD COLUMN `$column` $definition");
-        }
-    }
-    
-    // Check if order_date column exists, if not add it
-    $check_order_date = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'order_date'");
-    if ($check_order_date && $check_order_date->num_rows == 0) {
-        @$conn->query("ALTER TABLE `orders` ADD COLUMN `order_date` DATETIME DEFAULT NULL AFTER `customer_cell`");
-    }
-    
-    // Check if extra_ingredients column exists, if not add it
-    $check_extra_ingredients = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'extra_ingredients'");
-    if ($check_extra_ingredients && $check_extra_ingredients->num_rows == 0) {
-        @$conn->query("ALTER TABLE `orders` ADD COLUMN `extra_ingredients` TEXT DEFAULT NULL AFTER `notes`");
-    }
-    
-    // Check if unit column exists, if not add it
-    $check_unit = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'unit'");
-    if ($check_unit && $check_unit->num_rows == 0) {
-        @$conn->query("ALTER TABLE `orders` ADD COLUMN `unit` VARCHAR(50) DEFAULT NULL AFTER `quantity`");
-    }
-    
-    // Make customer_id nullable to support orders without registered customers
-    $check_customer_id = @$conn->query("SHOW COLUMNS FROM `orders` LIKE 'customer_id'");
-    if ($check_customer_id && $check_customer_id->num_rows > 0) {
-        $column_info = $check_customer_id->fetch_assoc();
-        if (isset($column_info['Null']) && $column_info['Null'] === 'NO') {
-            // Try to drop the foreign key constraint first, then modify the column
-            try {
-                @$conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `orders_ibfk_1`");
-            } catch (Exception $e) {
-                // Constraint might not exist or have different name, try alternative
-                try {
-                    $fk_result = @$conn->query("SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE 
-                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' 
-                        AND COLUMN_NAME = 'customer_id' AND REFERENCED_TABLE_NAME IS NOT NULL
-                        LIMIT 1");
-                    if ($fk_result && $fk_result->num_rows > 0) {
-                        $fk_row = $fk_result->fetch_assoc();
-                        $fk_name = $fk_row['CONSTRAINT_NAME'];
-                        @$conn->query("ALTER TABLE `orders` DROP FOREIGN KEY `$fk_name`");
-                    }
-                } catch (Exception $e2) {
-                    // Ignore errors
+if (!$conn instanceof PDO) {
+    $error = 'Database connection failed. Please try again.';
+} else {
+    static $schema_checked = false;
+    if (!$schema_checked) {
+        $schema_checked = true;
+        try {
+            $order_cols = [
+                'order_number' => 'ALTER TABLE orders ADD COLUMN order_number VARCHAR(50) DEFAULT NULL',
+                'unit' => 'ALTER TABLE orders ADD COLUMN unit VARCHAR(50) DEFAULT NULL',
+                'extra_ingredients' => 'ALTER TABLE orders ADD COLUMN extra_ingredients TEXT',
+                'customer_name' => 'ALTER TABLE orders ADD COLUMN customer_name VARCHAR(100) DEFAULT NULL',
+                'customer_cell' => 'ALTER TABLE orders ADD COLUMN customer_cell VARCHAR(20) DEFAULT NULL',
+                'order_date' => 'ALTER TABLE orders ADD COLUMN order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+                'delivery_date' => 'ALTER TABLE orders ADD COLUMN delivery_date DATE DEFAULT NULL',
+                'delivery_time' => 'ALTER TABLE orders ADD COLUMN delivery_time TIME DEFAULT NULL',
+                'shift' => 'ALTER TABLE orders ADD COLUMN shift VARCHAR(20) DEFAULT NULL',
+                'number_of_persons' => 'ALTER TABLE orders ADD COLUMN number_of_persons INT DEFAULT NULL',
+                'payment_type' => "ALTER TABLE orders ADD COLUMN payment_type VARCHAR(20) DEFAULT 'cash'",
+                'paid_amount' => 'ALTER TABLE orders ADD COLUMN paid_amount DECIMAL(10, 2) DEFAULT 0',
+            ];
+            foreach ($order_cols as $col => $alter) {
+                if (!db_column_exists($conn, 'orders', $col)) {
+                    $conn->exec($alter);
                 }
             }
-            // Make column nullable
-            try {
-                @$conn->query("ALTER TABLE `orders` MODIFY `customer_id` INT(11) NULL");
-                // Re-add foreign key constraint with ON DELETE SET NULL
-                try {
-                    @$conn->query("ALTER TABLE `orders` ADD CONSTRAINT `orders_ibfk_1` 
-                        FOREIGN KEY (`customer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL");
-                } catch (Exception $e) {
-                    // If it fails, we'll continue without the constraint for now
-                }
-            } catch (Exception $e) {
-                // Ignore errors
-            }
-        }
-    }
-    } catch (Exception $e) {
-        // Log error but don't crash the page
-        error_log("Schema modification error: " . $e->getMessage());
-    }
-}
-
-// Handle update order (All users can update orders)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])) {
-    // All logged-in users can update orders
-    {
-        // Set execution time limit for order update
-        @set_time_limit(60);
-        
-        // Check database connection
-        if (!$conn || $conn->connect_error) {
-            $error = 'Database connection failed. Please try again.';
-            error_log("Database connection error: " . ($conn ? $conn->connect_error : 'Connection is null'));
-        } else {
-            $order_number = trim($_POST['order_number'] ?? '');
-            
-            if (empty($order_number)) {
-                $error = 'Order number is required for update.';
-            } else {
-                $customer_id = intval($_POST['customer_id'] ?? 0);
-                $customer_name = trim($_POST['customer_name'] ?? '');
-                $customer_cell = trim($_POST['customer_cell'] ?? '');
-                $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
-                $shift = trim($_POST['shift'] ?? '');
-                $delivery_date = trim($_POST['delivery_date'] ?? '');
-                $delivery_time = trim($_POST['delivery_time'] ?? '');
-                $notes = trim($_POST['notes'] ?? '');
-                
-                // Translate notes to Urdu if current language is Urdu
-                $notes = translateForDatabase($notes);
-                
-                // Get dishes array
-                $dishes_data = [];
-                if (isset($_POST['dishes']) && is_array($_POST['dishes'])) {
-                    $dishes_data = $_POST['dishes'];
-                }
-                
-                // Get extra ingredients array
-                $extra_ingredients_data = [];
-                if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
-                    foreach ($_POST['extra_ingredients'] as $ingredient_data) {
-                        $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
-                        $quantity = floatval($ingredient_data['quantity'] ?? 0);
-                        $unit = trim($ingredient_data['unit'] ?? '');
-                        
-                        if ($ingredient_id > 0 && $quantity > 0) {
-                            $extra_ingredients_data[] = [
-                                'ingredient_id' => $ingredient_id,
-                                'quantity' => $quantity,
-                                'unit' => $unit
-                            ];
-                        }
-                    }
-                }
-                
-                // Get additional items
-                $additional_items_data = [];
-                if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
-                    foreach ($_POST['additional_items'] as $item_key => $quantity) {
-                        $quantity = intval($quantity);
-                        if ($quantity > 0) {
-                            $additional_items_data[$item_key] = $quantity;
-                        }
-                    }
-                }
-                
-                // Validation
-                $use_new_form = !empty($customer_name) || !empty($customer_cell);
-                
-                if ($use_new_form) {
-                    if (empty($customer_cell) || 
-                        $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
-                        $error = 'Please fill all required fields in Step 1.';
-                    } elseif (empty($dishes_data)) {
-                        $error = 'Please select at least one dish in Step 2.';
-                    }
-                } else {
-                    if ($customer_id <= 0 || empty($dishes_data)) {
-                        $error = t('fill_all_required_fields');
-                    }
-                }
-                
-                if (empty($error)) {
-                    // Prepare extra ingredients JSON
-                    $combined_data = [];
-                    if (!empty($extra_ingredients_data)) {
-                        $combined_data['extra_ingredients'] = $extra_ingredients_data;
-                    }
-                    if (!empty($additional_items_data)) {
-                        $combined_data['additional_items'] = $additional_items_data;
-                    }
-                    $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
-                    
-                    // Start transaction
-                    $conn->begin_transaction();
-                    
-                    try {
-                        // Delete existing orders with this order_number
-                        $delete_stmt = $conn->prepare("DELETE FROM orders WHERE order_number = ?");
-                        $delete_stmt->bind_param("s", $order_number);
-                        $delete_stmt->execute();
-                        $delete_stmt->close();
-                        
-                        // Insert updated orders
-                        $orders_created = 0;
-                        $errors = [];
-                        
-                        foreach ($dishes_data as $dish_data) {
-                            $dish_id = intval($dish_data['dish_id'] ?? 0);
-                            $quantity = floatval($dish_data['quantity'] ?? 0);
-                            $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
-                            $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
-                            $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
-                            
-                            if ($dish_id <= 0 || $quantity <= 0) {
-                                continue;
-                            }
-                            
-                            // Calculate total_amount
-                            if ($total_amount_input !== null && $total_amount_input >= 0) {
-                                $total_amount = $total_amount_input;
-                            } elseif ($unit_price !== null && $unit_price > 0) {
-                                $total_amount = $quantity * $unit_price;
-                            } else {
-                                $total_amount = 0;
-                            }
-                            
-                            // Use current datetime for order_date
-                            $order_datetime = date('Y-m-d H:i:s');
-                            
-                            if ($use_new_form) {
-                                $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
-                                    customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
-                                    VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                                if ($stmt) {
-                                    $stmt->bind_param("siisdsssssssiss", 
-                                        $order_number, 
-                                        $dish_id, 
-                                        $quantity,
-                                        $unit,
-                                        $total_amount, 
-                                        $customer_name,
-                                        $customer_cell,
-                                        $order_datetime,
-                                        $delivery_date,
-                                        $delivery_time,
-                                        $shift,
-                                        $number_of_persons,
-                                        $notes,
-                                        $extra_ingredients_json
-                                    );
-                                }
-                            } else {
-                                $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)");
-                                if ($stmt) {
-                                    $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $notes, $extra_ingredients_json);
-                                }
-                            }
-                            
-                            if ($stmt) {
-                                if ($stmt->execute()) {
-                                    $orders_created++;
-                                } else {
-                                    $errors[] = 'Failed to update order for dish ID ' . $dish_id . ': ' . $stmt->error;
-                                }
-                                $stmt->close();
-                            }
-                        }
-                        
-                        if ($orders_created > 0 && empty($errors)) {
-                            $conn->commit();
-                            $dish_count = count($dishes_data);
-                            $success = $dish_count > 1 ? "Order #{$order_number} updated successfully with {$dish_count} dishes!" : 'Order updated successfully!';
-                            header('Location: orders.php?success=1&updated=1&order_number=' . urlencode($order_number));
-                            exit();
-                        } else {
-                            $conn->rollback();
-                            $error = !empty($errors) ? implode(', ', $errors) : 'Failed to update order.';
-                        }
-                    } catch (Exception $e) {
-                        $conn->rollback();
-                        $error = 'Error updating order: ' . $e->getMessage();
-                        error_log("Order update exception: " . $e->getMessage());
-                    }
-                }
-            }
+            $conn->exec("UPDATE orders SET order_number = 'ORD-' || LPAD(id::text, 6, '0') WHERE order_number IS NULL");
+        } catch (Throwable $e) {
+            error_log('Orders schema modification error: ' . $e->getMessage());
         }
     }
 }
 
-// Handle create order (All users can create orders)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
-    // All logged-in users can create orders
-    {
-        // Set execution time limit for order creation
-        @set_time_limit(60);
-        
-        // Check database connection
-        if (!$conn || $conn->connect_error) {
-            $error = 'Database connection failed. Please try again.';
-            error_log("Database connection error: " . ($conn ? $conn->connect_error : 'Connection is null'));
-        } else {
-            $customer_id = intval($_POST['customer_id'] ?? 0);
-            $customer_name = trim($_POST['customer_name'] ?? '');
-            $customer_cell = trim($_POST['customer_cell'] ?? '');
-            $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
-            $shift = trim($_POST['shift'] ?? '');
-            $delivery_date = trim($_POST['delivery_date'] ?? '');
-            $delivery_time = trim($_POST['delivery_time'] ?? '');
-            $notes = trim($_POST['notes'] ?? '');
-            
-            // Translate notes to Urdu if current language is Urdu
-            $notes = translateForDatabase($notes);
-            
-            // Use current datetime for order_date
-            $order_datetime = date('Y-m-d H:i:s');
-            
-            // Get dishes array - can be single or multiple
-            $dishes_data = [];
-            if (isset($_POST['dishes']) && is_array($_POST['dishes'])) {
-                // Multiple dishes format
-                $dishes_data = $_POST['dishes'];
-            } else {
-                // Single dish format (backward compatibility)
-                $dish_id = intval($_POST['dish_id'] ?? 0);
-                $quantity = floatval($_POST['quantity'] ?? 0);
-                $unit_price = !empty($_POST['unit_price']) ? floatval($_POST['unit_price']) : null;
-                $total_amount_input = !empty($_POST['total_amount']) ? floatval($_POST['total_amount']) : null;
-                
-                if ($dish_id > 0 && $quantity > 0) {
-                    $dishes_data[] = [
-                        'dish_id' => $dish_id,
+// Handle update order
+if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])) {
+    @set_time_limit(60);
+    $order_number = trim($_POST['order_number'] ?? '');
+    if ($order_number === '') {
+        $error = 'Order number is required for update.';
+    } else {
+        $customer_id = intval($_POST['customer_id'] ?? 0);
+        $customer_name = trim($_POST['customer_name'] ?? '');
+        $customer_cell = trim($_POST['customer_cell'] ?? '');
+        $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
+        $shift = trim($_POST['shift'] ?? '');
+        $delivery_date = trim($_POST['delivery_date'] ?? '');
+        $delivery_time = trim($_POST['delivery_time'] ?? '');
+        $notes = translateForDatabase(trim($_POST['notes'] ?? ''));
+        $payment_type = (($_POST['payment_type'] ?? 'cash') === 'udhaar') ? 'udhaar' : 'cash';
+        $paid_amount_input = floatval($_POST['paid_amount'] ?? 0);
+        $dishes_data = (isset($_POST['dishes']) && is_array($_POST['dishes'])) ? $_POST['dishes'] : [];
+
+        $extra_ingredients_data = [];
+        if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
+            foreach ($_POST['extra_ingredients'] as $ingredient_data) {
+                $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
+                $quantity = floatval($ingredient_data['quantity'] ?? 0);
+                $unit = trim($ingredient_data['unit'] ?? '');
+                if ($ingredient_id > 0 && $quantity > 0) {
+                    $extra_ingredients_data[] = [
+                        'ingredient_id' => $ingredient_id,
                         'quantity' => $quantity,
-                        'unit_price' => $unit_price,
-                        'total_amount' => $total_amount_input
+                        'unit' => $unit,
                     ];
                 }
             }
-            
-            // Get extra ingredients array
-            $extra_ingredients_data = [];
-            if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
-                foreach ($_POST['extra_ingredients'] as $ingredient_data) {
-                    $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
-                    $quantity = floatval($ingredient_data['quantity'] ?? 0);
-                    $unit = trim($ingredient_data['unit'] ?? '');
-                    
-                    if ($ingredient_id > 0 && $quantity > 0) {
-                        $extra_ingredients_data[] = [
-                            'ingredient_id' => $ingredient_id,
-                            'quantity' => $quantity,
-                            'unit' => $unit
-                        ];
-                    }
+        }
+
+        $additional_items_data = [];
+        if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
+            foreach ($_POST['additional_items'] as $item_key => $quantity) {
+                $quantity = intval($quantity);
+                if ($quantity > 0) {
+                    $additional_items_data[$item_key] = $quantity;
                 }
             }
-            
-            // Get additional items
-            $additional_items_data = [];
-            if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
-                foreach ($_POST['additional_items'] as $item_key => $quantity) {
-                    $quantity = intval($quantity);
-                    if ($quantity > 0) {
-                        $additional_items_data[$item_key] = $quantity;
-                    }
-                }
+        }
+
+        $use_new_form = $customer_name !== '' || $customer_cell !== '';
+        if ($use_new_form) {
+            if ($customer_cell === '' || $number_of_persons <= 0 || $shift === '' || $delivery_date === '' || $delivery_time === '') {
+                $error = 'Please fill all required fields in Step 1.';
+            } elseif (empty($dishes_data)) {
+                $error = 'Please select at least one dish in Step 2.';
             }
-            
-            // Validation - check if using new form fields or old customer selection
-            $use_new_form = !empty($customer_name) || !empty($customer_cell);
-            
-            if ($use_new_form) {
-                // New form validation
-                if (empty($customer_cell) || 
-                    $number_of_persons <= 0 || empty($shift) || empty($delivery_date) || empty($delivery_time)) {
-                    $error = 'Please fill all required fields in Step 1.';
-                } elseif (empty($dishes_data)) {
-                    $error = 'Please select at least one dish in Step 2.';
-                }
-            } else {
-                // Old form validation (backward compatibility)
-                if ($customer_id <= 0 || empty($dishes_data)) {
-                    $error = t('fill_all_required_fields');
-                }
+        } elseif ($customer_id <= 0 || empty($dishes_data)) {
+            $error = t('fill_all_required_fields');
+        }
+
+        if ($error === '') {
+            $combined_data = [];
+            if (!empty($extra_ingredients_data)) {
+                $combined_data['extra_ingredients'] = $extra_ingredients_data;
             }
-            
-            if (empty($error)) {
-                $status = 'pending';
+            if (!empty($additional_items_data)) {
+                $combined_data['additional_items'] = $additional_items_data;
+            }
+            $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
+
+            try {
+                $conn->beginTransaction();
+                db_exec($conn, 'DELETE FROM orders WHERE order_number = ?', [$order_number]);
                 $orders_created = 0;
-                $errors = [];
-                
-                // Generate a single order number for all dishes in this order
-                $order_number = 'ORD-' . date('Ymd') . '-' . str_pad(time() % 1000000, 6, '0', STR_PAD_LEFT);
-                
-                // Calculate grand total
-                $grand_total = 0;
-                $valid_dishes = [];
-                
+                $grand_total_update = 0;
                 foreach ($dishes_data as $dish_data) {
                     $dish_id = intval($dish_data['dish_id'] ?? 0);
                     $quantity = floatval($dish_data['quantity'] ?? 0);
                     $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
                     $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
-                    $total_amount_input = !empty($dish_data['total_amount']) ? floatval($dish_data['total_amount']) : null;
-                    
+                    $total_amount_input = isset($dish_data['total_amount']) && $dish_data['total_amount'] !== ''
+                        ? floatval($dish_data['total_amount']) : null;
                     if ($dish_id <= 0 || $quantity <= 0) {
-                        continue; // Skip invalid dishes
+                        continue;
                     }
-                    
-                    // Calculate total_amount: use direct input if provided, otherwise calculate from unit_price
                     if ($total_amount_input !== null && $total_amount_input >= 0) {
                         $total_amount = $total_amount_input;
                     } elseif ($unit_price !== null && $unit_price > 0) {
                         $total_amount = $quantity * $unit_price;
                     } else {
-                        $total_amount = 0; // Default to 0 if neither is provided
+                        $total_amount = 0;
                     }
-                    
-                    $grand_total += $total_amount;
-                    $valid_dishes[] = [
-                        'dish_id' => $dish_id,
-                        'quantity' => $quantity,
-                        'unit' => $unit,
-                        'total_amount' => $total_amount
-                    ];
-                }
-                
-                if (empty($valid_dishes)) {
-                    $error = t('fill_all_required_fields');
-                } else {
-                    // Create order records for each dish with the same order_number
-                    $order_id = null;
-                    foreach ($valid_dishes as $dish_info) {
-                        // Prepare extra ingredients JSON (same for all dishes in the order)
-                        // Include both extra ingredients and additional items
-                        $combined_data = [];
-                        if (!empty($extra_ingredients_data)) {
-                            $combined_data['extra_ingredients'] = $extra_ingredients_data;
-                        }
-                        if (!empty($additional_items_data)) {
-                            $combined_data['additional_items'] = $additional_items_data;
-                        }
-                        $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
-                        
-                        if ($use_new_form) {
-                            // New form with all required fields - use NULL for customer_id since customer info is in separate fields
-                            // mysqli bind_param doesn't handle NULL well with 'i' type, so we'll use a workaround
-                            $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, 
-                                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients) 
-                                VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                            if ($stmt) {
-                                // Extract values to variables for bind_param (must be variables, not expressions)
-                                $dish_id = $dish_info['dish_id'];
-                                $quantity = $dish_info['quantity'];
-                                $unit = $dish_info['unit'] ?? null;
-                                $total_amount = $dish_info['total_amount'];
-                                
-                                // Skip customer_id in bind_param since we're using NULL directly in the query
-                                $stmt->bind_param("siisdsssssssiss", 
-                                    $order_number, 
-                                    $dish_id, 
-                                    $quantity,
-                                    $unit,
-                                    $total_amount, 
-                                    $status,
-                                    $customer_name,
-                                    $customer_cell,
-                                    $order_datetime,
-                                    $delivery_date,
-                                    $delivery_time,
-                                    $shift,
-                                    $number_of_persons,
-                                    $notes,
-                                    $extra_ingredients_json
-                                );
-                            }
-                        } else {
-                            // Old form (backward compatibility)
-                            $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                            if ($stmt) {
-                                // Extract values to variables for bind_param (must be variables, not expressions)
-                                $dish_id = $dish_info['dish_id'];
-                                $quantity = $dish_info['quantity'];
-                                $unit = $dish_info['unit'] ?? null;
-                                $total_amount = $dish_info['total_amount'];
-                                
-                                $stmt->bind_param("siisdsss", $order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $status, $notes, $extra_ingredients_json);
-                            }
-                        }
-                        
-                        if ($stmt) {
-                            try {
-                                if ($stmt->execute()) {
-                                    if ($order_id === null) {
-                                        $order_id = $conn->insert_id;
-                                    }
-                                    $orders_created++;
-                                } else {
-                                    $errors[] = 'Failed to create order for dish ID ' . $dish_info['dish_id'] . ': ' . $stmt->error;
-                                    error_log("Order creation error: " . $stmt->error);
-                                    error_log("Order number: " . $order_number);
-                                    error_log("Dish ID: " . $dish_info['dish_id']);
-                                }
-                            } catch (Exception $e) {
-                                $errors[] = 'Exception creating order for dish ID ' . $dish_info['dish_id'] . ': ' . $e->getMessage();
-                                error_log("Order creation exception: " . $e->getMessage());
-                            }
-                            $stmt->close();
-                        } else {
-                            $errors[] = 'Failed to prepare insert query for dish ID ' . $dish_info['dish_id'] . ': ' . ($conn->error ?? 'Unknown error');
-                            error_log("Prepare error: " . ($conn->error ?? 'Unknown error'));
-                        }
-                    }
-                    
-                    if ($orders_created > 0) {
-                        $dish_count = count($valid_dishes);
-                        $success = $dish_count > 1 ? "Order #{$order_number} created successfully with {$dish_count} dishes!" : 'Order created successfully!';
-                        header('Location: orders.php?success=1&created=1&order_number=' . urlencode($order_number));
-                        exit();
+                    $grand_total_update += $total_amount;
+                    $order_datetime = date('Y-m-d H:i:s');
+
+                    if ($use_new_form) {
+                        db_exec(
+                            $conn,
+                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
+                                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, payment_type, paid_amount)
+                             VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            [
+                                $order_number, $dish_id, $quantity, $unit, $total_amount,
+                                $customer_name, $customer_cell, $order_datetime, $delivery_date,
+                                $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
+                                $payment_type, 0,
+                            ]
+                        );
                     } else {
-                        $error = !empty($errors) ? implode(', ', $errors) : t('failed_to_create') . ' ' . t('orders_title');
+                        db_exec(
+                            $conn,
+                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients, payment_type, paid_amount)
+                             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
+                            [$order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $notes, $extra_ingredients_json, $payment_type, 0]
+                        );
                     }
-                } // End of empty($valid_dishes) else block
-            } // End of empty($error) check
-        } // End of database connection else block
-    } // End of order creation block
+                    $orders_created++;
+                }
+
+                $final_paid = ($payment_type === 'cash')
+                    ? $grand_total_update
+                    : max(0, min($paid_amount_input, $grand_total_update));
+                if ($payment_type === 'udhaar' && $final_paid >= $grand_total_update && $grand_total_update > 0) {
+                    $payment_type = 'cash';
+                    $final_paid = $grand_total_update;
+                }
+                db_exec(
+                    $conn,
+                    'UPDATE orders SET payment_type = ?, paid_amount = ? WHERE order_number = ?',
+                    [$payment_type, $final_paid, $order_number]
+                );
+
+                if ($orders_created > 0) {
+                    $conn->commit();
+                    header('Location: orders.php?success=1&updated=1&order_number=' . urlencode($order_number));
+                    exit();
+                }
+                $conn->rollBack();
+                $error = 'Failed to update order.';
+            } catch (Throwable $e) {
+                if ($conn->inTransaction()) {
+                    $conn->rollBack();
+                }
+                $error = 'Error updating order: ' . $e->getMessage();
+                error_log('Order update exception: ' . $e->getMessage());
+            }
+        }
+    }
 }
 
-// Handle order status update - update all items in the same order (All users can update)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
-    // All logged-in users can update order status
-    {
-        $order_id = intval($_POST['order_id'] ?? 0);
-        $order_number = trim($_POST['order_number'] ?? '');
-        $status = trim($_POST['status'] ?? '');
-        
-        $valid_statuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
-        
-        if (in_array($status, $valid_statuses)) {
-            // Update all orders with the same order_number
-            if (!empty($order_number)) {
-                $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE order_number = ?");
-                if ($stmt) {
-                    $stmt->bind_param("ss", $status, $order_number);
-                    if ($stmt->execute()) {
-                        $success = 'Order status updated successfully!';
-                        header('Location: orders.php?success=1');
-                        exit();
+// Handle create order
+if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
+    @set_time_limit(60);
+    $customer_id = intval($_POST['customer_id'] ?? 0);
+    $customer_name = trim($_POST['customer_name'] ?? '');
+    $customer_cell = trim($_POST['customer_cell'] ?? '');
+    $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
+    $shift = trim($_POST['shift'] ?? '');
+    $delivery_date = trim($_POST['delivery_date'] ?? '');
+    $delivery_time = trim($_POST['delivery_time'] ?? '');
+    $notes = translateForDatabase(trim($_POST['notes'] ?? ''));
+    $payment_type = (($_POST['payment_type'] ?? 'cash') === 'udhaar') ? 'udhaar' : 'cash';
+    $paid_amount_input = floatval($_POST['paid_amount'] ?? 0);
+    $order_datetime = date('Y-m-d H:i:s');
+
+    $dishes_data = [];
+    if (isset($_POST['dishes']) && is_array($_POST['dishes'])) {
+        $dishes_data = $_POST['dishes'];
+    } else {
+        $dish_id = intval($_POST['dish_id'] ?? 0);
+        $quantity = floatval($_POST['quantity'] ?? 0);
+        $unit_price = !empty($_POST['unit_price']) ? floatval($_POST['unit_price']) : null;
+        $total_amount_input = !empty($_POST['total_amount']) ? floatval($_POST['total_amount']) : null;
+        if ($dish_id > 0 && $quantity > 0) {
+            $dishes_data[] = [
+                'dish_id' => $dish_id,
+                'quantity' => $quantity,
+                'unit_price' => $unit_price,
+                'total_amount' => $total_amount_input,
+            ];
+        }
+    }
+
+    $extra_ingredients_data = [];
+    if (isset($_POST['extra_ingredients']) && is_array($_POST['extra_ingredients'])) {
+        foreach ($_POST['extra_ingredients'] as $ingredient_data) {
+            $ingredient_id = intval($ingredient_data['ingredient_id'] ?? 0);
+            $quantity = floatval($ingredient_data['quantity'] ?? 0);
+            $unit = trim($ingredient_data['unit'] ?? '');
+            if ($ingredient_id > 0 && $quantity > 0) {
+                $extra_ingredients_data[] = [
+                    'ingredient_id' => $ingredient_id,
+                    'quantity' => $quantity,
+                    'unit' => $unit,
+                ];
+            }
+        }
+    }
+
+    $additional_items_data = [];
+    if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
+        foreach ($_POST['additional_items'] as $item_key => $quantity) {
+            $quantity = intval($quantity);
+            if ($quantity > 0) {
+                $additional_items_data[$item_key] = $quantity;
+            }
+        }
+    }
+
+    $use_new_form = $customer_name !== '' || $customer_cell !== '';
+    if ($use_new_form) {
+        if ($customer_cell === '' || $number_of_persons <= 0 || $shift === '' || $delivery_date === '' || $delivery_time === '') {
+            $error = 'Please fill all required fields in Step 1.';
+        } elseif (empty($dishes_data)) {
+            $error = 'Please select at least one dish in Step 2.';
+        }
+    } elseif ($customer_id <= 0 || empty($dishes_data)) {
+        $error = t('fill_all_required_fields');
+    }
+
+    if ($error === '') {
+        $status = 'pending';
+        $order_number = 'ORD-' . date('Ymd') . '-' . str_pad((string) (time() % 1000000), 6, '0', STR_PAD_LEFT);
+        $valid_dishes = [];
+        foreach ($dishes_data as $dish_data) {
+            $dish_id = intval($dish_data['dish_id'] ?? 0);
+            $quantity = floatval($dish_data['quantity'] ?? 0);
+            $unit = !empty($dish_data['unit']) ? trim($dish_data['unit']) : null;
+            $unit_price = !empty($dish_data['unit_price']) ? floatval($dish_data['unit_price']) : null;
+            $total_amount_input = isset($dish_data['total_amount']) && $dish_data['total_amount'] !== ''
+                ? floatval($dish_data['total_amount']) : null;
+            if ($dish_id <= 0 || $quantity <= 0) {
+                continue;
+            }
+            if ($total_amount_input !== null && $total_amount_input >= 0) {
+                $total_amount = $total_amount_input;
+            } elseif ($unit_price !== null && $unit_price > 0) {
+                $total_amount = $quantity * $unit_price;
+            } else {
+                $total_amount = 0;
+            }
+            $valid_dishes[] = [
+                'dish_id' => $dish_id,
+                'quantity' => $quantity,
+                'unit' => $unit,
+                'total_amount' => $total_amount,
+            ];
+        }
+
+        if (empty($valid_dishes)) {
+            $error = t('fill_all_required_fields');
+        } else {
+            $combined_data = [];
+            if (!empty($extra_ingredients_data)) {
+                $combined_data['extra_ingredients'] = $extra_ingredients_data;
+            }
+            if (!empty($additional_items_data)) {
+                $combined_data['additional_items'] = $additional_items_data;
+            }
+            $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
+            $orders_created = 0;
+            $errors = [];
+            $grand_total = array_sum(array_column($valid_dishes, 'total_amount'));
+            $final_paid = ($payment_type === 'cash')
+                ? $grand_total
+                : max(0, min($paid_amount_input, $grand_total));
+            if ($payment_type === 'udhaar' && $final_paid >= $grand_total && $grand_total > 0) {
+                $payment_type = 'cash';
+                $final_paid = $grand_total;
+            }
+            try {
+                foreach ($valid_dishes as $dish_info) {
+                    if ($use_new_form) {
+                        db_exec(
+                            $conn,
+                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
+                                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, payment_type, paid_amount)
+                             VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            [
+                                $order_number, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'],
+                                $dish_info['total_amount'], $status, $customer_name, $customer_cell, $order_datetime,
+                                $delivery_date, $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
+                                $payment_type, $final_paid,
+                            ]
+                        );
                     } else {
-                        $error = 'Failed to update order status: ' . $stmt->error;
+                        db_exec(
+                            $conn,
+                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients, payment_type, paid_amount)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            [
+                                $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'],
+                                $dish_info['unit'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json,
+                                $payment_type, $final_paid,
+                            ]
+                        );
                     }
-                    $stmt->close();
+                    $orders_created++;
                 }
+            } catch (Throwable $e) {
+                $errors[] = $e->getMessage();
+                error_log('Order creation exception: ' . $e->getMessage());
+            }
+
+            if ($orders_created > 0) {
+                header('Location: orders.php?success=1&created=1&order_number=' . urlencode($order_number));
+                exit();
+            }
+            $error = !empty($errors) ? implode(', ', $errors) : (t('failed_to_create') . ' ' . t('orders_title'));
+        }
+    }
+}
+
+// Handle status update
+if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
+    $order_id = intval($_POST['order_id'] ?? 0);
+    $order_number = trim($_POST['order_number'] ?? '');
+    $status = trim($_POST['status'] ?? '');
+    $valid_statuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
+    if (in_array($status, $valid_statuses, true)) {
+        try {
+            if ($order_number !== '') {
+                db_exec($conn, 'UPDATE orders SET status = ? WHERE order_number = ?', [$status, $order_number]);
             } elseif ($order_id > 0) {
-                // Fallback: update by order_id if order_number not provided
-                $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE id = ?");
-                if ($stmt) {
-                    $stmt->bind_param("si", $status, $order_id);
-                    if ($stmt->execute()) {
-                        $success = 'Order status updated successfully!';
-                        header('Location: orders.php?success=1');
-                        exit();
-                    } else {
-                        $error = 'Failed to update order status: ' . $stmt->error;
-                    }
-                    $stmt->close();
-                }
+                db_exec($conn, 'UPDATE orders SET status = ? WHERE id = ?', [$status, $order_id]);
             } else {
                 $error = 'Invalid order or status.';
             }
-        } // End of in_array check
-    } // End of status update block
-}
-
-// Handle delete order - delete all items in the same order (All users can delete)
-if (isset($_GET['delete'])) {
-    // All logged-in users can delete orders
-    {
-        $id = intval($_GET['delete']);
-        // Get order_number first
-        $stmt = $conn->prepare("SELECT order_number FROM orders WHERE id = ?");
-        if ($stmt) {
-            $stmt->bind_param("i", $id);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            if ($result && $row = $result->fetch_assoc()) {
-                $order_number = $row['order_number'];
-                $stmt->close();
-                
-                // Delete all orders with the same order_number
-                $stmt = $conn->prepare("DELETE FROM orders WHERE order_number = ?");
-                if ($stmt) {
-                    $stmt->bind_param("s", $order_number);
-                    if ($stmt->execute()) {
-                        $success = 'Order deleted successfully!';
-                        header('Location: orders.php?success=1&deleted=1');
-                        exit();
-                    } else {
-                        $error = 'Failed to delete order: ' . $stmt->error;
-                    }
-                    $stmt->close();
-                }
-            } else {
-                $stmt->close();
-                $error = 'Order not found.';
+            if ($error === '') {
+                header('Location: orders.php?success=1');
+                exit();
             }
+        } catch (Throwable $e) {
+            $error = 'Failed to update order status: ' . $e->getMessage();
         }
-    } // End of delete order block
+    }
 }
 
-// Handle success message from redirect
+// Handle delete
+if ($conn instanceof PDO && isset($_GET['delete'])) {
+    $id = intval($_GET['delete']);
+    try {
+        $row = db_fetch($conn, 'SELECT order_number FROM orders WHERE id = ?', [$id]);
+        if ($row && !empty($row['order_number'])) {
+            db_exec($conn, 'DELETE FROM orders WHERE order_number = ?', [$row['order_number']]);
+            header('Location: orders.php?success=1&deleted=1');
+            exit();
+        }
+        $error = 'Order not found.';
+    } catch (Throwable $e) {
+        $error = 'Failed to delete order: ' . $e->getMessage();
+    }
+}
+
 if (isset($_GET['success'])) {
     if (isset($_GET['created'])) {
         $count = isset($_GET['count']) ? intval($_GET['count']) : 1;
@@ -632,195 +409,14 @@ if (isset($_GET['success'])) {
     }
 }
 
-// Get current language for translation
 $currentLang = getCurrentLanguage();
-
-// Get all customers for dropdown
 $customers = [];
-$result = $conn->query("SELECT id, name, email FROM users WHERE role = 'user' ORDER BY name");
-if ($result && $result->num_rows > 0) {
-    $customers = $result->fetch_all(MYSQLI_ASSOC);
-    // Translate customer names if needed (though names usually don't need translation)
-}
-
-// Get previously used customer names from orders (for autocomplete)
 $previous_customer_names = [];
-$prev_cust_query = "SELECT DISTINCT customer_name, customer_cell 
-    FROM orders 
-    WHERE customer_name IS NOT NULL AND customer_name != '' 
-    ORDER BY customer_name";
-$prev_cust_result = $conn->query($prev_cust_query);
-if ($prev_cust_result && $prev_cust_result->num_rows > 0) {
-    $previous_customer_names = $prev_cust_result->fetch_all(MYSQLI_ASSOC);
-}
-
-// Combine registered customers and previously used names for autocomplete
 $all_customer_names = [];
-// Add registered customers
-foreach ($customers as $customer) {
-    $all_customer_names[$customer['name']] = [
-        'name' => $customer['name'],
-        'cell' => $customer['email'] ?? '',
-        'type' => 'registered'
-    ];
-}
-// Add previously used customer names (avoid duplicates)
-foreach ($previous_customer_names as $prev_cust) {
-    if (!empty($prev_cust['customer_name']) && !isset($all_customer_names[$prev_cust['customer_name']])) {
-        $all_customer_names[$prev_cust['customer_name']] = [
-            'name' => $prev_cust['customer_name'],
-            'cell' => $prev_cust['customer_cell'] ?? '',
-            'type' => 'previous'
-        ];
-    }
-}
-// Sort by name
-ksort($all_customer_names);
-
-// Get all categories for dish selection modal
 $dish_categories = [];
-$cat_result = $conn->query("SELECT DISTINCT c.id, c.name, c.description 
-    FROM categories c 
-    INNER JOIN dishes d ON d.category_id = c.id 
-    ORDER BY c.name");
-if ($cat_result && $cat_result->num_rows > 0) {
-    $dish_categories = $cat_result->fetch_all(MYSQLI_ASSOC);
-}
-
-// Get all dishes for dropdown with images and categories
 $dishes = [];
-$result = $conn->query("SELECT d.id, d.name, d.image, d.base_unit, d.category_id, c.name as category_name 
-    FROM dishes d 
-    LEFT JOIN categories c ON d.category_id = c.id 
-    ORDER BY d.name");
-if ($result && $result->num_rows > 0) {
-    $dishes = $result->fetch_all(MYSQLI_ASSOC);
-    // Translate dish names if needed
-    foreach ($dishes as &$dish) {
-        if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
-            $dish['name'] = translateToUrdu($dish['name']);
-        }
-    }
-    unset($dish);
-}
-
-// Get all ingredients for extra ingredients section
 $ingredients = [];
-$ingredients_result = $conn->query("SELECT i.id, i.name, i.unit, i.category_id, c.name as category_name 
-    FROM ingredients i 
-    LEFT JOIN categories c ON i.category_id = c.id 
-    ORDER BY i.name");
-if ($ingredients_result && $ingredients_result->num_rows > 0) {
-    $ingredients = $ingredients_result->fetch_all(MYSQLI_ASSOC);
-    // Translate ingredient names if needed
-    foreach ($ingredients as &$ingredient) {
-        if (isset($ingredient['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ingredient['name'])) {
-            $ingredient['name'] = translateToUrdu($ingredient['name']);
-        }
-    }
-    unset($ingredient);
-}
-
-// Get previously used dishes from recent orders (last 30 days)
 $previously_used_dishes = [];
-$recent_orders_query = "SELECT DISTINCT o.dish_id, d.id, d.name,
-    COUNT(o.id) as order_count,
-    MAX(o.order_date) as last_used_date
-    FROM orders o
-    INNER JOIN dishes d ON o.dish_id = d.id
-    WHERE o.order_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-    GROUP BY o.dish_id, d.id
-    ORDER BY order_count DESC, last_used_date DESC
-    LIMIT 20";
-$recent_result = $conn->query($recent_orders_query);
-if ($recent_result && $recent_result->num_rows > 0) {
-    $previously_used_dishes = $recent_result->fetch_all(MYSQLI_ASSOC);
-    // Translate dish names if needed
-    foreach ($previously_used_dishes as &$dish) {
-        if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
-            $dish['name'] = translateToUrdu($dish['name']);
-        }
-    }
-    unset($dish);
-}
-
-// Pagination & view settings
-$default_items_per_page = 12; // Number of orders per page when viewing all
-$recent_items_limit = 2; // Number of orders to show on the main view
-// Get items per page from URL parameter, default to 12
-$items_per_page = isset($_GET['per_page']) ? max(5, min(100, intval($_GET['per_page']))) : $default_items_per_page;
-$current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$view_mode = (isset($_GET['view']) && $_GET['view'] === 'all') ? 'all' : 'recent';
-$order_number_search = isset($_GET['order_number']) ? trim($_GET['order_number']) : '';
-if (strlen($order_number_search) > 50) {
-    $order_number_search = substr($order_number_search, 0, 50);
-}
-$is_search_active = $order_number_search !== '';
-
-// Get all orders grouped by order_number
-$orders = [];
-// Use COALESCE to get customer_name from orders table first, then fallback to users table
-// Also explicitly select o.customer_name and o.customer_cell to ensure they're available
-// Show all orders - removed WHERE clause to ensure all orders are displayed
-// Simplified query to ensure it works
-$query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount, 
-    o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date, 
-    o.delivery_time, o.shift, o.number_of_persons,
-    o.customer_name as order_customer_name,
-    o.customer_cell as order_customer_cell,
-    u.name as user_customer_name,
-    u.email as user_customer_email,
-    COALESCE(u.name, o.customer_name) as customer_name, 
-    COALESCE(u.email, o.customer_cell) as customer_email, 
-    d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
-    cat.name as dish_category_name
-    FROM orders o
-    LEFT JOIN users u ON o.customer_id = u.id
-    LEFT JOIN dishes d ON o.dish_id = d.id
-    LEFT JOIN categories cat ON d.category_id = cat.id";
-    
-    // Add search filter if active - search by order number or phone number
-    if ($is_search_active && !empty($order_number_search)) {
-        $escaped_search = $conn->real_escape_string($order_number_search);
-        $query .= " WHERE (o.order_number LIKE '%$escaped_search%' OR o.customer_cell LIKE '%$escaped_search%')";
-    }
-    
-    $query .= " ORDER BY 
-        COALESCE(o.order_date, NOW()) DESC, 
-        COALESCE(o.order_number, ''), 
-        o.id DESC";
-    
-    // Add LIMIT for performance - load more than needed to account for grouping
-    // Load 3x the items per page to ensure we have enough after grouping
-    $limit = ($view_mode === 'all') ? ($items_per_page * 3) : ($recent_items_limit * 3);
-    $query .= " LIMIT $limit";
-
-$result = $conn->query($query);
-if (!$result) {
-    // Log query error for debugging
-    $error_msg = "Orders query error: " . $conn->error;
-    error_log($error_msg);
-    error_log("Query: " . $query);
-    
-    // Try a simpler query to see if orders table exists and has data
-    $test_result = $conn->query("SELECT COUNT(*) as count FROM orders");
-    if ($test_result) {
-        $test_row = $test_result->fetch_assoc();
-        error_log("Total orders in database: " . $test_row['count']);
-        if ($test_row['count'] > 0) {
-            // Orders exist but main query failed - try simpler query
-            $query = "SELECT * FROM orders ORDER BY id DESC LIMIT 100";
-            $result = $conn->query($query);
-        }
-    }
-    
-    // Also show error in page for debugging (remove in production)
-    if (isset($_GET['debug'])) {
-        $error = $error_msg;
-    }
-}
-
-// Always initialize variables even if query fails
 $orders = [];
 $grouped_orders = [];
 $paginated_orders = [];
@@ -830,234 +426,272 @@ $total_orders = 0;
 $total_pages = 0;
 $overall_orders_count = 0;
 
-if ($result && $result->num_rows > 0) {
-    $orders = $result->fetch_all(MYSQLI_ASSOC);
-    
-    // If using fallback query, we need to fetch dish and customer info separately
-    $using_fallback = !isset($orders[0]['dish_name']);
-    
-    if ($using_fallback) {
-        // OPTIMIZED: Batch fetch dish and customer info instead of N+1 queries
-        $dish_ids = array_filter(array_unique(array_column($orders, 'dish_id')));
-        $customer_ids = array_filter(array_unique(array_column($orders, 'customer_id')));
-        
-        // Batch fetch all dishes
-        $dishes_map = [];
-        if (!empty($dish_ids)) {
-            $dish_ids_str = implode(',', array_map('intval', $dish_ids));
-            $dishes_query = "SELECT d.id, d.name, d.number_of_persons, d.category_id, cat.name as dish_category_name 
-                FROM dishes d 
-                LEFT JOIN categories cat ON d.category_id = cat.id 
-                WHERE d.id IN ($dish_ids_str)";
-            $dishes_result = $conn->query($dishes_query);
-            if ($dishes_result) {
-                while ($dish = $dishes_result->fetch_assoc()) {
-                    $dishes_map[$dish['id']] = $dish;
-                }
+$default_items_per_page = 12;
+$recent_items_limit = 2;
+$items_per_page = isset($_GET['per_page']) ? max(5, min(100, intval($_GET['per_page']))) : $default_items_per_page;
+$current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$view_mode = (isset($_GET['view']) && $_GET['view'] === 'all') ? 'all' : 'recent';
+$order_number_search = isset($_GET['order_number']) ? trim($_GET['order_number']) : '';
+if (strlen($order_number_search) > 50) {
+    $order_number_search = substr($order_number_search, 0, 50);
+}
+$is_search_active = $order_number_search !== '';
+
+if ($conn instanceof PDO) {
+    try {
+        $customers = db_fetch_all($conn, "SELECT id, name, email FROM users WHERE role = 'user' ORDER BY name");
+
+        if (db_column_exists($conn, 'orders', 'customer_name')) {
+            $previous_customer_names = db_fetch_all(
+                $conn,
+                "SELECT DISTINCT customer_name, customer_cell
+                 FROM orders
+                 WHERE customer_name IS NOT NULL AND customer_name <> ''
+                 ORDER BY customer_name"
+            );
+        }
+
+        foreach ($customers as $customer) {
+            $all_customer_names[$customer['name']] = [
+                'name' => $customer['name'],
+                'cell' => $customer['email'] ?? '',
+                'type' => 'registered',
+            ];
+        }
+        foreach ($previous_customer_names as $prev_cust) {
+            if (!empty($prev_cust['customer_name']) && !isset($all_customer_names[$prev_cust['customer_name']])) {
+                $all_customer_names[$prev_cust['customer_name']] = [
+                    'name' => $prev_cust['customer_name'],
+                    'cell' => $prev_cust['customer_cell'] ?? '',
+                    'type' => 'previous',
+                ];
             }
         }
-        
-        // Batch fetch all customers
-        $customers_map = [];
-        if (!empty($customer_ids)) {
-            $customer_ids_str = implode(',', array_map('intval', $customer_ids));
-            $customers_query = "SELECT id, name, email FROM users WHERE id IN ($customer_ids_str)";
-            $customers_result = $conn->query($customers_query);
-            if ($customers_result) {
-                while ($cust = $customers_result->fetch_assoc()) {
-                    $customers_map[$cust['id']] = $cust;
-                }
+        ksort($all_customer_names);
+
+        $dish_categories = db_fetch_all(
+            $conn,
+            "SELECT DISTINCT c.id, c.name, c.description
+             FROM categories c
+             INNER JOIN dishes d ON d.category_id = c.id
+             ORDER BY c.name"
+        );
+
+        $dishes = db_fetch_all(
+            $conn,
+            "SELECT d.id, d.name, d.base_unit, d.category_id, c.name as category_name,
+                    CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image
+             FROM dishes d
+             LEFT JOIN categories c ON d.category_id = c.id
+             ORDER BY d.name"
+        );
+        foreach ($dishes as &$dish) {
+            if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
+                $dish['name'] = translateToUrdu($dish['name']);
             }
         }
-        
-        // Map data to orders
-        foreach ($orders as &$order) {
-            // Get dish info from map
-            if (!empty($order['dish_id']) && isset($dishes_map[$order['dish_id']])) {
-                $dish = $dishes_map[$order['dish_id']];
-                $order['dish_name'] = $dish['name'];
-                $order['dish_id'] = $dish['id'];
-                if (empty($order['number_of_persons']) || $order['number_of_persons'] == 0) {
-                    $order['number_of_persons'] = $dish['number_of_persons'] ?? 0;
-                }
-                $order['dish_category_name'] = $dish['dish_category_name'] ?? 'Uncategorized';
-                $order['dish_number_of_persons'] = $dish['number_of_persons'] ?? 0;
-            }
-            
-            // Get customer info from map
-            if (!empty($order['customer_id']) && isset($customers_map[$order['customer_id']])) {
-                $cust = $customers_map[$order['customer_id']];
-                $order['user_customer_name'] = $cust['name'];
-                $order['user_customer_email'] = $cust['email'];
-                if (empty($order['customer_name'])) {
-                    $order['customer_name'] = $cust['name'];
-                }
-                if (empty($order['customer_email']) && empty($order['customer_cell'])) {
-                    $order['customer_email'] = $cust['email'];
-                }
-            }
-            
-            // Set aliases for consistency
-            $order['order_customer_name'] = $order['customer_name'] ?? '';
-            $order['order_customer_cell'] = $order['customer_cell'] ?? '';
-            if (empty($order['user_customer_name']) && !empty($order['customer_id'])) {
-                $order['user_customer_name'] = $order['customer_name'] ?? '';
+        unset($dish);
+
+        $ingredients = db_fetch_all(
+            $conn,
+            "SELECT i.id, i.name, i.unit, i.category_id, c.name as category_name
+             FROM ingredients i
+             LEFT JOIN categories c ON i.category_id = c.id
+             ORDER BY i.name"
+        );
+        foreach ($ingredients as &$ingredient) {
+            if (isset($ingredient['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $ingredient['name'])) {
+                $ingredient['name'] = translateToUrdu($ingredient['name']);
             }
         }
-        unset($order);
-    }
-    
-    // OPTIMIZED: Batch fetch all dish ingredients instead of N+1 queries
-    $dish_ids_for_ingredients = array_filter(array_unique(array_column($orders, 'dish_id')));
-    $ingredients_map = [];
-    
-    if (!empty($dish_ids_for_ingredients)) {
-        $dish_ids_str = implode(',', array_map('intval', $dish_ids_for_ingredients));
-        $ingredients_query = "SELECT di.dish_id, di.quantity, di.unit, i.name as ingredient_name, i.id as ingredient_id, 
-            i.category_id, c.name as category_name
-            FROM dish_ingredients di
-            LEFT JOIN ingredients i ON di.ingredient_id = i.id
-            LEFT JOIN categories c ON i.category_id = c.id
-            WHERE di.dish_id IN ($dish_ids_str)
-            ORDER BY di.dish_id, c.name, i.name";
-        
-        $ingredients_result = $conn->query($ingredients_query);
-        if ($ingredients_result) {
-            while ($ing = $ingredients_result->fetch_assoc()) {
-                $dish_id = $ing['dish_id'];
-                if (!isset($ingredients_map[$dish_id])) {
-                    $ingredients_map[$dish_id] = [];
-                }
-                // Translate ingredient names and category names if needed
+        unset($ingredient);
+
+        $previously_used_dishes = db_fetch_all(
+            $conn,
+            "SELECT o.dish_id, d.id, d.name,
+                    COUNT(o.id) as order_count,
+                    MAX(o.order_date) as last_used_date
+             FROM orders o
+             INNER JOIN dishes d ON o.dish_id = d.id
+             WHERE o.order_date >= (NOW() - INTERVAL '30 days')
+             GROUP BY o.dish_id, d.id, d.name
+             ORDER BY order_count DESC, last_used_date DESC
+             LIMIT 20"
+        );
+        foreach ($previously_used_dishes as &$dish) {
+            if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
+                $dish['name'] = translateToUrdu($dish['name']);
+            }
+        }
+        unset($dish);
+
+        $limit = ($view_mode === 'all') ? ($items_per_page * 3) : ($recent_items_limit * 3);
+        $params = [];
+        $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount,
+            o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date,
+            o.delivery_time, o.shift, o.number_of_persons,
+            COALESCE(o.payment_type, 'cash') as payment_type,
+            COALESCE(o.paid_amount, 0) as paid_amount,
+            o.customer_name as order_customer_name,
+            o.customer_cell as order_customer_cell,
+            u.name as user_customer_name,
+            u.email as user_customer_email,
+            COALESCE(u.name, o.customer_name) as customer_name,
+            COALESCE(u.email, o.customer_cell) as customer_email,
+            d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
+            cat.name as dish_category_name
+            FROM orders o
+            LEFT JOIN users u ON o.customer_id = u.id
+            LEFT JOIN dishes d ON o.dish_id = d.id
+            LEFT JOIN categories cat ON d.category_id = cat.id";
+        if ($is_search_active) {
+            $query .= " WHERE (o.order_number ILIKE ? OR COALESCE(o.customer_cell, '') ILIKE ?)";
+            $like = '%' . $order_number_search . '%';
+            $params[] = $like;
+            $params[] = $like;
+        }
+        $query .= " ORDER BY COALESCE(o.order_date, NOW()) DESC, COALESCE(o.order_number, ''), o.id DESC LIMIT " . (int) $limit;
+        $orders = db_fetch_all($conn, $query, $params);
+
+        $dish_ids_for_ingredients = array_values(array_filter(array_unique(array_column($orders, 'dish_id'))));
+        $ingredients_map = [];
+        if (!empty($dish_ids_for_ingredients)) {
+            $placeholders = implode(',', array_fill(0, count($dish_ids_for_ingredients), '?'));
+            $ing_rows = db_fetch_all(
+                $conn,
+                "SELECT di.dish_id, di.quantity, di.unit, i.name as ingredient_name, i.id as ingredient_id,
+                        i.category_id, c.name as category_name
+                 FROM dish_ingredients di
+                 LEFT JOIN ingredients i ON di.ingredient_id = i.id
+                 LEFT JOIN categories c ON i.category_id = c.id
+                 WHERE di.dish_id IN ($placeholders)
+                 ORDER BY di.dish_id, c.name, i.name",
+                array_map('intval', $dish_ids_for_ingredients)
+            );
+            foreach ($ing_rows as $ing) {
                 if ($currentLang === 'ur') {
-                    if (isset($ing['ingredient_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['ingredient_name'])) {
+                    if (!empty($ing['ingredient_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['ingredient_name'])) {
                         $ing['ingredient_name'] = translateToUrdu($ing['ingredient_name']);
                     }
-                    if (isset($ing['category_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['category_name'])) {
+                    if (!empty($ing['category_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['category_name'])) {
                         $ing['category_name'] = translateToUrdu($ing['category_name']);
                     }
                 }
-                $ingredients_map[$dish_id][] = $ing;
+                $ingredients_map[$ing['dish_id']][] = $ing;
             }
         }
-    }
-    
-    // Map ingredients to orders and translate dish names/notes
-    foreach ($orders as &$order) {
-        // Translate dish name if needed
-        if (isset($order['dish_name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $order['dish_name'])) {
-            $order['dish_name'] = translateToUrdu($order['dish_name']);
-        }
-        
-        // Translate notes if needed
-        if (isset($order['notes']) && !empty($order['notes']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $order['notes'])) {
-            $order['notes'] = translateToUrdu($order['notes']);
-        }
-        
-        // Get ingredients from map
-        $dish_id = isset($order['dish_id']) ? intval($order['dish_id']) : 0;
-        $order['ingredients'] = isset($ingredients_map[$dish_id]) ? $ingredients_map[$dish_id] : [];
-    }
-    unset($order); // Break the reference
-    
-    // Group orders by order_number
-    $grouped_orders = [];
-    foreach ($orders as $order) {
-        $order_num = $order['order_number'] ?? 'ORD-' . str_pad($order['id'], 6, '0', STR_PAD_LEFT);
-        if (!isset($grouped_orders[$order_num])) {
-            // Prioritize customer name from users table (registered customers), then from orders table, then fallback
-            $customer_name = !empty($order['user_customer_name']) ? $order['user_customer_name'] : 
-                            (!empty($order['order_customer_name']) ? $order['order_customer_name'] : 
-                            (!empty($order['customer_name']) ? $order['customer_name'] : 'Guest Customer'));
-            // Prioritize customer email from users table, then customer_cell from orders table
-            $customer_email = !empty($order['user_customer_email']) ? $order['user_customer_email'] : 
-                             (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] : 
-                             (!empty($order['customer_email']) ? $order['customer_email'] : ''));
-            
-            $grouped_orders[$order_num] = [
-                'order_number' => $order_num,
-                'customer_id' => $order['customer_id'],
-                'customer_name' => $customer_name,
-                'customer_email' => $customer_email,
-                'customer_cell' => $order['customer_cell'] ?? '',
-                'order_date' => !empty($order['order_date']) ? $order['order_date'] : date('Y-m-d H:i:s'),
-                'delivery_date' => $order['delivery_date'] ?? '',
-                'delivery_time' => $order['delivery_time'] ?? '',
-                'shift' => $order['shift'] ?? '',
-                'number_of_persons' => $order['number_of_persons'] ?? 0,
-                'status' => $order['status'],
-                'notes' => $order['notes'],
-                'extra_ingredients' => $order['extra_ingredients'] ?? null,
-                'id' => $order['id'], // Use first order ID for reference
-                'total_amount' => 0,
-                'dishes' => []
-            ];
-        }
-        $grouped_orders[$order_num]['dishes'][] = $order;
-        $grouped_orders[$order_num]['total_amount'] += floatval($order['total_amount']);
-    }
-    
-    // Convert to indexed array and sort by date (newest first)
-    $grouped_orders = array_values($grouped_orders);
-    usort($grouped_orders, function($a, $b) {
-        // Get order date, fallback to current time
-        $date_a = !empty($a['order_date']) ? strtotime($a['order_date']) : time();
-        $date_b = !empty($b['order_date']) ? strtotime($b['order_date']) : time();
-        return $date_b - $date_a; // Descending order (newest first)
-    });
 
-    // Keep master copy for stats/search and a display copy for pagination
-    $all_grouped_orders = $grouped_orders;
-    $display_orders = $all_grouped_orders;
-    $overall_orders_count = count($all_grouped_orders);
+        foreach ($orders as &$order) {
+            if (!empty($order['dish_name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $order['dish_name'])) {
+                $order['dish_name'] = translateToUrdu($order['dish_name']);
+            }
+            if (!empty($order['notes']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $order['notes'])) {
+                $order['notes'] = translateToUrdu($order['notes']);
+            }
+            $dish_id = isset($order['dish_id']) ? intval($order['dish_id']) : 0;
+            $order['ingredients'] = $ingredients_map[$dish_id] ?? [];
+        }
+        unset($order);
 
-    // Apply order number search on full dataset - search by order number, ID, or phone number
-    if ($is_search_active) {
-        $searchTerm = strtolower($order_number_search);
-        $display_orders = array_values(array_filter($display_orders, function($order) use ($searchTerm) {
-            $orderNumber = strtolower($order['order_number'] ?? '');
-            $orderId = (string)($order['id'] ?? '');
-            $phoneNumber = strtolower($order['customer_cell'] ?? '');
-            return ($searchTerm === '' ||
-                strpos($orderNumber, $searchTerm) !== false ||
-                strpos(strtolower($orderId), $searchTerm) !== false ||
-                strpos($phoneNumber, $searchTerm) !== false);
-        }));
-    }
+        $grouped_orders = [];
+        foreach ($orders as $order) {
+            $order_num = $order['order_number'] ?? ('ORD-' . str_pad((string) $order['id'], 6, '0', STR_PAD_LEFT));
+            if (!isset($grouped_orders[$order_num])) {
+                $customer_name_val = !empty($order['user_customer_name']) ? $order['user_customer_name'] :
+                    (!empty($order['order_customer_name']) ? $order['order_customer_name'] :
+                    (!empty($order['customer_name']) ? $order['customer_name'] : 'Guest Customer'));
+                $customer_email_val = !empty($order['user_customer_email']) ? $order['user_customer_email'] :
+                    (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] :
+                    (!empty($order['customer_email']) ? $order['customer_email'] : ''));
+                $grouped_orders[$order_num] = [
+                    'order_number' => $order_num,
+                    'customer_id' => $order['customer_id'],
+                    'customer_name' => $customer_name_val,
+                    'customer_email' => $customer_email_val,
+                    'customer_cell' => $order['customer_cell'] ?? '',
+                    'order_date' => !empty($order['order_date']) ? $order['order_date'] : date('Y-m-d H:i:s'),
+                    'delivery_date' => $order['delivery_date'] ?? '',
+                    'delivery_time' => $order['delivery_time'] ?? '',
+                    'shift' => $order['shift'] ?? '',
+                    'number_of_persons' => $order['number_of_persons'] ?? 0,
+                    'status' => $order['status'],
+                    'notes' => $order['notes'],
+                    'extra_ingredients' => $order['extra_ingredients'] ?? null,
+                    'payment_type' => $order['payment_type'] ?? 'cash',
+                    'paid_amount' => floatval($order['paid_amount'] ?? 0),
+                    'id' => $order['id'],
+                    'total_amount' => 0,
+                    'dishes' => [],
+                ];
+            }
+            $grouped_orders[$order_num]['dishes'][] = $order;
+            $grouped_orders[$order_num]['total_amount'] += floatval($order['total_amount']);
+            // Keep latest payment fields from any line
+            if (isset($order['payment_type'])) {
+                $grouped_orders[$order_num]['payment_type'] = $order['payment_type'];
+            }
+            if (isset($order['paid_amount'])) {
+                $grouped_orders[$order_num]['paid_amount'] = floatval($order['paid_amount']);
+            }
+        }
 
-    // Pagination calculations on filtered dataset
-    $total_orders = count($display_orders);
-    
-    if ($is_search_active) {
-        $paginated_orders = $display_orders;
-        $total_pages = $total_orders > 0 ? 1 : 0;
-        $current_page = $total_orders > 0 ? 1 : 0;
-    } elseif ($view_mode === 'recent') {
-        $paginated_orders = array_slice($display_orders, 0, $recent_items_limit);
-        $total_pages = $total_orders > 0 ? 1 : 0;
-        $current_page = $total_orders > 0 ? 1 : 0;
-    } else {
-        $total_pages = $total_orders > 0 ? (int) ceil($total_orders / $items_per_page) : 0;
-        if ($total_pages === 0) {
-            $paginated_orders = [];
-            $current_page = 0;
+        foreach ($grouped_orders as &$go) {
+            $go['due_amount'] = max(0, floatval($go['total_amount']) - floatval($go['paid_amount'] ?? 0));
+            $go['is_udhaar'] = (($go['payment_type'] ?? 'cash') === 'udhaar') && $go['due_amount'] > 0.009;
+        }
+        unset($go);
+
+        $grouped_orders = array_values($grouped_orders);
+        usort($grouped_orders, function ($a, $b) {
+            $date_a = !empty($a['order_date']) ? strtotime($a['order_date']) : time();
+            $date_b = !empty($b['order_date']) ? strtotime($b['order_date']) : time();
+            return $date_b - $date_a;
+        });
+
+        $all_grouped_orders = $grouped_orders;
+        $display_orders = $all_grouped_orders;
+        $overall_orders_count = count($all_grouped_orders);
+
+        if ($is_search_active) {
+            $searchTerm = strtolower($order_number_search);
+            $display_orders = array_values(array_filter($display_orders, function ($order) use ($searchTerm) {
+                $orderNumber = strtolower($order['order_number'] ?? '');
+                $orderId = (string) ($order['id'] ?? '');
+                $phoneNumber = strtolower($order['customer_cell'] ?? '');
+                return $searchTerm === '' ||
+                    strpos($orderNumber, $searchTerm) !== false ||
+                    strpos(strtolower($orderId), $searchTerm) !== false ||
+                    strpos($phoneNumber, $searchTerm) !== false;
+            }));
+        }
+
+        $total_orders = count($display_orders);
+        if ($is_search_active) {
+            $paginated_orders = $display_orders;
+            $total_pages = $total_orders > 0 ? 1 : 0;
+            $current_page = $total_orders > 0 ? 1 : 0;
+        } elseif ($view_mode === 'recent') {
+            $paginated_orders = array_slice($display_orders, 0, $recent_items_limit);
+            $total_pages = $total_orders > 0 ? 1 : 0;
+            $current_page = $total_orders > 0 ? 1 : 0;
         } else {
-            $current_page = min(max(1, $current_page), $total_pages);
-            $offset = ($current_page - 1) * $items_per_page;
-            $paginated_orders = array_slice($display_orders, $offset, $items_per_page);
+            $total_pages = $total_orders > 0 ? (int) ceil($total_orders / $items_per_page) : 0;
+            if ($total_pages === 0) {
+                $paginated_orders = [];
+                $current_page = 0;
+            } else {
+                $current_page = min(max(1, $current_page), $total_pages);
+                $offset = ($current_page - 1) * $items_per_page;
+                $paginated_orders = array_slice($display_orders, $offset, $items_per_page);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Orders page load error: ' . $e->getMessage());
+        if ($error === '') {
+            $error = 'Failed to load orders: ' . $e->getMessage();
         }
     }
-} else {
-    $grouped_orders = [];
-    $all_grouped_orders = [];
-    $display_orders = [];
-    $paginated_orders = [];
-    $total_orders = 0;
-    $total_pages = 0;
-    $overall_orders_count = 0;
 }
-
-$conn->close();
 
 // Get absolute URL for logo image
 $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
@@ -1076,6 +710,8 @@ $total_orders_count = count($all_grouped_orders);
 $pending_orders = count(array_filter($all_grouped_orders, fn($o) => $o['status'] == 'pending'));
 $delivered_orders = count(array_filter($all_grouped_orders, fn($o) => $o['status'] == 'delivered'));
 $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
+$udhaar_orders = count(array_filter($all_grouped_orders, fn($o) => !empty($o['is_udhaar'])));
+$udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floatval($o['due_amount'] ?? 0) : 0, $all_grouped_orders));
 ?>
 
 <style>
@@ -1441,19 +1077,21 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
         </div>
     </div>
     <div class="col-lg-3 col-md-6">
+        <a href="udhaar.php" class="text-decoration-none">
         <div class="order-stat-card info h-100">
             <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);">
-                        <i class="bi bi-currency-exchange fs-4 text-white"></i>
+                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
+                        <i class="bi bi-cash-coin fs-4 text-white"></i>
                     </div>
                     <div>
-                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Total Revenue</div>
-                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Rs <?php echo number_format($total_revenue, 0); ?></div>
+                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Udhaar Due (<?php echo (int) $udhaar_orders; ?>)</div>
+                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Rs <?php echo number_format($udhaar_due_total, 0); ?></div>
                     </div>
                 </div>
             </div>
         </div>
+        </a>
     </div>
 </div>
 
@@ -1601,6 +1239,35 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                 </label>
                                 <input type="time" class="form-control form-control-lg" id="delivery_time" name="delivery_time" 
                                        value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>" required>
+                            </div>
+                            <div class="col-12">
+                                <div class="p-3 rounded-3 border" style="background: #fff7ed; border-color: #fdba74 !important;">
+                                    <label class="form-label fw-semibold mb-2">
+                                        <i class="bi bi-cash-coin me-1 text-warning"></i>
+                                        ادائیگی / ادھار
+                                    </label>
+                                    <div class="d-flex flex-wrap gap-3 mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="payment_type" id="payment_cash" value="cash"
+                                                   <?php echo (!isset($_POST['payment_type']) || $_POST['payment_type'] !== 'udhaar') ? 'checked' : ''; ?>
+                                                   onchange="toggleUdhaarFields()">
+                                            <label class="form-check-label fw-semibold" for="payment_cash">نقد (Cash)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="payment_type" id="payment_udhaar" value="udhaar"
+                                                   <?php echo (isset($_POST['payment_type']) && $_POST['payment_type'] === 'udhaar') ? 'checked' : ''; ?>
+                                                   onchange="toggleUdhaarFields()">
+                                            <label class="form-check-label fw-semibold" for="payment_udhaar">ادھار (Udhaar)</label>
+                                        </div>
+                                    </div>
+                                    <div id="udhaarPaidWrap" style="display: none;">
+                                        <label for="paid_amount" class="form-label">ایڈوانس / جمع رقم (Rs)</label>
+                                        <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="paid_amount" name="paid_amount"
+                                               value="<?php echo htmlspecialchars($_POST['paid_amount'] ?? '0'); ?>"
+                                               placeholder="0 = مکمل ادھار">
+                                        <small class="text-muted">باقی رقم ادھار میں رہے گی۔ بعد میں <strong>Udhaar</strong> صفحے سے وصول کر سکتے ہیں۔</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="step-actions mt-4">
@@ -2149,8 +1816,8 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                 <!-- Dishes Grid (hidden initially, shown after category selection) -->
                 <div id="modalDishesGrid" class="row g-3" style="display: none;">
                     <?php foreach ($dishes as $dish): 
-                        $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
-                        $image_exists = !empty($dish['image']) && file_exists(__DIR__ . '/../' . $dish['image']);
+                        $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
+                        $image_exists = $image_path !== '';
                     ?>
                         <div class="col-md-4 col-lg-3 modal-dish-item" 
                              data-dish-id="<?php echo $dish['id']; ?>"
@@ -2165,6 +1832,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                              class="w-100 h-100" 
                                              style="object-fit: cover; transition: transform 0.3s ease;"
                                              alt="<?php echo htmlspecialchars($dish['name']); ?>"
+                                             loading="lazy" decoding="async"
                                              onmouseover="this.style.transform='scale(1.1)'"
                                              onmouseout="this.style.transform='scale(1)'">
                                     <?php else: ?>
@@ -2400,6 +2068,13 @@ $visible_orders_count = count($paginated_orders);
                                                 <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-1">
                                                     <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
                                                 </span>
+                                                <?php if (!empty($grouped_order['is_udhaar'])): ?>
+                                                    <span class="badge bg-warning text-dark ms-1" title="Outstanding Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>">
+                                                        <i class="bi bi-cash-coin me-1"></i>ادھار Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>
+                                                    </span>
+                                                <?php elseif (($grouped_order['payment_type'] ?? 'cash') === 'cash'): ?>
+                                                    <span class="badge bg-success ms-1"><i class="bi bi-check2-circle me-1"></i>نقد</span>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -2911,6 +2586,17 @@ function editOrder(orderNumber) {
 }
 
 // Step navigation functions
+function toggleUdhaarFields() {
+    const isUdhaar = document.getElementById('payment_udhaar')?.checked;
+    const wrap = document.getElementById('udhaarPaidWrap');
+    if (wrap) {
+        wrap.style.display = isUdhaar ? 'block' : 'none';
+    }
+}
+document.addEventListener('DOMContentLoaded', function () {
+    toggleUdhaarFields();
+});
+
 function nextStep(step) {
     // Initialize unit dropdowns before validation
     if (currentStep === 2) {

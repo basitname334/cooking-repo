@@ -259,7 +259,7 @@ function ensureDatabaseSetup(PDO $conn): void {
             number_of_persons INT DEFAULT 1,
             base_quantity DECIMAL(10,2) DEFAULT 1.00,
             base_unit VARCHAR(50) DEFAULT 'serving',
-            image VARCHAR(255) DEFAULT NULL,
+            image TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )",
 
@@ -276,7 +276,7 @@ function ensureDatabaseSetup(PDO $conn): void {
         'orders' => "CREATE TABLE IF NOT EXISTS orders (
             id SERIAL PRIMARY KEY,
             order_number VARCHAR(50) DEFAULT NULL,
-            customer_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            customer_id INT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
             dish_id INT NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
             quantity DECIMAL(10, 2) NOT NULL,
             unit VARCHAR(50) DEFAULT NULL,
@@ -285,7 +285,15 @@ function ensureDatabaseSetup(PDO $conn): void {
             status VARCHAR(20) DEFAULT 'pending'
                 CHECK (status IN ('pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled')),
             notes TEXT,
-            extra_ingredients TEXT
+            extra_ingredients TEXT,
+            customer_name VARCHAR(100) DEFAULT NULL,
+            customer_cell VARCHAR(20) DEFAULT NULL,
+            delivery_date DATE DEFAULT NULL,
+            delivery_time TIME DEFAULT NULL,
+            shift VARCHAR(20) DEFAULT NULL,
+            number_of_persons INT DEFAULT NULL,
+            payment_type VARCHAR(20) DEFAULT 'cash',
+            paid_amount DECIMAL(10, 2) DEFAULT 0
         )",
     ];
 
@@ -312,10 +320,18 @@ function db_run_column_migrations(PDO $conn): void {
         ['dishes', 'number_of_persons', 'ALTER TABLE dishes ADD COLUMN number_of_persons INT DEFAULT 1'],
         ['dishes', 'base_quantity', 'ALTER TABLE dishes ADD COLUMN base_quantity DECIMAL(10,2) DEFAULT 1.00'],
         ['dishes', 'base_unit', 'ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT \'serving\''],
-        ['dishes', 'image', 'ALTER TABLE dishes ADD COLUMN image VARCHAR(255) DEFAULT NULL'],
+        ['dishes', 'image', 'ALTER TABLE dishes ADD COLUMN image TEXT DEFAULT NULL'],
         ['orders', 'order_number', 'ALTER TABLE orders ADD COLUMN order_number VARCHAR(50) DEFAULT NULL'],
         ['orders', 'unit', 'ALTER TABLE orders ADD COLUMN unit VARCHAR(50) DEFAULT NULL'],
         ['orders', 'extra_ingredients', 'ALTER TABLE orders ADD COLUMN extra_ingredients TEXT'],
+        ['orders', 'customer_name', 'ALTER TABLE orders ADD COLUMN customer_name VARCHAR(100) DEFAULT NULL'],
+        ['orders', 'customer_cell', 'ALTER TABLE orders ADD COLUMN customer_cell VARCHAR(20) DEFAULT NULL'],
+        ['orders', 'delivery_date', 'ALTER TABLE orders ADD COLUMN delivery_date DATE DEFAULT NULL'],
+        ['orders', 'delivery_time', 'ALTER TABLE orders ADD COLUMN delivery_time TIME DEFAULT NULL'],
+        ['orders', 'shift', 'ALTER TABLE orders ADD COLUMN shift VARCHAR(20) DEFAULT NULL'],
+        ['orders', 'number_of_persons', 'ALTER TABLE orders ADD COLUMN number_of_persons INT DEFAULT NULL'],
+        ['orders', 'payment_type', "ALTER TABLE orders ADD COLUMN payment_type VARCHAR(20) DEFAULT 'cash'"],
+        ['orders', 'paid_amount', 'ALTER TABLE orders ADD COLUMN paid_amount DECIMAL(10, 2) DEFAULT 0'],
     ];
 
     foreach ($migrations as [$table, $column, $alter]) {
@@ -328,6 +344,15 @@ function db_run_column_migrations(PDO $conn): void {
             } catch (Throwable $e) {
                 error_log("Migration {$table}.{$column} failed: " . $e->getMessage());
             }
+        }
+    }
+
+    // Dish images are stored as data URIs on Render — ensure TEXT, not VARCHAR(255)
+    if (db_table_exists($conn, 'dishes') && db_column_exists($conn, 'dishes', 'image')) {
+        try {
+            $conn->exec('ALTER TABLE dishes ALTER COLUMN image TYPE TEXT');
+        } catch (Throwable $e) {
+            // ignore if already TEXT or unsupported
         }
     }
 }
@@ -518,6 +543,105 @@ function ensureAdminUser($conn): bool {
     }
 
     return true;
+}
+
+/**
+ * Public URL for a dish image (lazy-loaded endpoint — keeps list pages fast).
+ */
+function dish_image_url(int $dishId, string $relativePrefix = '../'): string {
+    return $relativePrefix . 'api/dish_image.php?id=' . $dishId;
+}
+
+/**
+ * Resolve a dish image value for <img src="...">.
+ * Prefer dish_image_url($id) on list pages so base64 is not embedded in HTML.
+ */
+function dish_image_src(?string $image, string $relativePrefix = '../'): ?string {
+    if ($image === null || $image === '') {
+        return null;
+    }
+    if (str_starts_with($image, 'data:') || str_starts_with($image, 'http://') || str_starts_with($image, 'https://')) {
+        return $image;
+    }
+    $relative = ltrim($image, '/');
+    $full = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relative);
+    if (is_file($full) && is_readable($full)) {
+        return $relativePrefix . $relative;
+    }
+    return null;
+}
+
+/**
+ * Compress/resize an image file with GD, return JPEG binary (or original on failure).
+ */
+function dish_image_compress_file(string $tmpPath, int $maxWidth = 800, int $jpegQuality = 72): ?array {
+    if (!function_exists('imagecreatefromstring')) {
+        $binary = @file_get_contents($tmpPath);
+        return $binary === false ? null : ['binary' => $binary, 'mime' => 'image/jpeg'];
+    }
+    $raw = @file_get_contents($tmpPath);
+    if ($raw === false || $raw === '') {
+        return null;
+    }
+    $src = @imagecreatefromstring($raw);
+    if (!$src) {
+        return ['binary' => $raw, 'mime' => 'image/jpeg'];
+    }
+    $width = imagesx($src);
+    $height = imagesy($src);
+    if ($width < 1 || $height < 1) {
+        imagedestroy($src);
+        return null;
+    }
+    if ($width > $maxWidth) {
+        $newW = $maxWidth;
+        $newH = (int) max(1, round($height * ($maxWidth / $width)));
+        $dst = imagecreatetruecolor($newW, $newH);
+        $white = imagecolorallocate($dst, 255, 255, 255);
+        imagefilledrectangle($dst, 0, 0, $newW, $newH, $white);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $width, $height);
+        imagedestroy($src);
+        $src = $dst;
+    }
+    ob_start();
+    imagejpeg($src, null, $jpegQuality);
+    $binary = ob_get_clean();
+    imagedestroy($src);
+    if ($binary === false || $binary === '') {
+        return null;
+    }
+    return ['binary' => $binary, 'mime' => 'image/jpeg'];
+}
+
+/**
+ * Convert an uploaded image into a compressed data URI for DB storage.
+ */
+function dish_image_from_upload(array $file, ?string &$errorMessage = null, int $maxBytes = 2097152): ?string {
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return null;
+    }
+    $tmp = $file['tmp_name'] ?? '';
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        $errorMessage = 'Uploaded file is not valid.';
+        return null;
+    }
+    $size = (int) ($file['size'] ?? 0);
+    if ($size <= 0 || $size > $maxBytes) {
+        $errorMessage = 'Image must be between 1 byte and ' . round($maxBytes / 1048576, 1) . 'MB.';
+        return null;
+    }
+    $ext = strtolower(pathinfo($file['name'] ?? '', PATHINFO_EXTENSION));
+    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!in_array($ext, $allowed, true)) {
+        $errorMessage = 'Invalid image format. Allowed: JPG, JPEG, PNG, GIF, WEBP';
+        return null;
+    }
+    $compressed = dish_image_compress_file($tmp, 800, 72);
+    if ($compressed === null) {
+        $errorMessage = 'Could not process uploaded image.';
+        return null;
+    }
+    return 'data:' . $compressed['mime'] . ';base64,' . base64_encode($compressed['binary']);
 }
 
 function db_die_connection_error(string $message): void {

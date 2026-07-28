@@ -29,83 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = translateForDatabase($name);
     $description = translateForDatabase($description);
     
-    // Handle image upload
+    // Handle image upload — store as data URI in Postgres (survives Render redeploys)
     $image_path = null;
     if (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] === UPLOAD_ERR_OK) {
-        $upload_dir = __DIR__ . '/../uploads/dishes/';
-        if (!is_dir($upload_dir)) {
-            if (!mkdir($upload_dir, 0755, true)) {
-                $error = 'Failed to create upload directory.';
-            }
-        }
-        
-        // Ensure directory is writable
-        if (!is_writable($upload_dir)) {
-            chmod($upload_dir, 0755);
-        }
-        
-        $file_extension = strtolower(pathinfo($_FILES['dish_image']['name'], PATHINFO_EXTENSION));
-        $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        
-        if (in_array($file_extension, $allowed_extensions)) {
-            $file_name = uniqid('dish_', true) . '.' . $file_extension;
-            $target_path = $upload_dir . $file_name;
-            
-            // Check if temp file exists and is readable
-            if (!is_uploaded_file($_FILES['dish_image']['tmp_name'])) {
-                $error = 'Uploaded file is not valid or has been moved.';
-            } elseif (!file_exists($_FILES['dish_image']['tmp_name'])) {
-                $error = 'Temporary file does not exist.';
-            } else {
-                // Move the uploaded file
-                if (move_uploaded_file($_FILES['dish_image']['tmp_name'], $target_path)) {
-                    // Verify file was moved successfully
-                    if (file_exists($target_path)) {
-                        // Set proper file permissions (readable by web server and owner)
-                        // 0644 = owner read/write, group/others read
-                        if (!chmod($target_path, 0644)) {
-                            error_log('Warning: Failed to set permissions on uploaded file: ' . $target_path);
-                        }
-                        
-                        // Also ensure directory permissions are correct
-                        if (!is_writable($upload_dir)) {
-                            chmod($upload_dir, 0755);
-                        }
-                        
-                        // Verify file is readable and get file size
-                        if (is_readable($target_path)) {
-                            $file_size = filesize($target_path);
-                            if ($file_size > 0) {
-                                $image_path = 'uploads/dishes/' . $file_name;
-                                // Log successful upload for debugging
-                                error_log('Image uploaded successfully: ' . $image_path . ' (Size: ' . $file_size . ' bytes)');
-                            } else {
-                                $error = 'Uploaded file is empty.';
-                                unlink($target_path);
-                            }
-                        } else {
-                            $error = 'Uploaded file is not readable. Please check file permissions.';
-                            // Clean up the file if it's not readable
-                            if (file_exists($target_path)) {
-                                unlink($target_path);
-                            }
-                        }
-                    } else {
-                        $error = 'File was moved but does not exist at target location.';
-                    }
-                } else {
-                    $error = 'Failed to move uploaded file. Check directory permissions and disk space.';
-                    // Log additional error information
-                    error_log('Image upload failed. Temp file: ' . $_FILES['dish_image']['tmp_name'] . ', Target: ' . $target_path);
-                    error_log('Upload error: ' . $_FILES['dish_image']['error']);
-                    error_log('Directory writable: ' . (is_writable($upload_dir) ? 'yes' : 'no'));
-                    error_log('Disk free space: ' . disk_free_space($upload_dir));
-                    error_log('Temp file exists: ' . (file_exists($_FILES['dish_image']['tmp_name']) ? 'yes' : 'no'));
-                    error_log('Temp file readable: ' . (is_readable($_FILES['dish_image']['tmp_name']) ? 'yes' : 'no'));
-                }
-            }
+        $uploadError = null;
+        $image_path = dish_image_from_upload($_FILES['dish_image'], $uploadError, 2 * 1024 * 1024);
+        if ($image_path === null) {
+            $error = $uploadError ?: 'Error uploading image.';
         } else {
-            $error = 'Invalid image format. Allowed formats: JPG, JPEG, PNG, GIF, WEBP';
+            // Best-effort local cache (optional; may be wiped on Render redeploy)
+            $upload_dir = __DIR__ . '/../uploads/dishes/';
+            if (!is_dir($upload_dir)) {
+                @mkdir($upload_dir, 0755, true);
+            }
+            if (is_dir($upload_dir) && is_writable($upload_dir)) {
+                $ext = strtolower(pathinfo($_FILES['dish_image']['name'], PATHINFO_EXTENSION)) ?: 'jpg';
+                $cache_name = uniqid('dish_', true) . '.' . $ext;
+                @copy($_FILES['dish_image']['tmp_name'], $upload_dir . $cache_name);
+            }
         }
     } elseif (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] !== UPLOAD_ERR_NO_FILE) {
         $upload_errors = [
@@ -156,41 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         try {
             if ($dish_id) {
-                // Get existing image path if no new image uploaded
+                // Keep existing image if no new upload
                 if ($image_path === null) {
                     $existing_row = db_fetch($conn, "SELECT image FROM dishes WHERE id = ?", [$dish_id]);
-                    if ($existing_row) {
-                        $existing_image = $existing_row['image'];
-                        if (!empty($existing_image)) {
-                            $existing_image_path = __DIR__ . '/../' . $existing_image;
-                            if (file_exists($existing_image_path) && is_readable($existing_image_path)) {
-                                $image_path = $existing_image;
-                            } else {
-                                error_log('Warning: Existing image file not found or not readable: ' . $existing_image_path);
-                                $image_path = null;
-                            }
-                        } else {
-                            $image_path = null;
-                        }
-                    }
-                } else {
-                    // Delete old image if new one is uploaded
-                    $old_row = db_fetch($conn, "SELECT image FROM dishes WHERE id = ?", [$dish_id]);
-                    if ($old_row && !empty($old_row['image'])) {
-                        $old_image_path = __DIR__ . '/../' . $old_row['image'];
-                        if ($old_image_path !== __DIR__ . '/../' . $image_path && file_exists($old_image_path)) {
-                            if (!unlink($old_image_path)) {
-                                error_log('Warning: Failed to delete old image file: ' . $old_image_path);
-                            }
-                        }
-                    }
-                    
-                    // Verify the new image file exists before saving
-                    $new_image_path = __DIR__ . '/../' . $image_path;
-                    if (!file_exists($new_image_path) || !is_readable($new_image_path)) {
-                        error_log('Error: New image file does not exist or is not readable: ' . $new_image_path);
-                        throw new Exception('Uploaded image file is not accessible. Please try uploading again.');
-                    }
+                    $image_path = $existing_row['image'] ?? null;
                 }
                 
                 // Update existing dish
@@ -332,8 +242,10 @@ $items_per_page_int = intval($items_per_page);
 $offset_int = intval($offset);
 $dishes = db_fetch_all(
     $conn,
-    "SELECT d.*, c.name as category_name,
-    (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
+    "SELECT d.id, d.name, d.description, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
+            d.created_at, c.name as category_name,
+            CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image,
+            (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
     ORDER BY d.id DESC, COALESCE(c.name, 'zzz'), d.name
@@ -548,10 +460,11 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="file" class="form-control" id="dish_image" name="dish_image" 
                                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                                        onchange="previewImage(this)">
-                                <small class="form-text text-muted">Allowed formats: JPG, JPEG, PNG, GIF, WEBP</small>
+                                <small class="form-text text-muted">Allowed formats: JPG, JPEG, PNG, GIF, WEBP (max 2MB). Images are saved in the database.</small>
                                 <?php if ($edit_dish && !empty($edit_dish['image'])): ?>
+                                    <?php $edit_image_src = dish_image_url((int) $edit_dish['id'], '../'); ?>
                                     <div class="mt-2">
-                                        <img src="../<?php echo htmlspecialchars($edit_dish['image']); ?>" 
+                                        <img src="<?php echo htmlspecialchars($edit_image_src); ?>" 
                                              alt="<?php echo htmlspecialchars($edit_dish['name']); ?>" 
                                              id="current_image_preview"
                                              class="img-thumbnail mt-2" 
@@ -696,14 +609,14 @@ include __DIR__ . '/../includes/header.php';
                                      style="cursor: pointer;" 
                                      onclick="window.location.href='?edit=<?php echo $dish['id']; ?>'">
                                     <?php 
-                                    $dish_image_path = !empty($dish['image']) ? htmlspecialchars($dish['image']) : '';
-                                    $dish_image_full_path = !empty($dish_image_path) ? '../' . $dish_image_path : '';
-                                    $dish_image_exists = !empty($dish_image_path) && file_exists(__DIR__ . '/../' . $dish_image_path);
+                                    $has_image = !empty($dish['has_image']);
+                                    $dish_image_src = $has_image ? dish_image_url((int) $dish['id'], '../') : null;
                                     ?>
-                                    <?php if (!empty($dish_image_path) && $dish_image_exists): ?>
+                                    <?php if (!empty($dish_image_src)): ?>
                                         <div style="height: 150px; overflow: hidden; background: #f8f9fa;">
-                                            <img src="<?php echo $dish_image_full_path; ?>" 
+                                            <img src="<?php echo htmlspecialchars($dish_image_src); ?>" 
                                                  alt="<?php echo htmlspecialchars($dish['name']); ?>" 
+                                                 loading="lazy" decoding="async"
                                                  style="width: 100%; height: 100%; object-fit: cover;"
                                                  onerror="this.parentElement.innerHTML='<div style=\'height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;\'><i class=\'bi bi-egg-fried text-white\' style=\'font-size: 3rem;\'></i></div>'">
                                         </div>

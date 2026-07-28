@@ -1,5 +1,4 @@
 services:
-  # Web Service
   - type: web
     name: food-management-system
     env: docker
@@ -7,24 +6,16 @@ services:
     dockerContext: .
     plan: free
     envVars:
-      - key: DB_HOST
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASS
-        sync: false
-      - key: DB_NAME
-        sync: false
-      - key: DB_PORT
-        value: "3306"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: food-management-db
+          property: connectionString
       - key: DB_SSL_REQUIRED
-        sync: false
+        value: "true"
     healthCheckPath: /health.php
 
 databases:
-  # MySQL Database
   - name: food-management-db
-    databaseName: food_management_system
     plan: free
-    user: food_user
-
+    databaseName: abdul_basit
+    user: abdul_basit_user

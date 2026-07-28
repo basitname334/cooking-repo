@@ -6,27 +6,24 @@ services:
     ports:
       - "8080:80"
     environment:
-      - DB_HOST=db
-      - DB_USER=root
-      - DB_PASS=rootpassword
-      - DB_NAME=food_management_system
-      - DB_PORT=3306
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/food_management_system
+      - DB_SSLMODE=disable
     depends_on:
       - db
     volumes:
       - ./uploads:/var/www/html/uploads
 
   db:
-    image: mysql:8.0
+    image: postgres:16-alpine
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
-      - MYSQL_DATABASE=food_management_system
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=food_management_system
     ports:
-      - "3307:3306"
+      - "5433:5432"
     volumes:
-      - db_data:/var/lib/mysql
-      - ./database/database.sql:/docker-entrypoint-initdb.d/init.sql
+      - db_data:/var/lib/postgresql/data
+      - ./database/schema.pgsql.sql:/docker-entrypoint-initdb.d/01-schema.sql
 
 volumes:
   db_data:
-

@@ -150,10 +150,12 @@ $dish_categories = db_fetch_all(
     ORDER BY c.name"
 );
 
-// Get all dishes with images
+// Get all dishes (no image blob — loaded via api/dish_image.php)
 $dishes = db_fetch_all(
     $conn,
-    "SELECT d.*, d.category_id, c.name as category_name 
+    "SELECT d.id, d.name, d.description, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
+            c.name as category_name,
+            CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
     ORDER BY d.name"
@@ -162,14 +164,17 @@ $dishes = db_fetch_all(
 // Get previously used dishes from recent orders (last 30 days)
 $previously_used_dishes = db_fetch_all(
     $conn,
-    "SELECT o.dish_id, d.*, c.name as category_name,
-    COUNT(o.id) as order_count,
-    MAX(o.order_date) as last_used_date
+    "SELECT o.dish_id, d.id, d.name, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
+            c.name as category_name,
+            CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image,
+            COUNT(o.id) as order_count,
+            MAX(o.order_date) as last_used_date
     FROM orders o
     INNER JOIN dishes d ON o.dish_id = d.id
     LEFT JOIN categories c ON d.category_id = c.id
     WHERE o.order_date >= (NOW() - INTERVAL '30 days')
-    GROUP BY o.dish_id, d.id, c.name
+    GROUP BY o.dish_id, d.id, d.name, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit, c.name,
+             CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END
     ORDER BY order_count DESC, last_used_date DESC
     LIMIT 20"
 );
@@ -583,14 +588,14 @@ include __DIR__ . '/../includes/header.php';
                     <div id="allDishesContainer" class="dish-container">
                         <div class="row g-3" id="dishesContainer">
                             <?php foreach ($dishes as $dish): 
-                                $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
-                                $image_exists = !empty($dish['image']) && file_exists(__DIR__ . '/../' . $dish['image']);
+                                $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
+                                $image_exists = $image_path !== '';
                             ?>
                                 <div class="col-md-4 col-lg-3">
                                     <div class="dish-card card h-100 position-relative" data-dish-id="<?php echo $dish['id']; ?>">
                                         <div style="position: relative; overflow: hidden;">
                                             <?php if ($image_exists): ?>
-                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>">
+                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>" loading="lazy" decoding="async">
                                             <?php else: ?>
                                                 <div class="dish-placeholder">
                                                     <i class="bi bi-egg-fried"></i>
@@ -624,8 +629,8 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="row g-3" id="previousDishesContainerGrid">
                             <?php foreach ($previously_used_dishes as $dish): 
-                                $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
-                                $image_exists = !empty($dish['image']) && file_exists(__DIR__ . '/../' . $dish['image']);
+                                $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
+                                $image_exists = $image_path !== '';
                             ?>
                                 <div class="col-md-4 col-lg-3">
                                     <div class="dish-card card h-100 position-relative" data-dish-id="<?php echo $dish['id']; ?>">
@@ -634,7 +639,7 @@ include __DIR__ . '/../includes/header.php';
                                         </div>
                                         <div style="position: relative; overflow: hidden;">
                                             <?php if ($image_exists): ?>
-                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>">
+                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>" loading="lazy" decoding="async">
                                             <?php else: ?>
                                                 <div class="dish-placeholder">
                                                     <i class="bi bi-egg-fried"></i>
@@ -828,8 +833,8 @@ include __DIR__ . '/../includes/header.php';
                 <!-- Dishes Grid (hidden initially, shown after category selection) -->
                 <div id="modalDishesGrid" class="row g-3" style="display: none;">
                     <?php foreach ($dishes as $dish): 
-                        $image_path = !empty($dish['image']) ? '../' . $dish['image'] : '';
-                        $image_exists = !empty($dish['image']) && file_exists(__DIR__ . '/../' . $dish['image']);
+                        $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
+                        $image_exists = $image_path !== '';
                     ?>
                         <div class="col-md-4 col-lg-3 modal-dish-item" 
                              data-dish-id="<?php echo $dish['id']; ?>"
@@ -844,6 +849,7 @@ include __DIR__ . '/../includes/header.php';
                                              class="w-100 h-100" 
                                              style="object-fit: cover; transition: transform 0.3s ease;"
                                              alt="<?php echo htmlspecialchars($dish['name']); ?>"
+                                             loading="lazy" decoding="async"
                                              onmouseover="this.style.transform='scale(1.1)'"
                                              onmouseout="this.style.transform='scale(1)'">
                                     <?php else: ?>

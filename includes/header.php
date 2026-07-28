@@ -86,6 +86,7 @@ $available_langs = getAvailableLanguages();
                                 ['url' => 'ingredients.php', 'icon' => 'basket', 'text' => 'Ingredients'],
                                 ['url' => 'dishes.php', 'icon' => 'egg-fried', 'text' => 'Dishes'],
                                 ['url' => 'orders.php', 'icon' => 'cart-check', 'text' => 'Orders'],
+                                ['url' => 'udhaar.php', 'icon' => 'cash-coin', 'text' => 'Udhaar'],
                                 ['url' => 'customers.php', 'icon' => 'people', 'text' => 'Customers'],
                             ];
                             foreach ($navItems as $item):
