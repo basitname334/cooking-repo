@@ -124,82 +124,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($name)) {
         $error = 'Dish name is required.';
     } else {
-        // Check if category_id allows NULL, if not modify it
-        $check_category_null = $conn->query("SHOW COLUMNS FROM dishes WHERE Field = 'category_id'");
-        if ($check_category_null && $check_category_null->num_rows > 0) {
-            $column_info = $check_category_null->fetch_assoc();
-            if ($column_info['Null'] === 'NO') {
-                // First, get and drop all foreign key constraints on category_id
-                $fk_check = $conn->query("SELECT CONSTRAINT_NAME 
-                    FROM information_schema.KEY_COLUMN_USAGE 
-                    WHERE TABLE_SCHEMA = DATABASE() 
-                    AND TABLE_NAME = 'dishes' 
-                    AND COLUMN_NAME = 'category_id' 
-                    AND REFERENCED_TABLE_NAME IS NOT NULL");
-                if ($fk_check && $fk_check->num_rows > 0) {
-                    while ($fk_row = $fk_check->fetch_assoc()) {
-                        $fk_name = $fk_row['CONSTRAINT_NAME'];
-                        $conn->query("ALTER TABLE dishes DROP FOREIGN KEY `" . $conn->real_escape_string($fk_name) . "`");
-                    }
-                }
-                // Now modify the column to allow NULL
-                $conn->query("ALTER TABLE dishes MODIFY COLUMN category_id INT(11) NULL");
-                // Re-add foreign key constraint (foreign keys can work with NULL values)
-                // Check if constraint already exists before adding
-                $existing_fk = $conn->query("SELECT CONSTRAINT_NAME 
-                    FROM information_schema.KEY_COLUMN_USAGE 
-                    WHERE TABLE_SCHEMA = DATABASE() 
-                    AND TABLE_NAME = 'dishes' 
-                    AND CONSTRAINT_NAME = 'dishes_category_fk'");
-                if (!$existing_fk || $existing_fk->num_rows == 0) {
-                    $conn->query("ALTER TABLE dishes ADD CONSTRAINT dishes_category_fk 
-                        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE");
-                }
+        // Allow NULL category_id if the column is currently NOT NULL
+        $null_info = db_fetch(
+            $conn,
+            "SELECT is_nullable FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'dishes' AND column_name = 'category_id'"
+        );
+        if ($null_info && strtoupper($null_info['is_nullable']) === 'NO') {
+            try {
+                $conn->exec("ALTER TABLE dishes ALTER COLUMN category_id DROP NOT NULL");
+            } catch (PDOException $e) {
+                error_log('Failed to allow NULL category_id: ' . $e->getMessage());
             }
         }
-        
-        // Check if number_of_persons column exists, if not add it
-        $check_column = $conn->query("SHOW COLUMNS FROM dishes LIKE 'number_of_persons'");
-        if ($check_column->num_rows == 0) {
-            $conn->query("ALTER TABLE dishes ADD COLUMN number_of_persons INT DEFAULT 1 AFTER category_id");
+
+        if (!db_column_exists($conn, 'dishes', 'number_of_persons')) {
+            $conn->exec("ALTER TABLE dishes ADD COLUMN number_of_persons INT DEFAULT 1");
         }
-        
-        // Check if base_quantity and base_unit columns exist, if not add them
-        $check_base_quantity = $conn->query("SHOW COLUMNS FROM dishes LIKE 'base_quantity'");
-        if ($check_base_quantity->num_rows == 0) {
-            $conn->query("ALTER TABLE dishes ADD COLUMN base_quantity DECIMAL(10,2) DEFAULT 1 AFTER number_of_persons");
+        if (!db_column_exists($conn, 'dishes', 'base_quantity')) {
+            $conn->exec("ALTER TABLE dishes ADD COLUMN base_quantity DECIMAL(10,2) DEFAULT 1");
         }
-        $check_base_unit = $conn->query("SHOW COLUMNS FROM dishes LIKE 'base_unit'");
-        if ($check_base_unit->num_rows == 0) {
-            $conn->query("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving' AFTER base_quantity");
+        if (!db_column_exists($conn, 'dishes', 'base_unit')) {
+            $conn->exec("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving'");
         }
-        
-        // Check if image column exists, if not add it
-        $check_image = $conn->query("SHOW COLUMNS FROM dishes LIKE 'image'");
-        if ($check_image->num_rows == 0) {
-            $conn->query("ALTER TABLE dishes ADD COLUMN image VARCHAR(255) DEFAULT NULL AFTER base_unit");
+        if (!db_column_exists($conn, 'dishes', 'image')) {
+            $conn->exec("ALTER TABLE dishes ADD COLUMN image VARCHAR(255) DEFAULT NULL");
         }
         
         // Start transaction
-        $conn->begin_transaction();
+        $conn->beginTransaction();
         
         try {
             if ($dish_id) {
                 // Get existing image path if no new image uploaded
                 if ($image_path === null) {
-                    $existing_stmt = $conn->prepare("SELECT image FROM dishes WHERE id = ?");
-                    $existing_stmt->bind_param("i", $dish_id);
-                    $existing_stmt->execute();
-                    $existing_result = $existing_stmt->get_result();
-                    if ($existing_row = $existing_result->fetch_assoc()) {
+                    $existing_row = db_fetch($conn, "SELECT image FROM dishes WHERE id = ?", [$dish_id]);
+                    if ($existing_row) {
                         $existing_image = $existing_row['image'];
-                        // Verify the existing image file still exists
                         if (!empty($existing_image)) {
                             $existing_image_path = __DIR__ . '/../' . $existing_image;
                             if (file_exists($existing_image_path) && is_readable($existing_image_path)) {
                                 $image_path = $existing_image;
                             } else {
-                                // File doesn't exist or is not readable, set to null
                                 error_log('Warning: Existing image file not found or not readable: ' . $existing_image_path);
                                 $image_path = null;
                             }
@@ -207,23 +173,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $image_path = null;
                         }
                     }
-                    $existing_stmt->close();
                 } else {
                     // Delete old image if new one is uploaded
-                    $old_stmt = $conn->prepare("SELECT image FROM dishes WHERE id = ?");
-                    $old_stmt->bind_param("i", $dish_id);
-                    $old_stmt->execute();
-                    $old_result = $old_stmt->get_result();
-                    if ($old_row = $old_result->fetch_assoc() && !empty($old_row['image'])) {
+                    $old_row = db_fetch($conn, "SELECT image FROM dishes WHERE id = ?", [$dish_id]);
+                    if ($old_row && !empty($old_row['image'])) {
                         $old_image_path = __DIR__ . '/../' . $old_row['image'];
-                        // Only delete if it's different from the new image
                         if ($old_image_path !== __DIR__ . '/../' . $image_path && file_exists($old_image_path)) {
                             if (!unlink($old_image_path)) {
                                 error_log('Warning: Failed to delete old image file: ' . $old_image_path);
                             }
                         }
                     }
-                    $old_stmt->close();
                     
                     // Verify the new image file exists before saving
                     $new_image_path = __DIR__ . '/../' . $image_path;
@@ -234,56 +194,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Update existing dish
-                if ($category_id === null) {
-                    $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = NULL, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?");
-                    $stmt->bind_param("ssidssi", $name, $description, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id);
-                } else {
-                    $stmt = $conn->prepare("UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?");
-                    $stmt->bind_param("ssiidssi", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id);
-                }
-                $stmt->execute();
-                $stmt->close();
+                db_exec(
+                    $conn,
+                    "UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?",
+                    [$name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id]
+                );
                 
                 // Delete existing dish ingredients
-                $stmt = $conn->prepare("DELETE FROM dish_ingredients WHERE dish_id = ?");
-                $stmt->bind_param("i", $dish_id);
-                $stmt->execute();
-                $stmt->close();
+                db_exec($conn, "DELETE FROM dish_ingredients WHERE dish_id = ?", [$dish_id]);
                 
                 $current_dish_id = $dish_id;
             } else {
                 // Create new dish
-                if ($category_id === null) {
-                    $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image) VALUES (?, ?, NULL, ?, ?, ?, ?)");
-                    $stmt->bind_param("ssidss", $name, $description, $number_of_persons, $base_quantity, $base_unit, $image_path);
-                } else {
-                    $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->bind_param("ssiidss", $name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path);
-                }
-                if (!$stmt->execute()) {
-                    throw new Exception('Failed to insert dish: ' . $stmt->error);
-                }
-                $current_dish_id = $stmt->insert_id;
+                $current_dish_id = db_insert(
+                    $conn,
+                    "INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image)
+                     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                    [$name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path]
+                );
                 if (!$current_dish_id) {
                     throw new Exception('Failed to get dish ID after insert');
                 }
-                $stmt->close();
             }
             
             // Insert dish ingredients
             if (!empty($ingredients) && is_array($ingredients)) {
                 $units = $_POST['units'] ?? [];
-                $ingredient_categories = $_POST['ingredient_categories'] ?? [];
-                $stmt = $conn->prepare("INSERT INTO dish_ingredients (dish_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)");
                 foreach ($ingredients as $index => $ingredient_id) {
                     if (!empty($ingredient_id) && isset($quantities[$index]) && $quantities[$index] > 0) {
                         $quantity = floatval($quantities[$index]);
                         $unit = isset($units[$index]) ? trim($units[$index]) : '';
-                        $stmt->bind_param("iids", $current_dish_id, $ingredient_id, $quantity, $unit);
-                        $stmt->execute();
+                        db_exec(
+                            $conn,
+                            "INSERT INTO dish_ingredients (dish_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
+                            [$current_dish_id, $ingredient_id, $quantity, $unit]
+                        );
                     }
                 }
-                $stmt->close();
             }
             
             // Commit transaction
@@ -302,7 +249,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
         } catch (Exception $e) {
             // Rollback transaction on error
-            $conn->rollback();
+            if ($conn->inTransaction()) {
+                $conn->rollBack();
+            }
             $error = 'Failed to save dish: ' . $e->getMessage();
         }
     }
@@ -311,18 +260,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Handle delete
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
-    $stmt = $conn->prepare("DELETE FROM dishes WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    
-    if ($stmt->execute()) {
+    try {
+        db_exec($conn, "DELETE FROM dishes WHERE id = ?", [$id]);
         $success = 'Dish deleted successfully!';
-        // Redirect to refresh the list
         header('Location: dishes.php?success=1&deleted=1');
         exit();
-    } else {
+    } catch (PDOException $e) {
         $error = 'Failed to delete dish.';
     }
-    $stmt->close();
 }
 
 // Handle success message from redirect
@@ -343,25 +288,19 @@ $edit_dish = null;
 $edit_dish_ingredients = [];
 if (isset($_GET['edit'])) {
     $id = intval($_GET['edit']);
-    $stmt = $conn->prepare("SELECT * FROM dishes WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $edit_dish = $result->fetch_assoc();
-    $stmt->close();
+    $edit_dish = db_fetch($conn, "SELECT * FROM dishes WHERE id = ?", [$id]);
     
     // Get dish ingredients with category information
     if ($edit_dish) {
-        $stmt = $conn->prepare("SELECT di.*, i.category_id, i.name as ingredient_name 
+        $edit_dish_ingredients = db_fetch_all(
+            $conn,
+            "SELECT di.*, i.category_id, i.name as ingredient_name 
             FROM dish_ingredients di 
             LEFT JOIN ingredients i ON di.ingredient_id = i.id 
             WHERE di.dish_id = ?
-            ORDER BY di.id ASC");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $edit_dish_ingredients = $result->fetch_all(MYSQLI_ASSOC);
-        $stmt->close();
+            ORDER BY di.id ASC",
+            [$id]
+        );
         
         // Debug: Log ingredient count
         error_log("Edit dish ID: $id, Ingredients found: " . count($edit_dish_ingredients));
@@ -369,45 +308,38 @@ if (isset($_GET['edit'])) {
 }
 
 // Get all dish categories for dropdown with error handling (only categories used by dishes)
-$categories = [];
-$result = $conn->query("SELECT DISTINCT c.* 
+$categories = db_fetch_all(
+    $conn,
+    "SELECT DISTINCT c.* 
     FROM categories c 
     INNER JOIN dishes d ON d.category_id = c.id 
-    ORDER BY c.name");
-if ($result && $result->num_rows > 0) {
-    $categories = $result->fetch_all(MYSQLI_ASSOC);
-}
+    ORDER BY c.name"
+);
 
 // Pagination settings
 $items_per_page = 12; // Number of dishes per page
 $current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 
 // Get total count of dishes
-$total_dishes = 0;
-$count_result = $conn->query("SELECT COUNT(*) as total FROM dishes");
-if ($count_result && $count_result->num_rows > 0) {
-    $total_dishes = $count_result->fetch_assoc()['total'] ?? 0;
-}
+$total_dishes = (int) (db_fetch($conn, "SELECT COUNT(*) as total FROM dishes")['total'] ?? 0);
 
 // Calculate pagination
 $total_pages = ceil($total_dishes / $items_per_page);
 $offset = ($current_page - 1) * $items_per_page;
 
 // Get paginated dishes with category names and ingredient counts with error handling
-$dishes = [];
 $items_per_page_int = intval($items_per_page);
 $offset_int = intval($offset);
-$result = $conn->query("SELECT d.*, c.name as category_name,
+$dishes = db_fetch_all(
+    $conn,
+    "SELECT d.*, c.name as category_name,
     (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
     ORDER BY d.id DESC, COALESCE(c.name, 'zzz'), d.name
-    LIMIT $items_per_page_int OFFSET $offset_int");
-if ($result && $result->num_rows > 0) {
-    $dishes = $result->fetch_all(MYSQLI_ASSOC);
-}
-
-$conn->close();
+    LIMIT ? OFFSET ?",
+    [$items_per_page_int, $offset_int]
+);
 
 $pageTitle = 'Manage Dishes';
 include __DIR__ . '/../includes/header.php';

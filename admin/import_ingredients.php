@@ -255,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                             $messages[] = "Found " . count($excel_data) . " categories with ingredients.";
                             
                             // Process the imported data
-                            $conn->begin_transaction();
+                            $conn->beginTransaction();
                             
                             try {
                                 foreach ($categories_data as $category_name => $ingredients_list) {
@@ -263,30 +263,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                     $category_name = translateForDatabase($category_name);
                                     
                                     // Check if category exists, if not create it
-                                    $stmt = $conn->prepare("SELECT id FROM categories WHERE name = ?");
-                                    $stmt->bind_param("s", $category_name);
-                                    $stmt->execute();
-                                    $result = $stmt->get_result();
+                                    $category_row = db_fetch($conn, "SELECT id FROM categories WHERE name = ?", [$category_name]);
                                     
-                                    if ($result->num_rows > 0) {
-                                        $category_row = $result->fetch_assoc();
+                                    if ($category_row !== null) {
                                         $category_id = $category_row['id'];
                                         $messages[] = "Category '$category_name' already exists (ID: $category_id)";
                                     } else {
                                         // Create new category
-                                        $stmt->close();
-                                        $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
                                         $description = "Imported from Excel/CSV";
-                                        $stmt->bind_param("ss", $category_name, $description);
-                                        
-                                        if ($stmt->execute()) {
-                                            $category_id = $conn->insert_id;
-                                            $messages[] = "Created category: '$category_name' (ID: $category_id)";
-                                        } else {
-                                            throw new Exception("Failed to create category '$category_name': " . $stmt->error);
+                                        $category_id = db_insert(
+                                            $conn,
+                                            "INSERT INTO categories (name, description) VALUES (?, ?) RETURNING id",
+                                            [$category_name, $description]
+                                        );
+                                        if (!$category_id) {
+                                            throw new Exception("Failed to create category '$category_name'");
                                         }
+                                        $messages[] = "Created category: '$category_name' (ID: $category_id)";
                                     }
-                                    $stmt->close();
                                     
                                     // Add ingredients to this category
                                     $unique_ingredients = array_unique($ingredients_list);
@@ -298,30 +292,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                         $ingredient_name = translateForDatabase($ingredient_name);
                                         
                                         // Check if ingredient already exists
-                                        $stmt = $conn->prepare("SELECT id FROM ingredients WHERE name = ?");
-                                        $stmt->bind_param("s", $ingredient_name);
-                                        $stmt->execute();
-                                        $result = $stmt->get_result();
+                                        $ingredient_row = db_fetch($conn, "SELECT id FROM ingredients WHERE name = ?", [$ingredient_name]);
                                         
-                                        if ($result->num_rows > 0) {
-                                            $ingredient_row = $result->fetch_assoc();
+                                        if ($ingredient_row !== null) {
                                             $existing_id = $ingredient_row['id'];
                                             $messages[] = "  - Ingredient '$ingredient_name' already exists (ID: $existing_id) - skipped";
                                         } else {
                                             // Create new ingredient
-                                            $stmt->close();
-                                            $unit = ''; // Empty unit
-                                            $stmt = $conn->prepare("INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?)");
-                                            $stmt->bind_param("sis", $ingredient_name, $category_id, $unit);
-                                            
-                                            if ($stmt->execute()) {
-                                                $ingredient_id = $conn->insert_id;
+                                            $unit = '';
+                                            try {
+                                                $ingredient_id = db_insert(
+                                                    $conn,
+                                                    "INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?) RETURNING id",
+                                                    [$ingredient_name, $category_id, $unit]
+                                                );
                                                 $messages[] = "  ✓ Added ingredient: '$ingredient_name' to '$category_name' (ID: $ingredient_id)";
-                                            } else {
-                                                $errors[] = "Failed to add ingredient '$ingredient_name': " . $stmt->error;
+                                            } catch (PDOException $e) {
+                                                $errors[] = "Failed to add ingredient '$ingredient_name': " . $e->getMessage();
                                             }
                                         }
-                                        $stmt->close();
                                     }
                                 }
                                 
@@ -329,7 +318,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                 $messages[] = "\n✅ Excel/CSV import completed successfully!";
                                 
                             } catch (Exception $e) {
-                                $conn->rollback();
+                                if ($conn->inTransaction()) {
+                                    $conn->rollBack();
+                                }
                                 $errors[] = "Error importing data: " . $e->getMessage();
                             }
                         }
@@ -351,35 +342,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
 
 // Process categories and ingredients (from hardcoded data)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import']) && !isset($_POST['upload_excel'])) {
-    $conn->begin_transaction();
+    $conn->beginTransaction();
     
     try {
         foreach ($categories_data as $category_name => $ingredients_list) {
             // Check if category exists, if not create it
-            $stmt = $conn->prepare("SELECT id FROM categories WHERE name = ?");
-            $stmt->bind_param("s", $category_name);
-            $stmt->execute();
-            $result = $stmt->get_result();
+            $category_row = db_fetch($conn, "SELECT id FROM categories WHERE name = ?", [$category_name]);
             
-            if ($result->num_rows > 0) {
-                $category_row = $result->fetch_assoc();
+            if ($category_row !== null) {
                 $category_id = $category_row['id'];
                 $messages[] = "Category '$category_name' already exists (ID: $category_id)";
             } else {
                 // Create new category
-                $stmt->close();
-                $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
                 $description = "Category for " . strtolower($category_name);
-                $stmt->bind_param("ss", $category_name, $description);
-                
-                if ($stmt->execute()) {
-                    $category_id = $conn->insert_id;
-                    $messages[] = "Created category: '$category_name' (ID: $category_id)";
-                } else {
-                    throw new Exception("Failed to create category '$category_name': " . $stmt->error);
+                $category_id = db_insert(
+                    $conn,
+                    "INSERT INTO categories (name, description) VALUES (?, ?) RETURNING id",
+                    [$category_name, $description]
+                );
+                if (!$category_id) {
+                    throw new Exception("Failed to create category '$category_name'");
                 }
+                $messages[] = "Created category: '$category_name' (ID: $category_id)";
             }
-            $stmt->close();
             
             // Add ingredients to this category (remove duplicates)
             $unique_ingredients = array_unique($ingredients_list);
@@ -388,30 +373,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import']) && !isset($
                 if (empty($ingredient_name)) continue;
                 
                 // Check if ingredient already exists (by name only, not category)
-                $stmt = $conn->prepare("SELECT id FROM ingredients WHERE name = ?");
-                $stmt->bind_param("s", $ingredient_name);
-                $stmt->execute();
-                $result = $stmt->get_result();
+                $ingredient_row = db_fetch($conn, "SELECT id FROM ingredients WHERE name = ?", [$ingredient_name]);
                 
-                if ($result->num_rows > 0) {
-                    $ingredient_row = $result->fetch_assoc();
+                if ($ingredient_row !== null) {
                     $existing_id = $ingredient_row['id'];
                     $messages[] = "  - Ingredient '$ingredient_name' already exists (ID: $existing_id) - skipped";
                 } else {
                     // Create new ingredient
-                    $stmt->close();
-                    $unit = ''; // Empty unit as per system design
-                    $stmt = $conn->prepare("INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?)");
-                    $stmt->bind_param("sis", $ingredient_name, $category_id, $unit);
-                    
-                    if ($stmt->execute()) {
-                        $ingredient_id = $conn->insert_id;
+                    $unit = '';
+                    try {
+                        $ingredient_id = db_insert(
+                            $conn,
+                            "INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?) RETURNING id",
+                            [$ingredient_name, $category_id, $unit]
+                        );
                         $messages[] = "  ✓ Added ingredient: '$ingredient_name' to '$category_name' (ID: $ingredient_id)";
-                    } else {
-                        $errors[] = "Failed to add ingredient '$ingredient_name': " . $stmt->error;
+                    } catch (PDOException $e) {
+                        $errors[] = "Failed to add ingredient '$ingredient_name': " . $e->getMessage();
                     }
                 }
-                $stmt->close();
             }
         }
         
@@ -419,7 +399,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import']) && !isset($
         $messages[] = "\n✅ Import completed successfully!";
         
     } catch (Exception $e) {
-        $conn->rollback();
+        if ($conn->inTransaction()) {
+            $conn->rollBack();
+        }
         $errors[] = "Error: " . $e->getMessage();
     }
 }

@@ -453,7 +453,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                          count($excel_data['dish_ingredients']) . " dish ingredients.";
                             
                             // Start transaction
-                            $conn->begin_transaction();
+                            $conn->beginTransaction();
                             
                             try {
                                 // Step 1: Import Categories
@@ -464,24 +464,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                     
                                     if (empty($cat_name)) continue;
                                     
-                                    $stmt = $conn->prepare("SELECT id FROM categories WHERE name = ?");
-                                    $stmt->bind_param("s", $cat_name);
-                                    $stmt->execute();
-                                    $result = $stmt->get_result();
+                                    $existing = db_fetch($conn, "SELECT id FROM categories WHERE name = ?", [$cat_name]);
                                     
-                                    if ($result->num_rows > 0) {
-                                        $category_map[$cat['name']] = $result->fetch_assoc()['id'];
+                                    if ($existing !== null) {
+                                        $category_map[$cat['name']] = $existing['id'];
                                         $import_stats['categories']['skipped']++;
                                     } else {
-                                        $stmt->close();
-                                        $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
-                                        $stmt->bind_param("ss", $cat_name, $cat_desc);
-                                        if ($stmt->execute()) {
-                                            $category_map[$cat['name']] = $conn->insert_id;
-                                            $import_stats['categories']['created']++;
-                                        }
+                                        $category_map[$cat['name']] = db_insert(
+                                            $conn,
+                                            "INSERT INTO categories (name, description) VALUES (?, ?) RETURNING id",
+                                            [$cat_name, $cat_desc]
+                                        );
+                                        $import_stats['categories']['created']++;
                                     }
-                                    $stmt->close();
                                 }
                                 
                                 // Step 2: Import Ingredients (requires categories)
@@ -495,47 +490,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                     
                                     // Get or create category
                                     if (!isset($category_map[$ing['category_name']])) {
-                                        $stmt = $conn->prepare("SELECT id FROM categories WHERE name = ?");
-                                        $stmt->bind_param("s", $cat_name);
-                                        $stmt->execute();
-                                        $result = $stmt->get_result();
-                                        if ($result->num_rows > 0) {
-                                            $category_map[$ing['category_name']] = $result->fetch_assoc()['id'];
+                                        $existing = db_fetch($conn, "SELECT id FROM categories WHERE name = ?", [$cat_name]);
+                                        if ($existing !== null) {
+                                            $category_map[$ing['category_name']] = $existing['id'];
                                         } else {
                                             // Create category if it doesn't exist
-                                            $stmt->close();
-                                            $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
                                             $desc = "Auto-created from import";
-                                            $stmt->bind_param("ss", $cat_name, $desc);
-                                            if ($stmt->execute()) {
-                                                $category_map[$ing['category_name']] = $conn->insert_id;
-                                                $import_stats['categories']['created']++;
-                                            }
+                                            $category_map[$ing['category_name']] = db_insert(
+                                                $conn,
+                                                "INSERT INTO categories (name, description) VALUES (?, ?) RETURNING id",
+                                                [$cat_name, $desc]
+                                            );
+                                            $import_stats['categories']['created']++;
                                         }
-                                        $stmt->close();
                                     }
                                     
                                     $category_id = $category_map[$ing['category_name']];
                                     
                                     // Check if ingredient exists
-                                    $stmt = $conn->prepare("SELECT id FROM ingredients WHERE name = ?");
-                                    $stmt->bind_param("s", $ing_name);
-                                    $stmt->execute();
-                                    $result = $stmt->get_result();
+                                    $existing = db_fetch($conn, "SELECT id FROM ingredients WHERE name = ?", [$ing_name]);
                                     
-                                    if ($result->num_rows > 0) {
-                                        $ingredient_map[$ing['name']] = $result->fetch_assoc()['id'];
+                                    if ($existing !== null) {
+                                        $ingredient_map[$ing['name']] = $existing['id'];
                                         $import_stats['ingredients']['skipped']++;
                                     } else {
-                                        $stmt->close();
-                                        $stmt = $conn->prepare("INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?)");
-                                        $stmt->bind_param("sis", $ing_name, $category_id, $unit);
-                                        if ($stmt->execute()) {
-                                            $ingredient_map[$ing['name']] = $conn->insert_id;
-                                            $import_stats['ingredients']['created']++;
-                                        }
+                                        $ingredient_map[$ing['name']] = db_insert(
+                                            $conn,
+                                            "INSERT INTO ingredients (name, category_id, unit) VALUES (?, ?, ?) RETURNING id",
+                                            [$ing_name, $category_id, $unit]
+                                        );
+                                        $import_stats['ingredients']['created']++;
                                     }
-                                    $stmt->close();
                                 }
                                 
                                 // Step 3: Import Dishes (requires categories)
@@ -552,54 +537,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                     
                                     // Get or create category
                                     if (!isset($category_map[$dish['category_name']])) {
-                                        $stmt = $conn->prepare("SELECT id FROM categories WHERE name = ?");
-                                        $stmt->bind_param("s", $cat_name);
-                                        $stmt->execute();
-                                        $result = $stmt->get_result();
-                                        if ($result->num_rows > 0) {
-                                            $category_map[$dish['category_name']] = $result->fetch_assoc()['id'];
+                                        $existing = db_fetch($conn, "SELECT id FROM categories WHERE name = ?", [$cat_name]);
+                                        if ($existing !== null) {
+                                            $category_map[$dish['category_name']] = $existing['id'];
                                         } else {
-                                            $stmt->close();
-                                            $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
                                             $desc = "Auto-created from import";
-                                            $stmt->bind_param("ss", $cat_name, $desc);
-                                            if ($stmt->execute()) {
-                                                $category_map[$dish['category_name']] = $conn->insert_id;
-                                                $import_stats['categories']['created']++;
-                                            }
+                                            $category_map[$dish['category_name']] = db_insert(
+                                                $conn,
+                                                "INSERT INTO categories (name, description) VALUES (?, ?) RETURNING id",
+                                                [$cat_name, $desc]
+                                            );
+                                            $import_stats['categories']['created']++;
                                         }
-                                        $stmt->close();
                                     }
                                     
                                     $category_id = $category_map[$dish['category_name']];
                                     
                                     // Check if dish exists
-                                    $stmt = $conn->prepare("SELECT id FROM dishes WHERE name = ?");
-                                    $stmt->bind_param("s", $dish_name);
-                                    $stmt->execute();
-                                    $result = $stmt->get_result();
+                                    $existing = db_fetch($conn, "SELECT id FROM dishes WHERE name = ?", [$dish_name]);
                                     
-                                    if ($result->num_rows > 0) {
-                                        $dish_map[$dish['name']] = $result->fetch_assoc()['id'];
+                                    if ($existing !== null) {
+                                        $dish_map[$dish['name']] = $existing['id'];
                                         $import_stats['dishes']['skipped']++;
                                     } else {
-                                        $stmt->close();
-                                        // Check if columns exist
-                                        $check_cols = $conn->query("SHOW COLUMNS FROM dishes LIKE 'number_of_persons'");
-                                        if ($check_cols->num_rows == 0) {
-                                            $conn->query("ALTER TABLE dishes ADD COLUMN number_of_persons INT DEFAULT 1");
-                                            $conn->query("ALTER TABLE dishes ADD COLUMN base_quantity DECIMAL(10,2) DEFAULT 1.00");
-                                            $conn->query("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving'");
+                                        if (!db_column_exists($conn, 'dishes', 'number_of_persons')) {
+                                            $conn->exec("ALTER TABLE dishes ADD COLUMN number_of_persons INT DEFAULT 1");
+                                            $conn->exec("ALTER TABLE dishes ADD COLUMN base_quantity DECIMAL(10,2) DEFAULT 1.00");
+                                            $conn->exec("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving'");
                                         }
                                         
-                                        $stmt = $conn->prepare("INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit) VALUES (?, ?, ?, ?, ?, ?)");
-                                        $stmt->bind_param("ssiids", $dish_name, $dish_desc, $category_id, $persons, $base_qty, $base_unit);
-                                        if ($stmt->execute()) {
-                                            $dish_map[$dish['name']] = $conn->insert_id;
-                                            $import_stats['dishes']['created']++;
-                                        }
+                                        $dish_map[$dish['name']] = db_insert(
+                                            $conn,
+                                            "INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                                            [$dish_name, $dish_desc, $category_id, $persons, $base_qty, $base_unit]
+                                        );
+                                        $import_stats['dishes']['created']++;
                                     }
-                                    $stmt->close();
                                 }
                                 
                                 // Step 4: Import Dish Ingredients (requires dishes and ingredients)
@@ -613,61 +586,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_excel']) && is
                                     
                                     // Get dish ID
                                     if (!isset($dish_map[$dish_ing['dish_name']])) {
-                                        $stmt = $conn->prepare("SELECT id FROM dishes WHERE name = ?");
-                                        $stmt->bind_param("s", $dish_name);
-                                        $stmt->execute();
-                                        $result = $stmt->get_result();
-                                        if ($result->num_rows > 0) {
-                                            $dish_map[$dish_ing['dish_name']] = $result->fetch_assoc()['id'];
+                                        $existing = db_fetch($conn, "SELECT id FROM dishes WHERE name = ?", [$dish_name]);
+                                        if ($existing !== null) {
+                                            $dish_map[$dish_ing['dish_name']] = $existing['id'];
                                         } else {
-                                            $stmt->close();
                                             continue; // Skip if dish doesn't exist
                                         }
-                                        $stmt->close();
                                     }
                                     
                                     // Get ingredient ID
                                     if (!isset($ingredient_map[$dish_ing['ingredient_name']])) {
-                                        $stmt = $conn->prepare("SELECT id FROM ingredients WHERE name = ?");
-                                        $stmt->bind_param("s", $ing_name);
-                                        $stmt->execute();
-                                        $result = $stmt->get_result();
-                                        if ($result->num_rows > 0) {
-                                            $ingredient_map[$dish_ing['ingredient_name']] = $result->fetch_assoc()['id'];
+                                        $existing = db_fetch($conn, "SELECT id FROM ingredients WHERE name = ?", [$ing_name]);
+                                        if ($existing !== null) {
+                                            $ingredient_map[$dish_ing['ingredient_name']] = $existing['id'];
                                         } else {
-                                            $stmt->close();
                                             continue; // Skip if ingredient doesn't exist
                                         }
-                                        $stmt->close();
                                     }
                                     
                                     $dish_id = $dish_map[$dish_ing['dish_name']];
                                     $ingredient_id = $ingredient_map[$dish_ing['ingredient_name']];
                                     
                                     // Check if dish_ingredient already exists
-                                    $stmt = $conn->prepare("SELECT id FROM dish_ingredients WHERE dish_id = ? AND ingredient_id = ?");
-                                    $stmt->bind_param("ii", $dish_id, $ingredient_id);
-                                    $stmt->execute();
-                                    $result = $stmt->get_result();
+                                    $existing = db_fetch(
+                                        $conn,
+                                        "SELECT id FROM dish_ingredients WHERE dish_id = ? AND ingredient_id = ?",
+                                        [$dish_id, $ingredient_id]
+                                    );
                                     
-                                    if ($result->num_rows > 0) {
+                                    if ($existing !== null) {
                                         $import_stats['dish_ingredients']['skipped']++;
                                     } else {
-                                        $stmt->close();
-                                        $stmt = $conn->prepare("INSERT INTO dish_ingredients (dish_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)");
-                                        $stmt->bind_param("iids", $dish_id, $ingredient_id, $quantity, $unit);
-                                        if ($stmt->execute()) {
-                                            $import_stats['dish_ingredients']['created']++;
-                                        }
+                                        db_exec(
+                                            $conn,
+                                            "INSERT INTO dish_ingredients (dish_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
+                                            [$dish_id, $ingredient_id, $quantity, $unit]
+                                        );
+                                        $import_stats['dish_ingredients']['created']++;
                                     }
-                                    $stmt->close();
                                 }
                                 
                                 $conn->commit();
                                 $messages[] = "✅ Import completed successfully!";
                                 
                             } catch (Exception $e) {
-                                $conn->rollback();
+                                if ($conn->inTransaction()) {
+                                    $conn->rollBack();
+                                }
                                 $errors[] = "Error importing data: " . $e->getMessage();
                             }
                         }
