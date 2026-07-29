@@ -354,45 +354,87 @@ include __DIR__ . '/../includes/header.php';
     </div>
 
     <!-- Compulsory Items -->
+    <?php
+    $additional_items = [];
+    $extra_raw = $first_order['extra_ingredients'] ?? '';
+    if (!empty($extra_raw)) {
+        $decoded_extra = is_array($extra_raw) ? $extra_raw : json_decode($extra_raw, true);
+        if (is_array($decoded_extra) && !empty($decoded_extra['additional_items']) && is_array($decoded_extra['additional_items'])) {
+            $additional_items = $decoded_extra['additional_items'];
+        }
+    }
+    $tent_preview = [
+        'shamiana' => ['شامیانہ', 'عدد'],
+        'qanat' => ['قنات', 'عدد'],
+        'dari' => ['دری', 'عدد'],
+        'charpai' => ['چارپائی', 'عدد'],
+    ];
+    $izafi_preview = [
+        'cloth_malmal' => ['کپڑا ململ', 'عدد'],
+        'match_box' => ['ماچس', 'عدد'],
+        'surrf' => ['سرف', 'کلو'],
+        'wood' => ['لکڑی', 'کلو'],
+        'sobi_iron' => ['صوبی (لوہے والی)', 'عدد'],
+        'sponjis_iron' => ['اسپنجز (آئرن)', 'عدد'],
+        'steam_pot_with_lid' => ['سٹیم پتیلہ جال ڈھکن', 'عدد'],
+        'deg' => ['دیگ', 'عدد'],
+        'karahi' => ['کڑاہی', 'عدد'],
+        'chulhe' => ['چولہے', 'عدد'],
+        'parat' => ['پرات', 'عدد'],
+        'tub' => ['ٹب', 'عدد'],
+        'coal' => ['کوئلہ', 'کلو'],
+        'steam_pot_without_lid' => ['سٹیم پتیلہ بغیر ڈھکن', 'عدد'],
+    ];
+    $has_tent = false;
+    $has_izafi = false;
+    foreach ($tent_preview as $k => $_) {
+        if (intval($additional_items[$k] ?? 0) > 0) { $has_tent = true; break; }
+    }
+    foreach ($izafi_preview as $k => $_) {
+        if (intval($additional_items[$k] ?? 0) > 0) { $has_izafi = true; break; }
+    }
+    ?>
+    <?php if ($has_tent || $has_izafi): ?>
     <div class="preview-card">
         <div class="preview-header">
             <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2"></i>Compulsory Items</h5>
         </div>
         <div class="card-body p-4">
-            <div class="row g-3">
-                <div class="col-md-3 col-sm-6">
-                    <div class="text-center p-3 border rounded">
-                        <div class="fw-bold text-muted mb-2">Cloth Malmal</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['cloth_malmal_quantity'] ?? 0); ?></div>
+            <?php if ($has_tent): ?>
+                <h6 class="fw-bold text-warning mb-3"><i class="bi bi-house me-1"></i>(a) ٹینٹ کا سامان</h6>
+                <div class="row g-3 mb-4">
+                    <?php foreach ($tent_preview as $key => [$label, $unit]):
+                        $qty = intval($additional_items[$key] ?? 0);
+                        if ($qty <= 0) continue;
+                    ?>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="text-center p-3 border rounded" style="background:#fff7ed;">
+                            <div class="fw-bold text-muted mb-2"><?php echo htmlspecialchars($label); ?></div>
+                            <div class="h4 mb-0"><?php echo $qty; ?> <small class="text-muted"><?php echo $unit; ?></small></div>
+                        </div>
                     </div>
+                    <?php endforeach; ?>
                 </div>
-                <div class="col-md-3 col-sm-6">
-                    <div class="text-center p-3 border rounded">
-                        <div class="fw-bold text-muted mb-2">ماچس</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['match_box_quantity'] ?? 0); ?></div>
+            <?php endif; ?>
+            <?php if ($has_izafi): ?>
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-box2 me-1"></i>(b) اضافی سامان</h6>
+                <div class="row g-3">
+                    <?php foreach ($izafi_preview as $key => [$label, $unit]):
+                        $qty = intval($additional_items[$key] ?? 0);
+                        if ($qty <= 0) continue;
+                    ?>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="text-center p-3 border rounded" style="background:#eff6ff;">
+                            <div class="fw-bold text-muted mb-2"><?php echo htmlspecialchars($label); ?></div>
+                            <div class="h4 mb-0"><?php echo $qty; ?> <small class="text-muted"><?php echo $unit; ?></small></div>
+                        </div>
                     </div>
+                    <?php endforeach; ?>
                 </div>
-                <div class="col-md-3 col-sm-6">
-                    <div class="text-center p-3 border rounded">
-                        <div class="fw-bold text-muted mb-2">سرف (Surrf)</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['surrf_quantity'] ?? 0); ?> <small class="text-muted">گرام</small></div>
-                    </div>
-                </div>
-                <div class="col-md-3 col-sm-6">
-                    <div class="text-center p-3 border rounded">
-                        <div class="fw-bold text-muted mb-2">Sponjis (Iron)</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['sponjis_quantity'] ?? 0); ?></div>
-                    </div>
-                </div>
-                <div class="col-md-3 col-sm-6">
-                    <div class="text-center p-3 border rounded">
-                        <div class="fw-bold text-muted mb-2">لکڑی (Wood)</div>
-                        <div class="h4 mb-0"><?php echo htmlspecialchars($first_order['wood_quantity'] ?? 0); ?> <small class="text-muted">کلو</small></div>
-                    </div>
-                </div>
-            </div>
+            <?php endif; ?>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- Ingredients List by Category -->
     <div class="preview-card">
