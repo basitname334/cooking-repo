@@ -1203,6 +1203,105 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     display: none !important;
 }
 
+/* ADD / LESS ingredients modal — clean spaced rows */
+.ingredient-adjust-modal-content {
+    border-radius: 16px;
+    overflow: hidden;
+    border: none;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+.ingredient-adjust-modal-header {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    border: none;
+    flex-shrink: 0;
+}
+.ingredient-adjust-modal-body {
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+    overflow: hidden;
+}
+.ingredient-adjust-search-wrap {
+    flex-shrink: 0;
+}
+.ingredient-adjust-list {
+    flex: 1 1 auto;
+    min-height: 280px;
+    max-height: min(55vh, 480px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.35rem 0.15rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    -webkit-overflow-scrolling: touch;
+}
+.ingredient-adjust-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    margin: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    flex-shrink: 0;
+}
+.ingredient-adjust-row:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+.ingredient-adjust-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.ingredient-adjust-row-name {
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.45;
+    word-break: break-word;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+.ingredient-adjust-row-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+.ingredient-adjust-row-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+.ingredient-adjust-row-controls .btn {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.ing-modal-qty {
+    min-width: 3rem;
+    text-align: center;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #0f172a;
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -2131,16 +2230,16 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
 
 <!-- ADD / LESS Ingredients Modal -->
 <div class="modal fade" id="ingredientAdjustModal" tabindex="-1" aria-labelledby="ingredientAdjustModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content" style="border-radius: 16px; overflow: hidden;">
-            <div class="modal-header" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); border: none;">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content ingredient-adjust-modal-content">
+            <div class="modal-header ingredient-adjust-modal-header">
                 <h5 class="modal-title text-white fw-bold" id="ingredientAdjustModalLabel">
                     <i class="bi bi-plus-slash-minus me-2"></i>ADD / LESS Ingredients
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-3 p-md-4">
-                <div class="mb-3">
+            <div class="modal-body ingredient-adjust-modal-body">
+                <div class="ingredient-adjust-search-wrap">
                     <div class="input-group">
                         <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
                         <input type="text" class="form-control" id="ingredientAdjustSearch"
@@ -2149,14 +2248,14 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
-                    <small class="text-muted">Scroll karein ya search karein. + qty badhayega, − kam karega.</small>
+                    <small class="text-muted d-block mt-2">Scroll karein ya search karein. + qty badhayega, − kam karega.</small>
                 </div>
-                <div id="ingredientAdjustList" class="list-group" style="max-height: 55vh; overflow-y: auto;">
+                <div id="ingredientAdjustList" class="ingredient-adjust-list">
                     <!-- Filled by JS -->
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">
                     <i class="bi bi-check-lg me-1"></i> Done
                 </button>
             </div>
@@ -2762,7 +2861,7 @@ function renderIngredientAdjustModalList(filterTerm) {
 
     listEl.innerHTML = '';
     if (filtered.length === 0) {
-        listEl.innerHTML = '<div class="text-muted small p-3 text-center">Koi ingredient nahi mila.</div>';
+        listEl.innerHTML = '<div class="text-muted small text-center py-4 px-2">Koi ingredient nahi mila.</div>';
         return;
     }
 
@@ -2783,22 +2882,24 @@ function renderIngredientAdjustModalList(filterTerm) {
         const qty = getEffectiveIngredientQty(id);
         const unit = ing.unit || (defaults[id] && defaults[id].unit) || '';
         const row = document.createElement('div');
-        row.className = 'list-group-item d-flex align-items-center justify-content-between gap-2 flex-wrap';
+        row.className = 'ingredient-adjust-row';
         row.setAttribute('data-ing-id', id);
         const badge = inDish
-            ? '<span class="badge bg-primary-subtle text-primary ms-1">Dish</span>'
-            : (qty > 0 ? '<span class="badge bg-success-subtle text-success ms-1">Extra</span>' : '');
+            ? '<span class="badge text-bg-primary">Dish</span>'
+            : (qty > 0 ? '<span class="badge text-bg-success">Extra</span>' : '');
         row.innerHTML =
-            '<div class="flex-grow-1 min-w-0">' +
-            '<div class="fw-semibold text-truncate">' + String(ing.name || '').replace(/</g, '&lt;') + badge + '</div>' +
-            '<small class="text-muted">' + (unit ? String(unit).replace(/</g, '&lt;') : '') +
-            (inDish ? ' · default ' + (Math.round((defaults[id].quantity || 0) * 100) / 100) : '') +
-            '</small></div>' +
-            '<div class="d-flex align-items-center gap-1">' +
-            '<button type="button" class="btn btn-sm btn-outline-danger ing-modal-minus" title="Less">−</button>' +
-            '<span class="ing-modal-qty px-2 fw-bold" style="min-width:3.5rem;text-align:center;">' +
-            (Math.round(qty * 100) / 100) + '</span>' +
-            '<button type="button" class="btn btn-sm btn-outline-success ing-modal-plus" title="Add">+</button>' +
+            '<div class="ingredient-adjust-row-main">' +
+            '<div class="ingredient-adjust-row-name">' +
+            '<span>' + String(ing.name || '').replace(/</g, '&lt;') + '</span>' + badge +
+            '</div>' +
+            '<span class="ingredient-adjust-row-meta">' +
+            (unit ? String(unit).replace(/</g, '&lt;') : '') +
+            (inDish ? (unit ? ' · ' : '') + 'default ' + (Math.round((defaults[id].quantity || 0) * 100) / 100) : '') +
+            '</span></div>' +
+            '<div class="ingredient-adjust-row-controls">' +
+            '<button type="button" class="btn btn-outline-danger ing-modal-minus" title="Less" aria-label="Less">−</button>' +
+            '<span class="ing-modal-qty">' + (Math.round(qty * 100) / 100) + '</span>' +
+            '<button type="button" class="btn btn-outline-success ing-modal-plus" title="Add" aria-label="Add">+</button>' +
             '</div>';
         frag.appendChild(row);
     });
@@ -4435,19 +4536,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (qtyEl && typeof getEffectiveIngredientQty === 'function') {
                 qtyEl.textContent = String(Math.round(getEffectiveIngredientQty(id) * 100) / 100);
             }
-            // Refresh badge (Dish / Extra) without full re-render to keep scroll position
-            const badgeHost = row.querySelector('.fw-semibold');
-            if (badgeHost && master) {
+            const nameHost = row.querySelector('.ingredient-adjust-row-name');
+            if (nameHost && master) {
                 const defaults = typeof getAggregatedDishIngredientDefaults === 'function'
                     ? getAggregatedDishIngredientDefaults()
                     : {};
                 const inDish = !!defaults[String(id)];
-                const qty = typeof getEffectiveIngredientQty === 'function' ? getEffectiveIngredientQty(id) : 0;
+                const qtyNow = typeof getEffectiveIngredientQty === 'function' ? getEffectiveIngredientQty(id) : 0;
                 const name = String(master.name || '').replace(/</g, '&lt;');
                 const badge = inDish
-                    ? '<span class="badge bg-primary-subtle text-primary ms-1">Dish</span>'
-                    : (qty > 0 ? '<span class="badge bg-success-subtle text-success ms-1">Extra</span>' : '');
-                badgeHost.innerHTML = name + badge;
+                    ? '<span class="badge text-bg-primary">Dish</span>'
+                    : (qtyNow > 0 ? '<span class="badge text-bg-success">Extra</span>' : '');
+                nameHost.innerHTML = '<span>' + name + '</span>' + badge;
             }
         });
     }
