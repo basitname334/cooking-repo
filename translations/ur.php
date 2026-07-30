@@ -231,12 +231,12 @@ return [
     'create_new_order' => 'گاہک کے لیے نیا آرڈر بنائیں',
     'confirm_delete_order' => 'کیا آپ واقعی اس آرڈر کو حذف کرنا چاہتے ہیں؟',
     'extra_ingredients' => 'اضافی اجزاء',
-    'additional_items' => 'اضافی اشیاء',
+    'additional_items' => 'اضافی سامان',
     'cloth_malmal' => 'کپڑا ململ',
-    'match_box' => 'میچ باکس',
+    'match_box' => 'ماچس',
     'surrf' => 'سرف',
     'sponjis_iron' => 'اسپنجز (آئرن)',
-    'pieces' => 'ٹکڑے'
+    'pieces' => 'عدد'
 ];
 
 ?>

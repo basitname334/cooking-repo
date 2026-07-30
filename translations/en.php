@@ -231,10 +231,10 @@ return [
     'create_new_order' => 'Create a new order for a customer',
     'confirm_delete_order' => 'Are you sure you want to delete this order?',
     'extra_ingredients' => 'Extra Ingredients',
-    'additional_items' => 'Additional Items',
+    'additional_items' => 'Extra Items',
     'cloth_malmal' => 'Cloth Malmal',
-    'match_box' => 'Match Box',
-    'surrf' => 'Surrf',
+    'match_box' => 'Matches',
+    'surrf' => 'Surf',
     'sponjis_iron' => 'Sponjis (Iron)',
     'pieces' => 'pieces'
 ];

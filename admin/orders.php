@@ -1106,6 +1106,64 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     min-width: 150px;
 }
 
+/* Step 3: اضافی سامان / ٹینٹ کا سامان tables */
+.saman-tables-wrap {
+    direction: rtl;
+}
+.saman-table-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    height: 100%;
+}
+.saman-table-card table {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+}
+.saman-table-card thead th {
+    color: #fff;
+    text-align: center;
+    font-weight: 700;
+    padding: 0.75rem 0.5rem;
+    border: none;
+    font-size: 1rem;
+}
+.saman-table-card.izafi thead th {
+    background: #1e3a8a;
+}
+.saman-table-card.tent thead th {
+    background: #166534;
+}
+.saman-table-card tbody td {
+    border: 1px solid #cbd5e1;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.95rem;
+}
+.saman-table-card tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+.saman-table-card .saman-qty-input {
+    width: 100%;
+    max-width: 110px;
+    margin: 0 auto;
+    text-align: center;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    padding: 0.35rem 0.4rem;
+}
+.saman-table-card .saman-item-name {
+    font-weight: 600;
+    color: #0f172a;
+}
+.saman-table-card .saman-unit {
+    color: #334155;
+    white-space: nowrap;
+}
+
 .dish-modal-card {
     transition: all 0.3s ease;
 }
@@ -1641,184 +1699,103 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                         </div>
                     </div>
                     
-                    <!-- Step 3: Compulsory Items -->
+                    <!-- Step 3: Compulsory Items (اضافی سامان + ٹینٹ کا سامان) -->
                     <div class="order-step" id="step3" data-step="3" style="display: none;">
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-box-seam me-2 text-primary"></i>
                                 مرحلہ 3: لازمی اشیاء
                             </h4>
-                            <p class="text-muted">آرڈر کے لیے ضروری اضافی اشیاء شامل کریں۔</p>
+                            <p class="text-muted">آرڈر کے لیے اضافی سامان اور ٹینٹ کا سامان شامل کریں۔</p>
                         </div>
-                        
-                        <!-- Additional Items Section -->
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    کپڑا ململ
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[cloth_malmal]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
+
+                        <?php
+                        $izafi_saman_items = [
+                            ['key' => 'cloth_malmal', 'label' => 'کپڑا ململ', 'unit' => 'عدد'],
+                            ['key' => 'match_box', 'label' => 'ماچس', 'unit' => 'عدد'],
+                            ['key' => 'surrf', 'label' => 'سرف', 'unit' => 'گرام'],
+                            ['key' => 'wood', 'label' => 'لکڑی', 'unit' => 'کلوگرام'],
+                            ['key' => 'coal', 'label' => 'کوئلہ', 'unit' => 'کلوگرام'],
+                            ['key' => 'sobi_iron', 'label' => 'صوبی (لوہے والی)', 'unit' => 'عدد'],
+                        ];
+                        $tent_saman_items = [
+                            ['key' => 'shamiana', 'label' => 'شامیانہ', 'unit' => 'عدد'],
+                            ['key' => 'qanat', 'label' => 'قنات', 'unit' => 'عدد'],
+                            ['key' => 'dari', 'label' => 'دری', 'unit' => 'عدد'],
+                            ['key' => 'charpai', 'label' => 'چارپائی', 'unit' => 'عدد'],
+                            ['key' => 'steam_pot_with_lid', 'label' => 'سٹیم پتیلہ جال ڈھکن سمیت', 'unit' => 'عدد'],
+                            ['key' => 'steam_pot_without_lid', 'label' => 'سٹیم پتیلہ بغیر ڈھکن', 'unit' => 'عدد'],
+                            ['key' => 'deg', 'label' => 'دیگ', 'unit' => 'عدد'],
+                            ['key' => 'karahi', 'label' => 'کڑاہی', 'unit' => 'عدد'],
+                            ['key' => 'chulhe', 'label' => 'چولہے', 'unit' => 'عدد'],
+                            ['key' => 'parat', 'label' => 'پرات', 'unit' => 'عدد'],
+                            ['key' => 'tub', 'label' => 'ٹب', 'unit' => 'عدد'],
+                        ];
+                        ?>
+
+                        <div class="row g-4 saman-tables-wrap">
+                            <div class="col-lg-6">
+                                <div class="saman-table-card izafi">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th colspan="3">اضافی سامان</th>
+                                            </tr>
+                                            <tr style="background: #1e40af;">
+                                                <th style="width: 42%;">آئٹم کا نام</th>
+                                                <th style="width: 28%;">مقدار</th>
+                                                <th style="width: 30%;">یونٹ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($izafi_saman_items as $item): ?>
+                                                <tr>
+                                                    <td class="saman-item-name"><?php echo htmlspecialchars($item['label']); ?></td>
+                                                    <td>
+                                                        <input type="number"
+                                                               class="form-control form-control-sm saman-qty-input additional-item"
+                                                               name="additional_items[<?php echo htmlspecialchars($item['key']); ?>]"
+                                                               value="0" min="0" step="1" placeholder="0">
+                                                    </td>
+                                                    <td class="saman-unit"><?php echo htmlspecialchars($item['unit']); ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    ماچس
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[match_box]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
+                            <div class="col-lg-6">
+                                <div class="saman-table-card tent">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th colspan="3">ٹینٹ کا سامان</th>
+                                            </tr>
+                                            <tr style="background: #15803d;">
+                                                <th style="width: 42%;">آئٹم کا نام</th>
+                                                <th style="width: 28%;">مقدار</th>
+                                                <th style="width: 30%;">یونٹ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($tent_saman_items as $item): ?>
+                                                <tr>
+                                                    <td class="saman-item-name"><?php echo htmlspecialchars($item['label']); ?></td>
+                                                    <td>
+                                                        <input type="number"
+                                                               class="form-control form-control-sm saman-qty-input additional-item"
+                                                               name="additional_items[<?php echo htmlspecialchars($item['key']); ?>]"
+                                                               value="0" min="0" step="1" placeholder="0">
+                                                    </td>
+                                                    <td class="saman-unit"><?php echo htmlspecialchars($item['unit']); ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
                                 </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    سرف
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[surrf]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">گرام</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    لکڑی
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[wood]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">کلو</span>
-                                </div>
-                            </div>
-                          
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    صوبی(لوہے والی )
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[sobi_iron]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    سٹیم پتیلہ جال ڈھکن
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[steam_pot_with_lid]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    دیگ
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[deg]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    کڑاہی
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[karahi]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    چولہے
-                                </label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control additional-item" 
-                                           name="additional_items[chulhe]" 
-                                           placeholder="0" step="1" min="0" value="0">
-                                    <span class="input-group-text">عدد</span>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    پرات
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[parat]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    ٹب
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[tub]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    شامیانہ
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[shamiana]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    قنات
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[qanat]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    دری
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[dari]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    چارپائی
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[charpai]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    کوئلہ
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[coal]" 
-                                       placeholder="0" step="1" min="0" value="0">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    سٹیم پتیلہ بغیر ڈھکن
-                                </label>
-                                <input type="number" class="form-control additional-item" 
-                                       name="additional_items[steam_pot_without_lid]" 
-                                       placeholder="0" step="1" min="0" value="0">
                             </div>
                         </div>
-                        
+
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-secondary btn-lg" onclick="previousStep(2)">
                                 <i class="bi bi-arrow-left me-2"></i> Previous
@@ -3389,8 +3366,8 @@ function updateReview() {
                     'surrf': reviewTranslations.surrf || 'سرف',
                     'wood': reviewTranslations.wood || 'لکڑی',
                     'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)',
-                    'sobi_iron': reviewTranslations.sobi_iron || 'صوبی(لوہے والی )',
-                    'steam_pot_with_lid': reviewTranslations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
+                    'sobi_iron': reviewTranslations.sobi_iron || 'صوبی (لوہے والی)',
+                    'steam_pot_with_lid': reviewTranslations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن سمیت',
                     'deg': reviewTranslations.deg || 'دیگ',
                     'karahi': reviewTranslations.karahi || 'کڑاہی',
                     'chulhe': reviewTranslations.chulhe || 'چولہے',
@@ -3405,13 +3382,12 @@ function updateReview() {
                 };
                 displayName = nameMap[key] || key;
                 
-                // Set unit: meter for cloth_malmal, gram for surrf, kilo for wood, pieces for others
-                if (key === 'cloth_malmal') {
-                    unit = 'میٹر'; // Meter for cloth
-                } else if (key === 'surrf') {
-                    unit = 'گرام'; // Gram for surrf
-                } else if (key === 'wood') {
-                    unit = 'کلو'; // Kilo for wood
+                if (key === 'surrf') {
+                    unit = 'گرام';
+                } else if (key === 'wood' || key === 'coal') {
+                    unit = 'کلوگرام';
+                } else {
+                    unit = 'عدد';
                 }
             }
             
@@ -4178,8 +4154,8 @@ try {
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
         'wood' => $urduTranslations['wood'] ?? 'لکڑی',
         'sponjis_iron' => $urduTranslations['sponjis_iron'] ?? 'اسپنجز (آئرن)',
-        'sobi_iron' => $urduTranslations['sobi_iron'] ?? 'صوبی(لوہے والی )',
-        'steam_pot_with_lid' => $urduTranslations['steam_pot_with_lid'] ?? 'سٹیم پتیلہ جال ڈھکن',
+        'sobi_iron' => $urduTranslations['sobi_iron'] ?? 'صوبی (لوہے والی)',
+        'steam_pot_with_lid' => $urduTranslations['steam_pot_with_lid'] ?? 'سٹیم پتیلہ جال ڈھکن سمیت',
         'deg' => $urduTranslations['deg'] ?? 'دیگ',
         'karahi' => $urduTranslations['karahi'] ?? 'کڑاہی',
         'chulhe' => $urduTranslations['chulhe'] ?? 'چولہے',
@@ -4230,8 +4206,8 @@ try {
         'surrf' => 'سرف',
         'wood' => 'لکڑی',
         'sponjis_iron' => 'اسپنجز (آئرن)',
-        'sobi_iron' => 'صوبی(لوہے والی )',
-        'steam_pot_with_lid' => 'سٹیم پتیلہ جال ڈھکن',
+        'sobi_iron' => 'صوبی (لوہے والی)',
+        'steam_pot_with_lid' => 'سٹیم پتیلہ جال ڈھکن سمیت',
         'deg' => 'دیگ',
         'karahi' => 'کڑاہی',
         'chulhe' => 'چولہے',
@@ -4690,8 +4666,8 @@ function printIngredients(orderNumberOrId) {
                     'surrf': translations.surrf || 'سرف',
                     'wood': translations.wood || 'لکڑی',
                     'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)',
-                    'sobi_iron': translations.sobi_iron || 'صوبی(لوہے والی )',
-                    'steam_pot_with_lid': translations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
+                    'sobi_iron': translations.sobi_iron || 'صوبی (لوہے والی)',
+                    'steam_pot_with_lid': translations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن سمیت',
                     'deg': translations.deg || 'دیگ',
                     'karahi': translations.karahi || 'کڑاہی',
                     'chulhe': translations.chulhe || 'چولہے',
@@ -4735,14 +4711,12 @@ function printIngredients(orderNumberOrId) {
                         const itemName = additionalItemsMap[itemKey] || itemKey;
                         const key = 'additional_' + itemKey;
                         
-                        // Set unit: meter for cloth_malmal, gram for surrf, kilo for wood, pieces for others
-                        let unit = 'عدد'; // Default to pieces
-                        if (itemKey === 'cloth_malmal') {
-                            unit = 'میٹر'; // Meter for cloth
-                        } else if (itemKey === 'surrf') {
-                            unit = 'گرام'; // Gram for surrf
-                        } else if (itemKey === 'wood') {
-                            unit = 'کلو'; // Kilo for wood
+                        // Set unit based on item type
+                        let unit = 'عدد';
+                        if (itemKey === 'surrf') {
+                            unit = 'گرام';
+                        } else if (itemKey === 'wood' || itemKey === 'coal') {
+                            unit = 'کلوگرام';
                         }
                         
                         // Add or update additional item in category
