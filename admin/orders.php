@@ -4189,7 +4189,8 @@ try {
         'number_of_persons' => $urduTranslations['number_of_persons'] ?? 'افراد کی تعداد',
         'persons' => $urduTranslations['persons'] ?? 'افراد',
         'extra_ingredients' => $urduTranslations['extra_ingredients'] ?? 'اضافی اجزاء',
-        'additional_items' => $urduTranslations['additional_items'] ?? 'اضافی اشیاء',
+        'additional_items' => $urduTranslations['additional_items'] ?? 'اضافی سامان',
+        'tent_items' => $urduTranslations['tent_items'] ?? 'ٹنٹ کا سامان',
         'cloth_malmal' => $urduTranslations['cloth_malmal'] ?? 'کپڑا ململ',
         'match_box' => $urduTranslations['match_box'] ?? 'ماچس',
         'surrf' => $urduTranslations['surrf'] ?? 'سرف',
@@ -4243,7 +4244,8 @@ try {
         'number_of_persons' => 'افراد کی تعداد',
         'persons' => 'افراد',
         'extra_ingredients' => 'اضافی اجزاء',
-        'additional_items' => 'اضافی اشیاء',
+        'additional_items' => 'اضافی سامان',
+        'tent_items' => 'ٹنٹ کا سامان',
         'cloth_malmal' => 'کپڑا ململ',
         'match_box' => 'ماچس',
         'surrf' => 'سرف',
@@ -4703,7 +4705,7 @@ function printIngredients(orderNumberOrId) {
                 });
             }
             
-            // Process additional_items object
+            // Process additional_items object — split into اضافی سامان and ٹنٹ کا سامان (same as form)
             if (extraIngredientsData && extraIngredientsData.additional_items && typeof extraIngredientsData.additional_items === 'object') {
                 const additionalItemsMap = {
                     'cloth_malmal': translations.cloth_malmal || 'کپڑا ململ',
@@ -4727,55 +4729,78 @@ function printIngredients(orderNumberOrId) {
                     'rope': translations.rope || 'رسی',
                     'steam_pot_without_lid': translations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
                 };
-                
-                // Create a special category for additional items
-                const additionalItemsCategoryId = 'additional_items';
-                const additionalItemsCategoryName = translations.additional_items || 'اضافی اشیاء';
+
+                // Keys matching Step 3 form categories (ٹنٹ کا سامان); rest go under اضافی سامان
+                const tentSamanKeys = {
+                    'shamiana': true,
+                    'qanat': true,
+                    'dari': true,
+                    'charpai': true,
+                    'steam_pot_with_lid': true,
+                    'steam_pot_without_lid': true,
+                    'deg': true,
+                    'karahi': true,
+                    'chulhe': true,
+                    'parat': true,
+                    'tub': true
+                };
+
+                const izafiCategoryId = 'izafi_saman';
+                const tentCategoryId = 'tent_saman';
+                const izafiCategoryName = translations.additional_items || 'اضافی سامان';
+                const tentCategoryName = translations.tent_items || 'ٹنٹ کا سامان';
                 const additionalItemsDishId = 'additional_items_dish';
-                
+
                 if (!ingredientsByDish[additionalItemsDishId]) {
                     ingredientsByDish[additionalItemsDishId] = {
-                        dish_name: translations.additional_items || 'اضافی اشیاء',
+                        dish_name: izafiCategoryName,
                         dish_id: additionalItemsDishId,
                         quantity: 1,
                         categories: {}
                     };
                 }
-                
-                // Initialize category if not exists
-                if (!ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId]) {
-                    ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId] = {
-                        category_name: additionalItemsCategoryName,
-                        ingredients: {}
-                    };
+
+                function ensureSamanCategory(categoryId, categoryName) {
+                    if (!ingredientsByDish[additionalItemsDishId].categories[categoryId]) {
+                        ingredientsByDish[additionalItemsDishId].categories[categoryId] = {
+                            category_name: categoryName,
+                            ingredients: {}
+                        };
+                    }
                 }
-                
-                // Process each additional item
+
+                function addSamanItem(categoryId, itemKey, quantity) {
+                    const itemName = additionalItemsMap[itemKey] || itemKey;
+                    const key = 'additional_' + itemKey;
+                    let unit = 'عدد';
+                    if (itemKey === 'surrf') {
+                        unit = 'گرام';
+                    } else if (itemKey === 'wood' || itemKey === 'coal') {
+                        unit = 'کلوگرام';
+                    }
+                    const cat = ingredientsByDish[additionalItemsDishId].categories[categoryId];
+                    if (cat.ingredients[key]) {
+                        cat.ingredients[key].quantity += quantity;
+                    } else {
+                        cat.ingredients[key] = {
+                            ingredient_name: itemName,
+                            quantity: quantity,
+                            unit: unit
+                        };
+                    }
+                }
+
                 Object.keys(extraIngredientsData.additional_items).forEach(function(itemKey) {
                     const quantity = parseInt(extraIngredientsData.additional_items[itemKey]) || 0;
-                    
-                    if (quantity > 0) {
-                        const itemName = additionalItemsMap[itemKey] || itemKey;
-                        const key = 'additional_' + itemKey;
-                        
-                        // Set unit based on item type
-                        let unit = 'عدد';
-                        if (itemKey === 'surrf') {
-                            unit = 'گرام';
-                        } else if (itemKey === 'wood' || itemKey === 'coal') {
-                            unit = 'کلوگرام';
-                        }
-                        
-                        // Add or update additional item in category
-                        if (ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key]) {
-                            ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key].quantity += quantity;
-                        } else {
-                            ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key] = {
-                                ingredient_name: itemName,
-                                quantity: quantity,
-                                unit: unit
-                            };
-                        }
+                    if (quantity <= 0) return;
+
+                    if (tentSamanKeys[itemKey]) {
+                        ensureSamanCategory(tentCategoryId, tentCategoryName);
+                        addSamanItem(tentCategoryId, itemKey, quantity);
+                    } else {
+                        // Izafi saman (known keys) + any unknown keys under اضافی سامان
+                        ensureSamanCategory(izafiCategoryId, izafiCategoryName);
+                        addSamanItem(izafiCategoryId, itemKey, quantity);
                     }
                 });
             }

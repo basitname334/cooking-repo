@@ -232,6 +232,7 @@ return [
     'confirm_delete_order' => 'Are you sure you want to delete this order?',
     'extra_ingredients' => 'Extra Ingredients',
     'additional_items' => 'Extra Items',
+    'tent_items' => 'Tent Items',
     'cloth_malmal' => 'Cloth Malmal',
     'match_box' => 'Matches',
     'surrf' => 'Surf',

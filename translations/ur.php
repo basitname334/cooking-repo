@@ -232,6 +232,7 @@ return [
     'confirm_delete_order' => 'کیا آپ واقعی اس آرڈر کو حذف کرنا چاہتے ہیں؟',
     'extra_ingredients' => 'اضافی اجزاء',
     'additional_items' => 'اضافی سامان',
+    'tent_items' => 'ٹنٹ کا سامان',
     'cloth_malmal' => 'کپڑا ململ',
     'match_box' => 'ماچس',
     'surrf' => 'سرف',
