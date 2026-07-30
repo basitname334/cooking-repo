@@ -1106,62 +1106,88 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     min-width: 150px;
 }
 
-/* Step 3: اضافی سامان / ٹینٹ کا سامان tables */
+/* Step 3: اضافی سامان / ٹینٹ کا سامان — match printed sheet look */
 .saman-tables-wrap {
     direction: rtl;
 }
 .saman-table-card {
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
     background: #fff;
     height: 100%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.saman-table-card.izafi {
+    border: 2px solid #1a4d8c;
+}
+.saman-table-card.tent {
+    border: 2px solid #1b6b2e;
+}
+.saman-table-card .saman-title {
+    color: #fff;
+    text-align: center;
+    font-weight: 800;
+    font-size: 1.15rem;
+    letter-spacing: 0.02em;
+    padding: 0.7rem 0.75rem;
+    margin: 0;
+    line-height: 1.4;
+}
+.saman-table-card.izafi .saman-title {
+    background: #1a4d8c;
+}
+.saman-table-card.tent .saman-title {
+    background: #1b6b2e;
 }
 .saman-table-card table {
     width: 100%;
     margin: 0;
     border-collapse: collapse;
+    background: #fff;
 }
 .saman-table-card thead th {
-    color: #fff;
+    background: #fff !important;
+    color: #0f172a !important;
     text-align: center;
     font-weight: 700;
-    padding: 0.75rem 0.5rem;
-    border: none;
-    font-size: 1rem;
-}
-.saman-table-card.izafi thead th {
-    background: #1e3a8a;
-}
-.saman-table-card.tent thead th {
-    background: #166534;
-}
-.saman-table-card tbody td {
-    border: 1px solid #cbd5e1;
-    text-align: center;
-    vertical-align: middle;
-    padding: 0.45rem 0.5rem;
+    padding: 0.55rem 0.4rem;
+    border: 1px solid #94a3b8;
     font-size: 0.95rem;
 }
-.saman-table-card tbody tr:nth-child(even) {
-    background: #f8fafc;
+.saman-table-card tbody td {
+    border: 1px solid #94a3b8;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0.4rem 0.45rem;
+    font-size: 0.95rem;
+    background: #fff;
 }
 .saman-table-card .saman-qty-input {
     width: 100%;
-    max-width: 110px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0;
     text-align: center;
-    border: 1px solid #94a3b8;
-    border-radius: 6px;
-    padding: 0.35rem 0.4rem;
+    border: none;
+    border-radius: 0;
+    padding: 0.35rem 0.25rem;
+    background: transparent;
+    box-shadow: none;
+    min-height: 2rem;
+}
+.saman-table-card .saman-qty-input:focus {
+    outline: 2px solid #93c5fd;
+    outline-offset: -2px;
+    background: #eff6ff;
 }
 .saman-table-card .saman-item-name {
     font-weight: 600;
     color: #0f172a;
+    text-align: center;
 }
 .saman-table-card .saman-unit {
-    color: #334155;
+    color: #0f172a;
     white-space: nowrap;
+    font-weight: 500;
 }
 
 .dish-modal-card {
@@ -1715,8 +1741,10 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                             ['key' => 'match_box', 'label' => 'ماچس', 'unit' => 'عدد'],
                             ['key' => 'surrf', 'label' => 'سرف', 'unit' => 'گرام'],
                             ['key' => 'wood', 'label' => 'لکڑی', 'unit' => 'کلوگرام'],
-                            ['key' => 'coal', 'label' => 'کوئلہ', 'unit' => 'کلوگرام'],
                             ['key' => 'sobi_iron', 'label' => 'صوبی (لوہے والی)', 'unit' => 'عدد'],
+                            ['key' => 'coal', 'label' => 'کوئلہ', 'unit' => 'کلوگرام'],
+                            ['key' => 'plastic_bucket', 'label' => 'پلاسٹک کی بالٹی', 'unit' => 'عدد'],
+                            ['key' => 'rope', 'label' => 'رسی', 'unit' => 'عدد'],
                         ];
                         $tent_saman_items = [
                             ['key' => 'shamiana', 'label' => 'شامیانہ', 'unit' => 'عدد'],
@@ -1736,15 +1764,13 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                         <div class="row g-4 saman-tables-wrap">
                             <div class="col-lg-6">
                                 <div class="saman-table-card izafi">
+                                    <h5 class="saman-title">اضافی سامان</h5>
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th colspan="3">اضافی سامان</th>
-                                            </tr>
-                                            <tr style="background: #1e40af;">
-                                                <th style="width: 42%;">آئٹم کا نام</th>
-                                                <th style="width: 28%;">مقدار</th>
-                                                <th style="width: 30%;">یونٹ</th>
+                                                <th style="width: 46%;">آئٹم کا نام</th>
+                                                <th style="width: 28%;"></th>
+                                                <th style="width: 26%;">یونٹ</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1755,7 +1781,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                                         <input type="number"
                                                                class="form-control form-control-sm saman-qty-input additional-item"
                                                                name="additional_items[<?php echo htmlspecialchars($item['key']); ?>]"
-                                                               value="0" min="0" step="1" placeholder="0">
+                                                               value="" min="0" step="1" placeholder="">
                                                     </td>
                                                     <td class="saman-unit"><?php echo htmlspecialchars($item['unit']); ?></td>
                                                 </tr>
@@ -1766,15 +1792,13 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                             </div>
                             <div class="col-lg-6">
                                 <div class="saman-table-card tent">
+                                    <h5 class="saman-title">ٹنٹ کا سامان</h5>
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th colspan="3">ٹینٹ کا سامان</th>
-                                            </tr>
-                                            <tr style="background: #15803d;">
-                                                <th style="width: 42%;">آئٹم کا نام</th>
-                                                <th style="width: 28%;">مقدار</th>
-                                                <th style="width: 30%;">یونٹ</th>
+                                                <th style="width: 46%;">آئٹم کا نام</th>
+                                                <th style="width: 28%;"></th>
+                                                <th style="width: 26%;">یونٹ</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1785,7 +1809,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                                         <input type="number"
                                                                class="form-control form-control-sm saman-qty-input additional-item"
                                                                name="additional_items[<?php echo htmlspecialchars($item['key']); ?>]"
-                                                               value="0" min="0" step="1" placeholder="0">
+                                                               value="" min="0" step="1" placeholder="">
                                                     </td>
                                                     <td class="saman-unit"><?php echo htmlspecialchars($item['unit']); ?></td>
                                                 </tr>
@@ -3378,6 +3402,8 @@ function updateReview() {
                     'dari': reviewTranslations.dari || 'دری',
                     'charpai': reviewTranslations.charpai || 'چارپائی',
                     'coal': reviewTranslations.coal || 'کوئلہ',
+                    'plastic_bucket': reviewTranslations.plastic_bucket || 'پلاسٹک کی بالٹی',
+                    'rope': reviewTranslations.rope || 'رسی',
                     'steam_pot_without_lid': reviewTranslations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
                 };
                 displayName = nameMap[key] || key;
@@ -4166,6 +4192,8 @@ try {
         'dari' => $urduTranslations['dari'] ?? 'دری',
         'charpai' => $urduTranslations['charpai'] ?? 'چارپائی',
         'coal' => $urduTranslations['coal'] ?? 'کوئلہ',
+        'plastic_bucket' => $urduTranslations['plastic_bucket'] ?? 'پلاسٹک کی بالٹی',
+        'rope' => $urduTranslations['rope'] ?? 'رسی',
         'steam_pot_without_lid' => $urduTranslations['steam_pot_without_lid'] ?? 'سٹیم پتیلہ بغیر ڈھکن',
         'pieces' => $urduTranslations['pieces'] ?? 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -4218,6 +4246,8 @@ try {
         'dari' => 'دری',
         'charpai' => 'چارپائی',
         'coal' => 'کوئلہ',
+        'plastic_bucket' => 'پلاسٹک کی بالٹی',
+        'rope' => 'رسی',
         'steam_pot_without_lid' => 'سٹیم پتیلہ بغیر ڈھکن',
         'pieces' => 'عدد'
     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -4678,6 +4708,8 @@ function printIngredients(orderNumberOrId) {
                     'dari': translations.dari || 'دری',
                     'charpai': translations.charpai || 'چارپائی',
                     'coal': translations.coal || 'کوئلہ',
+                    'plastic_bucket': translations.plastic_bucket || 'پلاسٹک کی بالٹی',
+                    'rope': translations.rope || 'رسی',
                     'steam_pot_without_lid': translations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
                 };
                 
