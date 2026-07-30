@@ -98,7 +98,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
         $additional_items_data = [];
         if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
             foreach ($_POST['additional_items'] as $item_key => $quantity) {
-                $quantity = intval($quantity);
+                $quantity = floatval($quantity);
                 if ($quantity > 0) {
                     $additional_items_data[$item_key] = $quantity;
                 }
@@ -281,7 +281,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
     $additional_items_data = [];
     if (isset($_POST['additional_items']) && is_array($_POST['additional_items'])) {
         foreach ($_POST['additional_items'] as $item_key => $quantity) {
-            $quantity = intval($quantity);
+            $quantity = floatval($quantity);
             if ($quantity > 0) {
                 $additional_items_data[$item_key] = $quantity;
             }
@@ -1737,7 +1737,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
 
                         <?php
                         $izafi_saman_items = [
-                            ['key' => 'cloth_malmal', 'label' => 'کپڑا ململ', 'unit' => 'عدد'],
+                            ['key' => 'cloth_malmal', 'label' => 'کپڑا ململ', 'unit' => 'میٹر'],
                             ['key' => 'match_box', 'label' => 'ماچس', 'unit' => 'عدد'],
                             ['key' => 'surrf', 'label' => 'سرف', 'unit' => 'گرام'],
                             ['key' => 'wood', 'label' => 'لکڑی', 'unit' => 'کلوگرام'],
@@ -1766,24 +1766,17 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                 <div class="saman-table-card izafi">
                                     <h5 class="saman-title">اضافی سامان</h5>
                                     <table>
-                                        <thead>
-                                            <tr>
-                                                <th style="width: 46%;">آئٹم کا نام</th>
-                                                <th style="width: 28%;"></th>
-                                                <th style="width: 26%;">یونٹ</th>
-                                            </tr>
-                                        </thead>
                                         <tbody>
                                             <?php foreach ($izafi_saman_items as $item): ?>
                                                 <tr>
-                                                    <td class="saman-item-name"><?php echo htmlspecialchars($item['label']); ?></td>
-                                                    <td>
+                                                    <td class="saman-item-name" style="width: 46%;"><?php echo htmlspecialchars($item['label']); ?></td>
+                                                    <td style="width: 28%;">
                                                         <input type="number"
                                                                class="form-control form-control-sm saman-qty-input additional-item"
                                                                name="additional_items[<?php echo htmlspecialchars($item['key']); ?>]"
-                                                               value="" min="0" step="1" placeholder="">
+                                                               value="" min="0" step="<?php echo $item['key'] === 'cloth_malmal' ? '0.1' : '1'; ?>" placeholder="">
                                                     </td>
-                                                    <td class="saman-unit"><?php echo htmlspecialchars($item['unit']); ?></td>
+                                                    <td class="saman-unit" style="width: 26%;"><?php echo htmlspecialchars($item['unit']); ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -1794,24 +1787,17 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                 <div class="saman-table-card tent">
                                     <h5 class="saman-title">ٹنٹ کا سامان</h5>
                                     <table>
-                                        <thead>
-                                            <tr>
-                                                <th style="width: 46%;">آئٹم کا نام</th>
-                                                <th style="width: 28%;"></th>
-                                                <th style="width: 26%;">یونٹ</th>
-                                            </tr>
-                                        </thead>
                                         <tbody>
                                             <?php foreach ($tent_saman_items as $item): ?>
                                                 <tr>
-                                                    <td class="saman-item-name"><?php echo htmlspecialchars($item['label']); ?></td>
-                                                    <td>
+                                                    <td class="saman-item-name" style="width: 46%;"><?php echo htmlspecialchars($item['label']); ?></td>
+                                                    <td style="width: 28%;">
                                                         <input type="number"
                                                                class="form-control form-control-sm saman-qty-input additional-item"
                                                                name="additional_items[<?php echo htmlspecialchars($item['key']); ?>]"
                                                                value="" min="0" step="1" placeholder="">
                                                     </td>
-                                                    <td class="saman-unit"><?php echo htmlspecialchars($item['unit']); ?></td>
+                                                    <td class="saman-unit" style="width: 26%;"><?php echo htmlspecialchars($item['unit']); ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -3386,7 +3372,7 @@ function updateReview() {
     let additionalItemsHTML = '';
     
     additionalItemInputs.forEach(function(input) {
-        const quantity = parseInt(input.value) || 0;
+        const quantity = parseFloat(input.value) || 0;
         if (quantity > 0) {
             if (!hasAdditionalItems) {
                 additionalItemsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-info"><i class="bi bi-box-seam me-1"></i>' + reviewTranslations.additional_items + ':</strong></div>';
@@ -3427,6 +3413,8 @@ function updateReview() {
                     unit = 'گرام';
                 } else if (key === 'wood' || key === 'coal') {
                     unit = 'کلوگرام';
+                } else if (key === 'cloth_malmal') {
+                    unit = 'میٹر';
                 } else {
                     unit = 'عدد';
                 }
@@ -4777,6 +4765,8 @@ function printIngredients(orderNumberOrId) {
                         unit = 'گرام';
                     } else if (itemKey === 'wood' || itemKey === 'coal') {
                         unit = 'کلوگرام';
+                    } else if (itemKey === 'cloth_malmal') {
+                        unit = 'میٹر';
                     }
                     const cat = ingredientsByDish[additionalItemsDishId].categories[categoryId];
                     if (cat.ingredients[key]) {
@@ -4791,7 +4781,7 @@ function printIngredients(orderNumberOrId) {
                 }
 
                 Object.keys(extraIngredientsData.additional_items).forEach(function(itemKey) {
-                    const quantity = parseInt(extraIngredientsData.additional_items[itemKey]) || 0;
+                    const quantity = parseFloat(extraIngredientsData.additional_items[itemKey]) || 0;
                     if (quantity <= 0) return;
 
                     if (tentSamanKeys[itemKey]) {
