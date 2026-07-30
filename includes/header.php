@@ -86,6 +86,7 @@ $available_langs = getAvailableLanguages();
                                 ['url' => 'ingredients.php', 'icon' => 'basket', 'text' => 'Ingredients'],
                                 ['url' => 'dishes.php', 'icon' => 'egg-fried', 'text' => 'Dishes'],
                                 ['url' => 'orders.php', 'icon' => 'cart-check', 'text' => 'Orders'],
+                                ['url' => 'recent_orders.php', 'icon' => 'clock-history', 'text' => 'Recent Orders'],
                                 ['url' => 'customers.php', 'icon' => 'people', 'text' => 'Customers'],
                             ];
                             foreach ($navItems as $item):
@@ -105,7 +106,8 @@ $available_langs = getAvailableLanguages();
                                 ['url' => 'dashboard.php', 'icon' => 'speedometer2', 'text' => 'Dashboard'],
                                 ['url' => 'categories.php', 'icon' => 'folder2-open', 'text' => 'Categories'],
                                 ['url' => 'dishes.php', 'icon' => 'egg-fried', 'text' => 'Dishes'],
-                                ['url' => 'orders.php', 'icon' => 'cart-check', 'text' => 'Orders', 'path' => 'admin']
+                                ['url' => 'orders.php', 'icon' => 'cart-check', 'text' => 'Orders', 'path' => 'admin'],
+                                ['url' => 'recent_orders.php', 'icon' => 'clock-history', 'text' => 'Recent Orders', 'path' => 'admin'],
                             ];
                             foreach ($navItems as $item):
                                 $isActive = ($currentPage === $item['url']);

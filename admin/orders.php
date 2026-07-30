@@ -1,14 +1,25 @@
 <?php
 /**
  * Orders Management Page
- * View and manage customer orders (PostgreSQL / PDO)
+ * - orders.php          → create order form (navbar: Orders)
+ * - recent_orders.php   → recent/all orders list (navbar: Recent Orders)
  */
+if (!defined('ORDERS_PAGE_MODE')) {
+    define('ORDERS_PAGE_MODE', 'create');
+}
+$orders_page_mode = ORDERS_PAGE_MODE; // 'create' | 'list'
+$orders_list_base = 'recent_orders.php';
+
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/language.php';
 
 requireLogin();
 
+// List page defaults to recent view
+if ($orders_page_mode === 'list' && !isset($_GET['view']) && !isset($_GET['order_number'])) {
+    // keep default recent in existing $view_mode logic below
+}
 /**
  * Collect removed dish ingredients from POST dishes[*][removed_ingredients][].
  * @return array<int, array{dish_id:int,ingredient_id:int}>
@@ -203,7 +214,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
 
                 if ($orders_created > 0) {
                     $conn->commit();
-                    header('Location: orders.php?success=1&updated=1&order_number=' . urlencode($order_number));
+                    header('Location: recent_orders.php?success=1&updated=1&order_number=' . urlencode($order_number));
                     exit();
                 }
                 $conn->rollBack();
@@ -414,7 +425,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
 
             if ($orders_created > 0) {
                 // Show in Recent list (not search-filtered) so the new card is always visible
-                header('Location: orders.php?success=1&created=1&count=' . (int) $orders_created);
+                header('Location: recent_orders.php?success=1&created=1&count=' . (int) $orders_created);
                 exit();
             }
             $error = !empty($errors)
@@ -440,7 +451,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
                 $error = 'Invalid order or status.';
             }
             if ($error === '') {
-                header('Location: orders.php?success=1');
+                header('Location: recent_orders.php?success=1');
                 exit();
             }
         } catch (Throwable $e) {
@@ -456,7 +467,7 @@ if ($conn instanceof PDO && isset($_GET['delete'])) {
         $row = db_fetch($conn, 'SELECT order_number FROM orders WHERE id = ?', [$id]);
         if ($row && !empty($row['order_number'])) {
             db_exec($conn, 'DELETE FROM orders WHERE order_number = ?', [$row['order_number']]);
-            header('Location: orders.php?success=1&deleted=1');
+            header('Location: recent_orders.php?success=1&deleted=1');
             exit();
         }
         $error = 'Order not found.';
@@ -657,6 +668,12 @@ if ($conn instanceof PDO) {
             ), 'order_number');
         }
 
+        // Ensure order being edited is included in dataset (create page)
+        $edit_order_number = isset($_GET['edit']) ? trim((string) $_GET['edit']) : '';
+        if ($edit_order_number !== '' && !in_array($edit_order_number, $recent_order_numbers, true)) {
+            array_unshift($recent_order_numbers, $edit_order_number);
+        }
+
         $orders = [];
         if (!empty($recent_order_numbers)) {
             $placeholders = implode(',', array_fill(0, count($recent_order_numbers), '?'));
@@ -850,7 +867,9 @@ $scriptPath = dirname($_SERVER['SCRIPT_NAME']);
 $baseUrl = $protocol . '://' . $host . $scriptPath;
 $logoPath = str_replace('/admin', '', $baseUrl) . '/images/logo.jpg';
 
-$pageTitle = t('orders_title');
+$pageTitle = ($orders_page_mode === 'list')
+    ? t('recent_orders', 'Recent Orders')
+    : t('orders_title');
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -1167,16 +1186,28 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
         <div>
             <h1 class="display-6 fw-bold mb-2" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
-                <i class="bi bi-cart-check me-3"></i><?php e('orders_title'); ?>
+                <?php if ($orders_page_mode === 'list'): ?>
+                    <i class="bi bi-clock-history me-3"></i><?php echo htmlspecialchars(t('recent_orders', 'Recent Orders')); ?>
+                <?php else: ?>
+                    <i class="bi bi-cart-plus me-3"></i><?php echo htmlspecialchars(t('create_order', 'Create Order')); ?>
+                <?php endif; ?>
             </h1>
             <p class="lead mb-0" style="color: #64748b;">
-                <i class="bi bi-info-circle me-2"></i>
-                <?php echo $total_orders; ?> <?php echo $total_orders == 1 ? 'order' : 'orders'; ?> in total
+                <?php if ($orders_page_mode === 'list'): ?>
+                    <i class="bi bi-info-circle me-2"></i>
+                    <?php echo (int) $overall_orders_count; ?> <?php echo $overall_orders_count == 1 ? 'order' : 'orders'; ?> total
+                    <a href="orders.php" class="ms-2 btn btn-sm btn-primary">+ New Order</a>
+                <?php else: ?>
+                    <i class="bi bi-info-circle me-2"></i>
+                    Naya order banayein —
+                    <a href="recent_orders.php" class="ms-1">Recent Orders dekhein</a>
+                <?php endif; ?>
             </p>
         </div>
     </div>
 </div>
 
+<?php if ($orders_page_mode === 'list'): ?>
 <!-- Modern Statistics Cards -->
 <div class="row g-4 mb-5">
     <div class="col-lg-3 col-md-6">
@@ -1225,6 +1256,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- Alert Messages -->
 <?php if ($error): ?>
@@ -1243,8 +1275,8 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     </div>
 <?php endif; ?>
 
-<!-- Create Order Section - 3-Step Wizard (All users can create orders) -->
-<?php if (isLoggedIn()): ?>
+<!-- Create Order Section - 4-Step Wizard (Orders page only) -->
+<?php if (isLoggedIn() && $orders_page_mode === 'create'): ?>
 <div class="row mb-4">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -2025,16 +2057,19 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
         </div>
     </div>
 </div>
-<?php endif; // End logged-in user check for create order section ?>
+<?php endif; // End create-order section ?>
 
+<?php if ($orders_page_mode === 'list'): ?>
 <?php
 $ordersSectionTitle = $is_search_active 
     ? t('search_results', 'Search Results') 
     : ($view_mode === 'recent' ? t('recent_orders', 'Recent Orders') : t('all_orders', 'All Orders'));
 $visible_orders_count = count($paginated_orders);
+$list_home = $orders_list_base;
+$list_all = $orders_list_base . '?view=all';
 ?>
 
-<!-- All Orders Section -->
+<!-- Recent / All Orders Section -->
 <div class="row">
     <div class="col-12">
         <div class="card shadow-sm border-0">
@@ -2058,17 +2093,17 @@ $visible_orders_count = count($paginated_orders);
                             </h5>
                             <div class="d-flex flex-wrap gap-2">
                                 <?php if (!$is_search_active && $view_mode === 'recent' && $overall_orders_count > $recent_items_limit): ?>
-                                    <a class="btn btn-sm btn-outline-primary" href="?view=all">
+                                    <a class="btn btn-sm btn-outline-primary" href="<?php echo htmlspecialchars($list_all); ?>">
                                         <i class="bi bi-box-arrow-up-right me-1"></i>View all orders
                                     </a>
                                 <?php elseif ($view_mode === 'all' || $is_search_active): ?>
-                                    <a class="btn btn-sm btn-outline-secondary" href="orders.php">
+                                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo htmlspecialchars($list_home); ?>">
                                         <i class="bi bi-arrow-counterclockwise me-1"></i>Back to recent
                                     </a>
                                 <?php endif; ?>
                             </div>
                         </div>
-                        <form class="input-group" method="GET" style="max-width: 500px;">
+                        <form class="input-group" method="GET" action="<?php echo htmlspecialchars($orders_list_base); ?>" style="max-width: 500px;">
                             <?php if ($view_mode === 'all' || isset($_GET['view'])): ?>
                                 <input type="hidden" name="view" value="<?php echo $view_mode === 'all' ? 'all' : 'recent'; ?>">
                             <?php endif; ?>
@@ -2082,7 +2117,7 @@ $visible_orders_count = count($paginated_orders);
                                 <i class="bi bi-search"></i>
                             </button>
                             <?php if ($order_number_search !== ''): ?>
-                                <a href="<?php echo $view_mode === 'all' ? 'orders.php?view=all' : 'orders.php'; ?>" class="btn btn-outline-secondary">
+                                <a href="<?php echo $view_mode === 'all' ? htmlspecialchars($list_all) : htmlspecialchars($list_home); ?>" class="btn btn-outline-secondary">
                                     <i class="bi bi-x-lg"></i>
                                 </a>
                             <?php endif; ?>
@@ -2106,13 +2141,13 @@ $visible_orders_count = count($paginated_orders);
                             <!-- Items per page filter buttons -->
                             <div class="btn-group" role="group" aria-label="Items per page">
                                 <button type="button" class="btn btn-sm <?php echo $items_per_page == 5 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
-                                        onclick="window.location.href='?view=all&per_page=5&page=1'">5</button>
+                                        onclick="window.location.href='<?php echo htmlspecialchars($list_all); ?>&per_page=5&page=1'">5</button>
                                 <button type="button" class="btn btn-sm <?php echo $items_per_page == 10 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
-                                        onclick="window.location.href='?view=all&per_page=10&page=1'">10</button>
+                                        onclick="window.location.href='<?php echo htmlspecialchars($list_all); ?>&per_page=10&page=1'">10</button>
                                 <button type="button" class="btn btn-sm <?php echo $items_per_page == 20 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
-                                        onclick="window.location.href='?view=all&per_page=20&page=1'">20</button>
+                                        onclick="window.location.href='<?php echo htmlspecialchars($list_all); ?>&per_page=20&page=1'">20</button>
                                 <button type="button" class="btn btn-sm <?php echo $items_per_page == 50 ? 'btn-primary' : 'btn-outline-primary'; ?>" 
-                                        onclick="window.location.href='?view=all&per_page=50&page=1'">50</button>
+                                        onclick="window.location.href='<?php echo htmlspecialchars($list_all); ?>&per_page=50&page=1'">50</button>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -2125,12 +2160,12 @@ $visible_orders_count = count($paginated_orders);
                         <?php if ($is_search_active): ?>
                             <h5 class="text-muted mb-2">No orders matched that number</h5>
                             <p class="text-muted mb-3">Double-check the order number or view the latest orders.</p>
-                            <a href="<?php echo $view_mode === 'all' ? 'orders.php?view=all' : 'orders.php'; ?>" class="btn btn-outline-primary">
+                            <a href="<?php echo $view_mode === 'all' ? htmlspecialchars($list_all) : htmlspecialchars($list_home); ?>" class="btn btn-outline-primary">
                                 <i class="bi bi-arrow-left me-1"></i>Back to orders
                             </a>
                         <?php else: ?>
                             <h5 class="text-muted mb-2"><?php e('no_orders'); ?></h5>
-                            <p class="text-muted">Create your first order using the form above!</p>
+                            <p class="text-muted">Create your first order from <a href="orders.php">Orders</a>.</p>
                         <?php endif; ?>
                     </div>
                 <?php else: ?>
@@ -2211,13 +2246,12 @@ $visible_orders_count = count($paginated_orders);
                                                 </small>
                                             </div>
                                             <div class="d-flex align-items-center gap-1">
-                                                <button type="button" 
+                                                <a href="orders.php?edit=<?php echo urlencode($grouped_order['order_number']); ?>"
                                                         class="btn btn-sm btn-warning" 
                                                         title="<?php e('edit'); ?>"
-                                                        onclick="editOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
                                                         style="font-size: 0.7rem; padding: 0.2rem 0.4rem; min-width: 28px;">
                                                     <i class="bi bi-pencil"></i>
-                                                </button>
+                                                </a>
                                                 <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-1">
                                                     <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
                                                 </span>
@@ -2417,7 +2451,7 @@ $visible_orders_count = count($paginated_orders);
                             <small>
                                 Showing the latest <?php echo min($recent_items_limit, $overall_orders_count); ?> of <?php echo $overall_orders_count; ?> orders.
                                 <?php if ($overall_orders_count > $recent_items_limit): ?>
-                                    <a href="?view=all">View all orders</a>
+                                    <a href="<?php echo htmlspecialchars($list_all); ?>">View all orders</a>
                                 <?php endif; ?>
                             </small>
                         <?php elseif ($view_mode === 'all'): ?>
@@ -2429,6 +2463,7 @@ $visible_orders_count = count($paginated_orders);
         </div>
     </div>
 </div>
+<?php endif; // End list section ?>
 
 <script>
 // 4-Step Order Wizard Functions
@@ -2685,7 +2720,7 @@ function resetFormToCreateMode() {
         formTitle.textContent = '<?php echo addslashes(t("create_order")); ?> - 4-Step Process';
     }
     
-    if (newOrderBtn) {
+        if (newOrderBtn) {
         // Keep New Order available so user can always start fresh
         newOrderBtn.style.display = 'inline-block';
     }
@@ -2693,6 +2728,10 @@ function resetFormToCreateMode() {
 
 // Edit Order Function
 function editOrder(orderNumber) {
+    if (<?php echo $orders_page_mode === 'list' ? 'true' : 'false'; ?>) {
+        window.location.href = 'orders.php?edit=' + encodeURIComponent(orderNumber);
+        return;
+    }
     // Wait for ordersData to be available
     if (typeof ordersData === 'undefined' || !ordersData || ordersData.length === 0) {
         alert('Order data not available. Please wait a moment and try again.');
@@ -4267,6 +4306,15 @@ try {
     echo '[]';
 }
 ?>;
+
+<?php if ($orders_page_mode === 'create'): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    const editParam = new URLSearchParams(window.location.search).get('edit');
+    if (editParam && typeof editOrder === 'function') {
+        setTimeout(function() { editOrder(editParam); }, 250);
+    }
+});
+<?php endif; ?>
 
 // Print Ingredients Function
 function printIngredients(orderNumberOrId) {

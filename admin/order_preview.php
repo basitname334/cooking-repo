@@ -248,7 +248,7 @@ include __DIR__ . '/../includes/header.php';
             </h1>
             <p class="lead mb-0" style="color: #64748b;">Order #<?php echo htmlspecialchars($order_number); ?></p>
         </div>
-        <a href="orders.php" class="btn btn-outline-primary rounded-pill px-4">
+        <a href="recent_orders.php" class="btn btn-outline-primary rounded-pill px-4">
             <i class="bi bi-arrow-left me-2"></i>Back to Orders
         </a>
     </div>

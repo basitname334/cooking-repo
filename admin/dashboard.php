@@ -371,7 +371,7 @@ include __DIR__ . '/../includes/header.php';
         </a>
     </div>
     <div class="col-lg-2 col-md-4 col-sm-6">
-        <a href="orders.php" class="quick-link">
+        <a href="recent_orders.php" class="quick-link">
             <div class="icon"><i class="bi bi-cart-check"></i></div>
             <div class="text">Orders</div>
             <small><?php echo $orders_count; ?> total</small>
