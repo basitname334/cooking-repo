@@ -71,6 +71,8 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
         $customer_id = intval($_POST['customer_id'] ?? 0);
         $customer_name = trim($_POST['customer_name'] ?? '');
         $customer_cell = trim($_POST['customer_cell'] ?? '');
+        $customer_cell = preg_replace('/[^0-9+\s\-]/', '', $customer_cell);
+        $customer_cell = trim($customer_cell);
         $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
         $shift = trim($_POST['shift'] ?? '');
         $delivery_date = trim($_POST['delivery_date'] ?? '');
@@ -236,6 +238,8 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
     $customer_id = intval($_POST['customer_id'] ?? 0);
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_cell = trim($_POST['customer_cell'] ?? '');
+    $customer_cell = preg_replace('/[^0-9+\s\-]/', '', $customer_cell);
+    $customer_cell = trim($customer_cell);
     $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
     $shift = trim($_POST['shift'] ?? '');
     $delivery_date = trim($_POST['delivery_date'] ?? '');
@@ -523,7 +527,19 @@ $is_search_active = $order_number_search !== '';
 
 if ($conn instanceof PDO) {
     try {
-        $customers = db_fetch_all($conn, "SELECT id, name, email FROM users WHERE role = 'user' ORDER BY name");
+        $customers = db_fetch_all(
+            $conn,
+            "SELECT u.id, u.name,
+                    (SELECT o.customer_cell FROM orders o
+                     WHERE (o.customer_id = u.id OR o.customer_name = u.name)
+                       AND o.customer_cell IS NOT NULL AND o.customer_cell <> ''
+                       AND o.customer_cell NOT LIKE '%@%'
+                     ORDER BY o.order_date DESC NULLS LAST, o.id DESC
+                     LIMIT 1) as last_cell
+             FROM users u
+             WHERE u.role = 'user'
+             ORDER BY u.name"
+        );
 
         if (db_column_exists($conn, 'orders', 'customer_name')) {
             $previous_customer_names = db_fetch_all(
@@ -536,19 +552,33 @@ if ($conn instanceof PDO) {
         }
 
         foreach ($customers as $customer) {
+            $cell = trim($customer['last_cell'] ?? '');
+            if ($cell !== '' && strpos($cell, '@') !== false) {
+                $cell = '';
+            }
             $all_customer_names[$customer['name']] = [
                 'name' => $customer['name'],
-                'cell' => $customer['email'] ?? '',
+                'cell' => $cell,
                 'type' => 'registered',
             ];
         }
         foreach ($previous_customer_names as $prev_cust) {
-            if (!empty($prev_cust['customer_name']) && !isset($all_customer_names[$prev_cust['customer_name']])) {
-                $all_customer_names[$prev_cust['customer_name']] = [
-                    'name' => $prev_cust['customer_name'],
-                    'cell' => $prev_cust['customer_cell'] ?? '',
+            if (empty($prev_cust['customer_name'])) {
+                continue;
+            }
+            $cell = trim($prev_cust['customer_cell'] ?? '');
+            if ($cell !== '' && strpos($cell, '@') !== false) {
+                $cell = '';
+            }
+            $name = $prev_cust['customer_name'];
+            if (!isset($all_customer_names[$name])) {
+                $all_customer_names[$name] = [
+                    'name' => $name,
+                    'cell' => $cell,
                     'type' => 'previous',
                 ];
+            } elseif ($cell !== '' && empty($all_customer_names[$name]['cell'])) {
+                $all_customer_names[$name]['cell'] = $cell;
             }
         }
         ksort($all_customer_names);
@@ -772,12 +802,18 @@ if ($conn instanceof PDO) {
                 $customer_email_val = !empty($order['user_customer_email']) ? $order['user_customer_email'] :
                     (!empty($order['order_customer_cell']) ? $order['order_customer_cell'] :
                     (!empty($order['customer_email']) ? $order['customer_email'] : ''));
+                $customer_cell_val = trim($order['customer_cell'] ?? '');
+                if ($customer_cell_val !== '' && (strpos($customer_cell_val, '@') !== false || !preg_match('/[0-9]/', $customer_cell_val))) {
+                    $customer_cell_val = '';
+                } else {
+                    $customer_cell_val = preg_replace('/[^0-9+\s\-]/', '', $customer_cell_val);
+                }
                 $grouped_orders[$order_num] = [
                     'order_number' => $order_num,
                     'customer_id' => $order['customer_id'],
                     'customer_name' => $customer_name_val,
                     'customer_email' => $customer_email_val,
-                    'customer_cell' => $order['customer_cell'] ?? '',
+                    'customer_cell' => $customer_cell_val,
                     'order_date' => !empty($order['order_date']) ? $order['order_date'] : date('Y-m-d H:i:s'),
                     'delivery_date' => $order['delivery_date'] ?? '',
                     'delivery_time' => $order['delivery_time'] ?? '',
@@ -1078,6 +1114,11 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     animation: fadeIn 0.3s ease-in;
 }
 
+/* Hide legacy per-dish ingredient chips (fully removed) */
+.dish-ingredients-panel {
+    display: none !important;
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -1106,7 +1147,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
     min-width: 150px;
 }
 
-/* Step 3: اضافی سامان / ٹینٹ کا سامان — match printed sheet look */
+/* Step 3: اضافی سامان / ٹنٹ کا سامان — match printed sheet look */
 .saman-tables-wrap {
     direction: rtl;
 }
@@ -1449,8 +1490,19 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                     <i class="bi bi-telephone me-1 text-primary"></i>
                                     گاہک کا نمبر <span class="text-danger">*</span>
                                 </label>
-                                <input type="tel" class="form-control form-control-lg" id="customer_cell" name="customer_cell" 
-                                       value="<?php echo htmlspecialchars($_POST['customer_cell'] ?? ''); ?>" required>
+                                <input type="tel" class="form-control form-control-lg" id="customer_cell" name="customer_cell"
+                                       value="<?php
+                                           $cell_display = trim($_POST['customer_cell'] ?? '');
+                                           if ($cell_display !== '' && (strpos($cell_display, '@') !== false || !preg_match('/[0-9]/', $cell_display))) {
+                                               $cell_display = '';
+                                           } else {
+                                               $cell_display = preg_replace('/[^0-9+\s\-]/', '', $cell_display);
+                                           }
+                                           echo htmlspecialchars($cell_display);
+                                       ?>"
+                                       inputmode="numeric" autocomplete="off" data-lpignore="true" data-form-type="other"
+                                       pattern="[0-9+\s\-]{7,20}" maxlength="20"
+                                       placeholder="03XXXXXXXXX" required>
                             </div>
                             <div class="col-md-6">
                                 <label for="number_of_persons" class="form-label fw-semibold">
@@ -1568,7 +1620,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                     <i class="bi bi-egg-fried me-1 text-primary"></i>
                                     <?php e('dish'); ?> <span class="text-danger">*</span>
                                 </label>
-                                <button type="button" class="btn btn-sm btn-primary" id="addDishBtn" onclick="addNewDishRow()">
+                                <button type="button" class="btn btn-sm btn-primary" id="addDishBtn">
                                     <i class="bi bi-plus-circle me-1"></i> Add Dish
                                 </button>
                             </div>
@@ -1640,13 +1692,6 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                                 <i class="bi bi-trash"></i> Remove
                                             </button>
                                         </div>
-                                    </div>
-                                    <div class="dish-ingredients-panel mt-3 pt-2 border-top" style="display: none;">
-                                        <div class="small fw-semibold text-muted mb-2">
-                                            <i class="bi bi-plus-circle me-1 text-success"></i>
-                                            Dish ingredients — <strong>+ Add</strong> dabao jo is order mein chahiye
-                                        </div>
-                                        <div class="dish-ingredients-list d-flex flex-wrap gap-2"></div>
                                     </div>
                                 </div>
                             </div>
@@ -1725,14 +1770,14 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                         </div>
                     </div>
                     
-                    <!-- Step 3: Compulsory Items (اضافی سامان + ٹینٹ کا سامان) -->
+                    <!-- Step 3: Compulsory Items (اضافی سامان + ٹنٹ کا سامان) -->
                     <div class="order-step" id="step3" data-step="3" style="display: none;">
                         <div class="step-header mb-4">
                             <h4 class="fw-bold">
                                 <i class="bi bi-box-seam me-2 text-primary"></i>
                                 مرحلہ 3: لازمی اشیاء
                             </h4>
-                            <p class="text-muted">آرڈر کے لیے اضافی سامان اور ٹینٹ کا سامان شامل کریں۔</p>
+                            <p class="text-muted">آرڈر کے لیے اضافی سامان اور ٹنٹ کا سامان شامل کریں۔</p>
                         </div>
 
                         <?php
@@ -2500,111 +2545,6 @@ function updateDishThumb(row) {
 }
 window.updateDishThumb = updateDishThumb;
 
-function renderDishIngredientsPanel(row, preRemovedIds) {
-    if (!row) return;
-    const panel = row.querySelector('.dish-ingredients-panel');
-    const list = row.querySelector('.dish-ingredients-list');
-    const dishSelect = row.querySelector('.dish-select');
-    if (!panel || !list || !dishSelect) return;
-
-    const rowIndex = row.getAttribute('data-row') || '0';
-    const dishId = String(dishSelect.value || '');
-    const ingredients = (dishId && dishIngredientsByDishId[dishId]) ? dishIngredientsByDishId[dishId] : [];
-
-    // Backend still stores "removed" = not added to this order.
-    // Fresh dish select (no preRemovedIds): start with NONE added → user uses + Add.
-    // Edit mode: preRemovedIds = previously excluded; others stay added.
-    let removedSet;
-    if (Array.isArray(preRemovedIds)) {
-        removedSet = new Set(preRemovedIds.map(Number).filter(Boolean));
-        list.querySelectorAll('input.dish-removed-ingredient').forEach(function (inp) {
-            removedSet.add(Number(inp.value));
-        });
-    } else {
-        // New dish / dish change: all ingredients wait for + Add
-        removedSet = new Set(ingredients.map(function (ing) { return Number(ing.ingredient_id); }).filter(Boolean));
-    }
-
-    list.innerHTML = '';
-    if (!dishId || ingredients.length === 0) {
-        panel.style.display = 'none';
-        return;
-    }
-
-    panel.style.display = 'block';
-    ingredients.forEach(function (ing) {
-        const id = Number(ing.ingredient_id);
-        const isAdded = !removedSet.has(id);
-        const qty = ing.quantity != null ? ing.quantity : '';
-        const unit = ing.unit || '';
-        const labelText = (ing.ingredient_name || 'Ingredient') + (qty !== '' ? (' (' + qty + (unit ? ' ' + unit : '') + ')') : '');
-
-        const chip = document.createElement('div');
-        chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border ' +
-            (isAdded ? 'bg-success-subtle border-success' : 'bg-white text-muted');
-        chip.style.fontSize = '0.85rem';
-
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = labelText;
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-sm ' + (isAdded ? 'btn-success' : 'btn-outline-success');
-        btn.style.padding = '0.1rem 0.45rem';
-        btn.style.fontSize = '0.75rem';
-        btn.innerHTML = isAdded
-            ? '<i class="bi bi-check-lg"></i> Added'
-            : '<i class="bi bi-plus-lg"></i> Add';
-        btn.title = isAdded ? 'Order se hatao' : 'Order mein shamil karo';
-
-        let hidden = null;
-        if (!isAdded) {
-            hidden = document.createElement('input');
-            hidden.type = 'hidden';
-            hidden.className = 'dish-removed-ingredient';
-            hidden.name = 'dishes[' + rowIndex + '][removed_ingredients][]';
-            hidden.value = String(id);
-            chip.appendChild(hidden);
-        }
-
-        btn.addEventListener('click', function () {
-            if (hidden) {
-                // + Add → include in order
-                hidden.remove();
-                hidden = null;
-                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-success-subtle border-success';
-                nameSpan.textContent = labelText;
-                btn.className = 'btn btn-sm btn-success';
-                btn.style.padding = '0.1rem 0.45rem';
-                btn.style.fontSize = '0.75rem';
-                btn.innerHTML = '<i class="bi bi-check-lg"></i> Added';
-                btn.title = 'Order se hatao';
-            } else {
-                // Un-add (no "Remove" label — toggle back to + Add)
-                hidden = document.createElement('input');
-                hidden.type = 'hidden';
-                hidden.className = 'dish-removed-ingredient';
-                hidden.name = 'dishes[' + rowIndex + '][removed_ingredients][]';
-                hidden.value = String(id);
-                chip.insertBefore(hidden, nameSpan);
-                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-white text-muted';
-                nameSpan.textContent = labelText;
-                btn.className = 'btn btn-sm btn-outline-success';
-                btn.style.padding = '0.1rem 0.45rem';
-                btn.style.fontSize = '0.75rem';
-                btn.innerHTML = '<i class="bi bi-plus-lg"></i> Add';
-                btn.title = 'Order mein shamil karo';
-            }
-        });
-
-        chip.appendChild(nameSpan);
-        chip.appendChild(btn);
-        list.appendChild(chip);
-    });
-}
-
-window.renderDishIngredientsPanel = renderDishIngredientsPanel;
-
 // Validate form submission - ensure correct mode is set
 function validateFormSubmission() {
     const createOrderInput = document.getElementById('createOrderInput');
@@ -2769,7 +2709,27 @@ function editOrder(orderNumber) {
         const deliveryTime = document.getElementById('delivery_time');
         
         if (customerName) customerName.value = order.customer_name || '';
-        if (customerCell) customerCell.value = order.customer_cell || '';
+        if (customerCell) {
+            let cellVal = (order.customer_cell || '').trim();
+            if (cellVal.indexOf('@') !== -1 || /[a-zA-Z]/.test(cellVal) || !/[0-9]/.test(cellVal)) {
+                cellVal = '';
+            } else {
+                cellVal = cellVal.replace(/[^0-9+\s\-]/g, '');
+            }
+            customerCell.value = cellVal;
+            setTimeout(function() {
+                let v = (customerCell.value || '').trim();
+                if (v.indexOf('@') !== -1 || /[a-zA-Z]/.test(v)) {
+                    customerCell.value = '';
+                }
+            }, 100);
+            setTimeout(function() {
+                let v = (customerCell.value || '').trim();
+                if (v.indexOf('@') !== -1 || /[a-zA-Z]/.test(v)) {
+                    customerCell.value = '';
+                }
+            }, 400);
+        }
         if (numberOfPersons) numberOfPersons.value = order.number_of_persons || '';
         if (shift) shift.value = order.shift || '';
         if (deliveryDate) {
@@ -2829,9 +2789,6 @@ function editOrder(orderNumber) {
                                 if (unitSelect && dish.unit) {
                                     unitSelect.value = dish.unit;
                                 }
-                                if (typeof renderDishIngredientsPanel === 'function') {
-                                    renderDishIngredientsPanel(row, dish.removed_ingredient_ids || []);
-                                }
                             }, 200);
                         } else {
                             // If updateUnitDropdown not available yet, initialize unit dropdown manually
@@ -2840,9 +2797,6 @@ function editOrder(orderNumber) {
                                 setTimeout(function() {
                                     if (unitSelect && dish.unit) {
                                         unitSelect.value = dish.unit;
-                                    }
-                                    if (typeof renderDishIngredientsPanel === 'function') {
-                                        renderDishIngredientsPanel(row, dish.removed_ingredient_ids || []);
                                     }
                                 }, 100);
                             }
@@ -3085,6 +3039,16 @@ function validateCurrentStep() {
             alert('Please enter customer cell number');
             customerCell.focus();
             return false;
+        }
+        if (customerCell) {
+            const cellVal = customerCell.value.trim();
+            if (cellVal.indexOf('@') !== -1 || /[a-zA-Z]/.test(cellVal) || !/[0-9]/.test(cellVal)) {
+                alert('گاہک کا نمبر صرف فون نمبر ہونا چاہیے — email نہیں');
+                customerCell.value = '';
+                customerCell.focus();
+                return false;
+            }
+            customerCell.value = cellVal.replace(/[^0-9+\s\-]/g, '');
         }
         if (orderDate && !orderDate.value) {
             alert('Please select order date');
@@ -3494,27 +3458,76 @@ document.addEventListener('DOMContentLoaded', function() {
     const customerDatalist = document.getElementById('customer_names_list');
     
     if (customerName && customerCell && customerDatalist) {
-        // Store customer data for quick lookup
+        // Store customer data for quick lookup (phone only — never email)
         const customerData = {};
         <?php foreach ($all_customer_names as $cust_info): ?>
         customerData['<?php echo addslashes($cust_info['name']); ?>'] = '<?php echo addslashes($cust_info['cell']); ?>';
         <?php endforeach; ?>
+
+        function isPhoneValue(value) {
+            const v = (value || '').trim();
+            return v !== '' && v.indexOf('@') === -1 && /[0-9]/.test(v) && !/[a-zA-Z]/.test(v);
+        }
+
+        function sanitizeCustomerCellField() {
+            if (!customerCell) return;
+            let v = (customerCell.value || '').trim();
+            // Strip email / letters — number field only
+            if (v.indexOf('@') !== -1 || /[a-zA-Z]/.test(v)) {
+                customerCell.value = '';
+                return;
+            }
+            const cleaned = v.replace(/[^0-9+\s\-]/g, '');
+            if (customerCell.value !== cleaned) {
+                customerCell.value = cleaned;
+            }
+        }
+
+        function fillCustomerCell(selectedName) {
+            const cell = customerData[selectedName];
+            if (isPhoneValue(cell)) {
+                customerCell.value = cell;
+            } else if (customerData.hasOwnProperty(selectedName)) {
+                // Known customer but no phone saved — clear email/junk
+                customerCell.value = '';
+            }
+            // Browser often autofills email into the next field after name select
+            setTimeout(sanitizeCustomerCellField, 0);
+            setTimeout(sanitizeCustomerCellField, 50);
+            setTimeout(sanitizeCustomerCellField, 200);
+        }
         
         // Handle input event to auto-fill cell number
         customerName.addEventListener('input', function() {
-            const selectedName = this.value.trim();
-            if (customerData[selectedName]) {
-                customerCell.value = customerData[selectedName];
-            }
+            fillCustomerCell(this.value.trim());
         });
         
         // Handle change event (when dropdown option is selected)
         customerName.addEventListener('change', function() {
-            const selectedName = this.value.trim();
-            if (customerData[selectedName]) {
-                customerCell.value = customerData[selectedName];
-            }
+            fillCustomerCell(this.value.trim());
         });
+
+        // Allow only phone characters in customer number field
+        customerCell.addEventListener('input', sanitizeCustomerCellField);
+        customerCell.addEventListener('change', sanitizeCustomerCellField);
+        customerCell.addEventListener('blur', sanitizeCustomerCellField);
+        customerCell.addEventListener('focus', sanitizeCustomerCellField);
+        customerCell.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+            if (text.indexOf('@') !== -1 || /[a-zA-Z]/.test(text)) {
+                return;
+            }
+            const cleaned = text.replace(/[^0-9+\s\-]/g, '');
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            this.value = this.value.slice(0, start) + cleaned + this.value.slice(end);
+        });
+
+        // Clear any email autofilled on page load
+        sanitizeCustomerCellField();
+        setTimeout(sanitizeCustomerCellField, 100);
+        setTimeout(sanitizeCustomerCellField, 500);
     }
     
     // Listen for new form field changes
@@ -3742,9 +3755,6 @@ document.addEventListener('DOMContentLoaded', function() {
             unitSelect.removeAttribute('required');
         }
 
-        if (typeof renderDishIngredientsPanel === 'function') {
-            renderDishIngredientsPanel(row);
-        }
         if (typeof updateDishThumb === 'function') {
             updateDishThumb(row);
         }
@@ -3863,13 +3873,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         <i class="bi bi-trash"></i> Remove
                     </button>
                 </div>
-            </div>
-            <div class="dish-ingredients-panel mt-3 pt-2 border-top" style="display: none;">
-                <div class="small fw-semibold text-muted mb-2">
-                    <i class="bi bi-plus-circle me-1 text-success"></i>
-                    Dish ingredients — <strong>+ Add</strong> dabao jo is order mein chahiye
-                </div>
-                <div class="dish-ingredients-list d-flex flex-wrap gap-2"></div>
             </div>
         `;
         
@@ -6077,9 +6080,6 @@ function selectDishFromModal(dishId, dishName) {
         if (typeof updateDishThumb === 'function') {
             updateDishThumb(row);
         }
-        if (typeof renderDishIngredientsPanel === 'function') {
-            renderDishIngredientsPanel(row);
-        }
     }
     
     // Close modal
@@ -6093,7 +6093,7 @@ function selectDishFromModal(dishId, dishName) {
     }
 }
 
-// Add new dish row function (called from button)
+// Add new dish row function (called from button / other scripts)
 function addNewDishRow() {
     const addDishBtn = document.getElementById('addDishBtn');
     if (addDishBtn) {

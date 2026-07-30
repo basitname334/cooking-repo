@@ -46,6 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     $customer_id = intval($_POST['customer_id'] ?? 0);
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_cell = trim($_POST['customer_cell'] ?? '');
+    $customer_cell = preg_replace('/[^0-9+\s\-]/', '', $customer_cell);
+    $customer_cell = trim($customer_cell);
     $order_date = trim($_POST['order_date'] ?? '');
     $order_time = trim($_POST['order_time'] ?? '');
     $number_of_persons = intval($_POST['number_of_persons'] ?? 0);
@@ -135,7 +137,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
 $customers = db_fetch_all(
     $conn,
     "SELECT u.id, u.name, u.email, 
-    (SELECT o.customer_cell FROM orders o WHERE o.customer_id = u.id ORDER BY o.order_date DESC LIMIT 1) as last_cell
+    (SELECT o.customer_cell FROM orders o
+     WHERE o.customer_id = u.id
+       AND o.customer_cell IS NOT NULL AND o.customer_cell <> ''
+       AND o.customer_cell NOT LIKE '%@%'
+     ORDER BY o.order_date DESC LIMIT 1) as last_cell
     FROM users u 
     WHERE u.role = 'user' 
     ORDER BY u.name"
@@ -512,8 +518,18 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Customer Cell No <span class="text-danger">*</span></label>
-                            <input type="tel" class="form-control" name="customer_cell" id="customer_cell" required 
-                                   value="<?php echo htmlspecialchars($_POST['customer_cell'] ?? ''); ?>">
+                            <input type="tel" class="form-control" name="customer_cell" id="customer_cell" required
+                                   autocomplete="off" inputmode="numeric" data-lpignore="true"
+                                   pattern="[0-9+\s\-]{7,20}" maxlength="20" placeholder="03XXXXXXXXX"
+                                   value="<?php
+                                       $cc = trim($_POST['customer_cell'] ?? '');
+                                       if ($cc !== '' && (strpos($cc, '@') !== false || !preg_match('/[0-9]/', $cc))) {
+                                           $cc = '';
+                                       } else {
+                                           $cc = preg_replace('/[^0-9+\s\-]/', '', $cc);
+                                       }
+                                       echo htmlspecialchars($cc);
+                                   ?>">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Date & Time <span class="text-danger">*</span></label>
@@ -963,12 +979,14 @@ function loadCustomerData() {
             customerNameInput.value = customerName;
         }
         
-        // Populate cell number if available from previous orders
-        if (customerCellInput && customerCell) {
-            customerCellInput.value = customerCell;
-        } else if (customerCellInput && !customerCellInput.value) {
-            // Focus on cell input if no previous cell number found
-            customerCellInput.focus();
+        // Populate cell number if available from previous orders (phone only)
+        if (customerCellInput) {
+            if (customerCell && customerCell.indexOf('@') === -1 && /[0-9]/.test(customerCell) && !/[a-zA-Z]/.test(customerCell)) {
+                customerCellInput.value = customerCell.replace(/[^0-9+\s\-]/g, '');
+            } else if (!customerCellInput.value || customerCellInput.value.indexOf('@') !== -1) {
+                customerCellInput.value = '';
+                customerCellInput.focus();
+            }
         }
     } else {
         // Clear customer ID if no customer selected
@@ -1095,8 +1113,13 @@ function selectCustomer(customerId, customerName, customerCell) {
     // Set values (data attributes already contain unescaped text)
     if (customerIdInput) customerIdInput.value = customerId;
     if (customerNameInput) customerNameInput.value = customerName || '';
-    if (customerCellInput && customerCell) {
-        customerCellInput.value = customerCell;
+    if (customerCellInput && customerCell && customerCell.indexOf('@') === -1 && /[0-9]/.test(customerCell) && !/[a-zA-Z]/.test(customerCell)) {
+        customerCellInput.value = customerCell.replace(/[^0-9+\s\-]/g, '');
+    } else if (customerCellInput && (!customerCell || customerCell.indexOf('@') !== -1)) {
+        // Don't leave email in the phone field
+        if ((customerCellInput.value || '').indexOf('@') !== -1 || /[a-zA-Z]/.test(customerCellInput.value || '')) {
+            customerCellInput.value = '';
+        }
     }
     
     // Update the select dropdown if it exists
