@@ -1643,8 +1643,8 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                     </div>
                                     <div class="dish-ingredients-panel mt-3 pt-2 border-top" style="display: none;">
                                         <div class="small fw-semibold text-muted mb-2">
-                                            <i class="bi bi-dash-circle me-1"></i>
-                                            Dish ingredients — remove jo is order mein nahi chahiye
+                                            <i class="bi bi-plus-circle me-1 text-success"></i>
+                                            Dish ingredients — <strong>+ Add</strong> dabao jo is order mein chahiye
                                         </div>
                                         <div class="dish-ingredients-list d-flex flex-wrap gap-2"></div>
                                     </div>
@@ -2525,10 +2525,19 @@ function renderDishIngredientsPanel(row, preRemovedIds) {
     const dishId = String(dishSelect.value || '');
     const ingredients = (dishId && dishIngredientsByDishId[dishId]) ? dishIngredientsByDishId[dishId] : [];
 
-    const removedSet = new Set((preRemovedIds || []).map(Number).filter(Boolean));
-    list.querySelectorAll('input.dish-removed-ingredient').forEach(function (inp) {
-        removedSet.add(Number(inp.value));
-    });
+    // Backend still stores "removed" = not added to this order.
+    // Fresh dish select (no preRemovedIds): start with NONE added → user uses + Add.
+    // Edit mode: preRemovedIds = previously excluded; others stay added.
+    let removedSet;
+    if (Array.isArray(preRemovedIds)) {
+        removedSet = new Set(preRemovedIds.map(Number).filter(Boolean));
+        list.querySelectorAll('input.dish-removed-ingredient').forEach(function (inp) {
+            removedSet.add(Number(inp.value));
+        });
+    } else {
+        // New dish / dish change: all ingredients wait for + Add
+        removedSet = new Set(ingredients.map(function (ing) { return Number(ing.ingredient_id); }).filter(Boolean));
+    }
 
     list.innerHTML = '';
     if (!dishId || ingredients.length === 0) {
@@ -2539,28 +2548,31 @@ function renderDishIngredientsPanel(row, preRemovedIds) {
     panel.style.display = 'block';
     ingredients.forEach(function (ing) {
         const id = Number(ing.ingredient_id);
-        const isRemoved = removedSet.has(id);
+        const isAdded = !removedSet.has(id);
         const qty = ing.quantity != null ? ing.quantity : '';
         const unit = ing.unit || '';
         const labelText = (ing.ingredient_name || 'Ingredient') + (qty !== '' ? (' (' + qty + (unit ? ' ' + unit : '') + ')') : '');
 
         const chip = document.createElement('div');
         chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border ' +
-            (isRemoved ? 'bg-danger-subtle text-decoration-line-through text-muted' : 'bg-light');
+            (isAdded ? 'bg-success-subtle border-success' : 'bg-white text-muted');
         chip.style.fontSize = '0.85rem';
 
         const nameSpan = document.createElement('span');
-        nameSpan.textContent = (isRemoved ? 'Removed: ' : '') + labelText;
+        nameSpan.textContent = labelText;
 
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'btn btn-sm ' + (isRemoved ? 'btn-outline-success' : 'btn-outline-danger');
-        btn.style.padding = '0 0.4rem';
+        btn.className = 'btn btn-sm ' + (isAdded ? 'btn-success' : 'btn-outline-success');
+        btn.style.padding = '0.1rem 0.45rem';
         btn.style.fontSize = '0.75rem';
-        btn.textContent = isRemoved ? 'Undo' : 'Remove';
+        btn.innerHTML = isAdded
+            ? '<i class="bi bi-check-lg"></i> Added'
+            : '<i class="bi bi-plus-lg"></i> Add';
+        btn.title = isAdded ? 'Order se hatao' : 'Order mein shamil karo';
 
         let hidden = null;
-        if (isRemoved) {
+        if (!isAdded) {
             hidden = document.createElement('input');
             hidden.type = 'hidden';
             hidden.className = 'dish-removed-ingredient';
@@ -2571,28 +2583,31 @@ function renderDishIngredientsPanel(row, preRemovedIds) {
 
         btn.addEventListener('click', function () {
             if (hidden) {
-                // Undo remove
+                // + Add → include in order
                 hidden.remove();
                 hidden = null;
-                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-light';
+                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-success-subtle border-success';
                 nameSpan.textContent = labelText;
-                btn.className = 'btn btn-sm btn-outline-danger';
-                btn.style.padding = '0 0.4rem';
+                btn.className = 'btn btn-sm btn-success';
+                btn.style.padding = '0.1rem 0.45rem';
                 btn.style.fontSize = '0.75rem';
-                btn.textContent = 'Remove';
+                btn.innerHTML = '<i class="bi bi-check-lg"></i> Added';
+                btn.title = 'Order se hatao';
             } else {
+                // Un-add (no "Remove" label — toggle back to + Add)
                 hidden = document.createElement('input');
                 hidden.type = 'hidden';
                 hidden.className = 'dish-removed-ingredient';
                 hidden.name = 'dishes[' + rowIndex + '][removed_ingredients][]';
                 hidden.value = String(id);
                 chip.insertBefore(hidden, nameSpan);
-                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-danger-subtle text-decoration-line-through text-muted';
-                nameSpan.textContent = 'Removed: ' + labelText;
+                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-white text-muted';
+                nameSpan.textContent = labelText;
                 btn.className = 'btn btn-sm btn-outline-success';
-                btn.style.padding = '0 0.4rem';
+                btn.style.padding = '0.1rem 0.45rem';
                 btn.style.fontSize = '0.75rem';
-                btn.textContent = 'Undo';
+                btn.innerHTML = '<i class="bi bi-plus-lg"></i> Add';
+                btn.title = 'Order mein shamil karo';
             }
         });
 
@@ -3863,8 +3878,8 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="dish-ingredients-panel mt-3 pt-2 border-top" style="display: none;">
                 <div class="small fw-semibold text-muted mb-2">
-                    <i class="bi bi-dash-circle me-1"></i>
-                    Dish ingredients — remove jo is order mein nahi chahiye
+                    <i class="bi bi-plus-circle me-1 text-success"></i>
+                    Dish ingredients — <strong>+ Add</strong> dabao jo is order mein chahiye
                 </div>
                 <div class="dish-ingredients-list d-flex flex-wrap gap-2"></div>
             </div>
