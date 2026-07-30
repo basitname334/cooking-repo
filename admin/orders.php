@@ -1781,7 +1781,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                             </div>
                         </div>
                         
-                        <!-- Order Ingredients: from selected dishes + optional extras -->
+                        <!-- Order Ingredients: from selected dishes + ADD/LESS adjustments -->
                         <div class="mt-5 pt-4 border-top">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <label class="form-label fw-bold mb-0">
@@ -1789,12 +1789,11 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                     آرڈر کے اجزاء
                                 </label>
                                 <button type="button" class="btn btn-sm btn-success" id="addExtraIngredientBtn">
-                                    <i class="bi bi-plus-circle me-1"></i> <?php e('add'); ?> <?php e('extra_ingredients'); ?>
+                                    <i class="bi bi-plus-slash-minus me-1"></i> + ADD / LESS INGREDIENTS
                                 </button>
                             </div>
                             <p class="text-muted small mb-3">
-                                Selected dishes ke ingredients yahan dikhte hain. Quantity kam kar sakte ho.
-                                Extra ingredient alag se Add se shamil karo.
+                                Ingredients kam ya zyada karne ke liye is button ka istemal karein.
                             </p>
                             <div id="orderDishIngredientsContainer" class="mb-3">
                                 <div id="orderDishIngredientsEmpty" class="text-muted small py-2" style="display:none;">
@@ -2131,6 +2130,85 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
             </div>
             <div class="modal-footer" style="border-top: 1px solid #e2e8f0;">
                 <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ADD / LESS Ingredients Modal -->
+<div class="modal fade" id="ingredientAdjustModal" tabindex="-1" aria-labelledby="ingredientAdjustModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); border: none;">
+                <h5 class="modal-title text-white fw-bold" id="ingredientAdjustModalLabel">
+                    <i class="bi bi-plus-slash-minus me-2"></i>ADD / LESS Ingredients
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Search ingredient</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="ingredientAdjustSearch"
+                               placeholder="Type to search (500+ ingredients)..." autocomplete="off">
+                        <button type="button" class="btn btn-outline-secondary" id="clearIngredientAdjustSearch">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted">Search karke ingredient select karein — list pehle se nahi dikhti.</small>
+                </div>
+
+                <div id="ingredientAdjustSearchResults" class="list-group mb-3" style="max-height: 240px; overflow-y: auto;">
+                    <div class="text-muted small p-3 text-center" id="ingredientAdjustSearchHint">
+                        Kam az kam 1 letter type karein…
+                    </div>
+                </div>
+
+                <div id="ingredientAdjustSelectedPanel" class="border rounded p-3 bg-light" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <div class="fw-bold" id="ingredientAdjustSelectedName">—</div>
+                            <small class="text-muted" id="ingredientAdjustSelectedMeta"></small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="ingredientAdjustClearSelection">Change</button>
+                    </div>
+
+                    <div class="btn-group w-100 mb-3" role="group" aria-label="Add or Less">
+                        <input type="radio" class="btn-check" name="ingredientAdjustMode" id="ingredientAdjustModeAdd" value="add" checked>
+                        <label class="btn btn-outline-success" for="ingredientAdjustModeAdd">
+                            <i class="bi bi-plus-lg me-1"></i> ADD
+                        </label>
+                        <input type="radio" class="btn-check" name="ingredientAdjustMode" id="ingredientAdjustModeLess" value="less">
+                        <label class="btn btn-outline-danger" for="ingredientAdjustModeLess">
+                            <i class="bi bi-dash-lg me-1"></i> LESS
+                        </label>
+                    </div>
+
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold mb-1">Quantity</label>
+                            <div class="input-group">
+                                <button type="button" class="btn btn-outline-secondary" id="ingredientAdjustQtyMinus">−</button>
+                                <input type="number" class="form-control text-center" id="ingredientAdjustQty" value="1" min="0.01" step="0.01">
+                                <button type="button" class="btn btn-outline-secondary" id="ingredientAdjustQtyPlus">+</button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold mb-1">Unit</label>
+                            <input type="text" class="form-control" id="ingredientAdjustUnit" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="button" class="btn btn-success w-100" id="ingredientAdjustApplyBtn">
+                                <i class="bi bi-check-lg me-1"></i> Apply
+                            </button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2" id="ingredientAdjustPreview"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -2687,6 +2765,233 @@ function syncOrderIngredientsPanel(presetOverrides) {
 }
 window.syncOrderIngredientsPanel = syncOrderIngredientsPanel;
 
+/** Collect current dish-recipe ingredient totals from selected dishes (defaults). */
+function getAggregatedDishIngredientDefaults() {
+    const aggregated = {};
+    document.querySelectorAll('.dish-row').forEach(function(row) {
+        const select = row.querySelector('.dish-select');
+        const qtyInput = row.querySelector('.dish-quantity');
+        if (!select || !select.value) return;
+        const dishId = String(select.value);
+        const orderQty = parseFloat(qtyInput && qtyInput.value ? qtyInput.value : 0) || 0;
+        if (orderQty <= 0) return;
+        const ings = dishIngredientsByDishId[dishId] || [];
+        ings.forEach(function(ing) {
+            const iid = String(ing.ingredient_id || '');
+            if (!iid || iid === '0') return;
+            const scaled = (parseFloat(ing.quantity) || 0) * orderQty;
+            if (!aggregated[iid]) {
+                aggregated[iid] = {
+                    ingredient_id: iid,
+                    ingredient_name: ing.ingredient_name || ('#' + iid),
+                    quantity: 0,
+                    unit: ing.unit || ''
+                };
+            }
+            aggregated[iid].quantity += scaled;
+            if (!aggregated[iid].unit && ing.unit) aggregated[iid].unit = ing.unit;
+        });
+    });
+    return aggregated;
+}
+
+function isIngredientInSelectedDishRecipes(ingredientId) {
+    const id = String(ingredientId);
+    const defaults = getAggregatedDishIngredientDefaults();
+    return Object.prototype.hasOwnProperty.call(defaults, id);
+}
+
+function getCurrentOrderIngredientQty(ingredientId) {
+    const id = String(ingredientId);
+    const row = document.querySelector('#orderDishIngredientsContainer .order-dish-ingredient-row[data-ingredient-id="' + id + '"]');
+    if (row) {
+        if (row.style.display === 'none') return 0;
+        const qtyInput = row.querySelector('.order-dish-ing-qty');
+        if (qtyInput) return parseFloat(qtyInput.value) || 0;
+    }
+    const defaults = getAggregatedDishIngredientDefaults();
+    return defaults[id] ? (parseFloat(defaults[id].quantity) || 0) : 0;
+}
+
+function collectCurrentIngredientOverrides() {
+    const overrides = {};
+    document.querySelectorAll('#orderDishIngredientsContainer .order-dish-ingredient-row').forEach(function(row) {
+        const id = row.getAttribute('data-ingredient-id');
+        if (!id) return;
+        const qtyInput = row.querySelector('.order-dish-ing-qty');
+        const unitInput = row.querySelector('input[name*="[unit]"]');
+        let qty = 0;
+        if (row.style.display === 'none') {
+            qty = 0;
+        } else if (qtyInput) {
+            qty = parseFloat(qtyInput.value) || 0;
+        }
+        overrides[id] = {
+            quantity: qty,
+            unit: unitInput ? unitInput.value : ''
+        };
+    });
+    return overrides;
+}
+
+let extraIngredientRowCount = 0;
+
+function appendExtraIngredientRow(preset) {
+    const extraIngredientsContainer = document.getElementById('extraIngredientsContainer');
+    if (!extraIngredientsContainer) return null;
+    const reviewTranslations = window.reviewTranslations || {};
+    const ingredientsData = window.ingredientsData || [];
+    const rowIndex = extraIngredientRowCount++;
+    const newRow = document.createElement('div');
+    newRow.className = 'extra-ingredient-row mb-3 p-3 border rounded';
+    newRow.setAttribute('data-row', String(rowIndex));
+    newRow.style.display = 'block';
+    newRow.innerHTML =
+        '<div class="row g-3">' +
+        '<div class="col-md-4">' +
+        '<label class="form-label fw-semibold small">Ingredient <span class="text-danger">*</span></label>' +
+        '<select class="form-select extra-ingredient-select" name="extra_ingredients[' + rowIndex + '][ingredient_id]">' +
+        (typeof getIngredientOptionsHTML === 'function' ? getIngredientOptionsHTML() : '<option value="">Select</option>') +
+        '</select></div>' +
+        '<div class="col-md-3">' +
+        '<label class="form-label fw-semibold small">Quantity <span class="text-danger">*</span></label>' +
+        '<input type="number" class="form-control extra-ingredient-quantity" name="extra_ingredients[' + rowIndex + '][quantity]" placeholder="0.00" step="0.01" min="0.01">' +
+        '</div>' +
+        '<div class="col-md-3">' +
+        '<label class="form-label fw-semibold small">Unit</label>' +
+        '<select class="form-select extra-ingredient-unit" name="extra_ingredients[' + rowIndex + '][unit]">' +
+        '<option value="">' + (reviewTranslations.select_unit || 'Select Unit') + '</option>' +
+        '<option value="کلو">کلو</option><option value="گرام">گرام</option>' +
+        '<option value="عدد">عدد</option><option value="گچھی">گچھی</option>' +
+        '</select></div>' +
+        '<div class="col-md-2">' +
+        '<label class="form-label fw-semibold small d-block">&nbsp;</label>' +
+        '<button type="button" class="btn btn-sm btn-danger remove-extra-ingredient-btn"><i class="bi bi-trash"></i> Remove</button>' +
+        '</div></div>';
+    extraIngredientsContainer.appendChild(newRow);
+
+    const select = newRow.querySelector('.extra-ingredient-select');
+    const unitSelect = newRow.querySelector('.extra-ingredient-unit');
+    const qtyInput = newRow.querySelector('.extra-ingredient-quantity');
+    if (select && unitSelect) {
+        select.addEventListener('change', function() {
+            const ingredient = ingredientsData.find(function(i) { return i.id == this.value; }.bind(this));
+            if (ingredient && ingredient.unit) {
+                const validUnits = ['کلو', 'گرام', 'عدد', 'گچھی'];
+                if (validUnits.includes(ingredient.unit)) {
+                    unitSelect.value = ingredient.unit;
+                } else {
+                    let opt = Array.from(unitSelect.options).find(function(o) { return o.value === ingredient.unit; });
+                    if (!opt) {
+                        opt = document.createElement('option');
+                        opt.value = ingredient.unit;
+                        opt.textContent = ingredient.unit;
+                        unitSelect.appendChild(opt);
+                    }
+                    unitSelect.value = ingredient.unit;
+                }
+            }
+        });
+    }
+    if (preset) {
+        if (select && preset.ingredient_id) select.value = preset.ingredient_id;
+        if (qtyInput && preset.quantity != null) qtyInput.value = preset.quantity;
+        if (unitSelect && preset.unit) {
+            let opt = Array.from(unitSelect.options).find(function(o) { return o.value === preset.unit; });
+            if (!opt) {
+                opt = document.createElement('option');
+                opt.value = preset.unit;
+                opt.textContent = preset.unit;
+                unitSelect.appendChild(opt);
+            }
+            unitSelect.value = preset.unit;
+        }
+        if (select) select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return newRow;
+}
+window.appendExtraIngredientRow = appendExtraIngredientRow;
+
+function findExtraIngredientRow(ingredientId) {
+    const id = String(ingredientId);
+    let found = null;
+    document.querySelectorAll('#extraIngredientsContainer .extra-ingredient-row').forEach(function(row) {
+        const sel = row.querySelector('.extra-ingredient-select');
+        if (sel && String(sel.value) === id) found = row;
+    });
+    return found;
+}
+
+/**
+ * Apply ADD/LESS from modal into dish ingredient overrides or extra ingredients.
+ */
+function applyIngredientAddLess(ingredientId, mode, amount, unit, name) {
+    const id = String(ingredientId);
+    const amt = Math.abs(parseFloat(amount) || 0);
+    if (!id || amt <= 0) {
+        alert('Valid quantity darj karein.');
+        return false;
+    }
+    const inDish = isIngredientInSelectedDishRecipes(id);
+
+    if (inDish) {
+        const current = getCurrentOrderIngredientQty(id);
+        let next = mode === 'less' ? (current - amt) : (current + amt);
+        if (next < 0) next = 0;
+        const overrides = collectCurrentIngredientOverrides();
+        const defaults = getAggregatedDishIngredientDefaults();
+        overrides[id] = {
+            quantity: next,
+            unit: unit || (defaults[id] && defaults[id].unit) || ''
+        };
+        // Ensure all default ingredients are represented so sync keeps them
+        Object.keys(defaults).forEach(function(did) {
+            if (!Object.prototype.hasOwnProperty.call(overrides, did)) {
+                overrides[did] = {
+                    quantity: defaults[did].quantity,
+                    unit: defaults[did].unit || ''
+                };
+            }
+        });
+        syncOrderIngredientsPanel(overrides);
+        return true;
+    }
+
+    // Not in dish recipe → treat as extra ingredient
+    if (mode === 'add') {
+        const existing = findExtraIngredientRow(id);
+        if (existing) {
+            const qtyInput = existing.querySelector('.extra-ingredient-quantity');
+            const cur = parseFloat(qtyInput && qtyInput.value ? qtyInput.value : 0) || 0;
+            qtyInput.value = cur + amt;
+        } else {
+            appendExtraIngredientRow({
+                ingredient_id: id,
+                quantity: amt,
+                unit: unit || ''
+            });
+        }
+        return true;
+    }
+
+    // LESS on non-dish ingredient: reduce extra if present
+    const existing = findExtraIngredientRow(id);
+    if (!existing) {
+        alert('Yeh ingredient dish recipe mein nahi hai, aur extra list mein bhi nahi — LESS apply nahi ho sakta.');
+        return false;
+    }
+    const qtyInput = existing.querySelector('.extra-ingredient-quantity');
+    const cur = parseFloat(qtyInput && qtyInput.value ? qtyInput.value : 0) || 0;
+    const next = cur - amt;
+    if (next <= 0) {
+        existing.remove();
+    } else {
+        qtyInput.value = next;
+    }
+    return true;
+}
+window.applyIngredientAddLess = applyIngredientAddLess;
+
 document.addEventListener('click', function(e) {
     const btn = e.target.closest('.remove-order-dish-ing-btn');
     if (!btn) return;
@@ -3019,30 +3324,14 @@ function editOrder(orderNumber) {
                 if (extrasContainer) {
                     extrasContainer.querySelectorAll('.extra-ingredient-row').forEach(function(r) { r.remove(); });
                 }
-                const addExtraBtn = document.getElementById('addExtraIngredientBtn');
                 extras.forEach(function(extraIng) {
-                    if (!addExtraBtn) return;
-                    addExtraBtn.click();
-                    const rows = document.querySelectorAll('#extraIngredientsContainer .extra-ingredient-row');
-                    const last = rows[rows.length - 1];
-                    if (!last) return;
-                    const sel = last.querySelector('.extra-ingredient-select');
-                    const qty = last.querySelector('.extra-ingredient-quantity');
-                    const unit = last.querySelector('.extra-ingredient-unit');
-                    if (sel) sel.value = extraIng.ingredient_id || '';
-                    if (qty) qty.value = extraIng.quantity || '';
-                    if (unit && extraIng.unit) {
-                        unit.value = extraIng.unit;
-                        if (unit.value !== extraIng.unit) {
-                            // allow custom unit text if not in list
-                            const opt = document.createElement('option');
-                            opt.value = extraIng.unit;
-                            opt.textContent = extraIng.unit;
-                            unit.appendChild(opt);
-                            unit.value = extraIng.unit;
-                        }
+                    if (typeof appendExtraIngredientRow === 'function') {
+                        appendExtraIngredientRow({
+                            ingredient_id: extraIng.ingredient_id,
+                            quantity: extraIng.quantity,
+                            unit: extraIng.unit || ''
+                        });
                     }
-                    if (sel) sel.dispatchEvent(new Event('change', { bubbles: true }));
                 });
             }, 350);
         }
@@ -3911,12 +4200,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to create ingredient options HTML
     function getIngredientOptionsHTML() {
         let html = '<option value="">Select Ingredient</option>';
-        ingredientsData.forEach(function(ingredient) {
-            const unitText = ingredient.unit ? ' (' + escapeHtml(ingredient.unit) + ')' : '';
-            html += '<option value="' + ingredient.id + '">' + escapeHtml(ingredient.name) + unitText + '</option>';
+        const list = window.ingredientsData || ingredientsData || [];
+        list.forEach(function(ingredient) {
+            const name = escapeHtml(ingredient.name || '');
+            const unitPart = ingredient.unit ? ' (' + escapeHtml(ingredient.unit) + ')' : '';
+            html += '<option value="' + ingredient.id + '">' + name + unitPart + '</option>';
         });
         return html;
     }
+    window.getIngredientOptionsHTML = getIngredientOptionsHTML;
     
     // Function to escape HTML
     function escapeHtml(text) {
@@ -4223,107 +4515,234 @@ document.addEventListener('DOMContentLoaded', function() {
         syncOrderIngredientsPanel();
     }
     
-    // Extra Ingredients Management
+    // ADD / LESS Ingredients modal
     const extraIngredientsContainer = document.getElementById('extraIngredientsContainer');
     const addExtraIngredientBtn = document.getElementById('addExtraIngredientBtn');
-    let extraIngredientRowCount = 0;
-    
-    // Add extra ingredient row
-    if (addExtraIngredientBtn && extraIngredientsContainer) {
-        addExtraIngredientBtn.addEventListener('click', function() {
-            const newRow = document.createElement('div');
-            newRow.className = 'extra-ingredient-row mb-3 p-3 border rounded';
-            newRow.setAttribute('data-row', extraIngredientRowCount);
-            newRow.style.display = 'block';
-            
-            const reviewTranslations = window.reviewTranslations || {};
-            newRow.innerHTML = `
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold small">
-                            ${reviewTranslations.ingredient_name || 'Ingredient'} <span class="text-danger">*</span>
-                        </label>
-                        <select class="form-select extra-ingredient-select" name="extra_ingredients[${extraIngredientRowCount}][ingredient_id]">
-                            ${getIngredientOptionsHTML()}
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold small">
-                            ${reviewTranslations.quantity || 'Quantity'} <span class="text-danger">*</span>
-                        </label>
-                        <input type="number" class="form-control extra-ingredient-quantity" 
-                               name="extra_ingredients[${extraIngredientRowCount}][quantity]" 
-                               placeholder="0.00" step="0.01" min="0.01">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label fw-semibold small">
-                            ${reviewTranslations.unit_label || 'Unit'}
-                        </label>
-                        <select class="form-select extra-ingredient-unit" name="extra_ingredients[${extraIngredientRowCount}][unit]">
-                            <option value="">${reviewTranslations.select_unit || 'Select Unit'}</option>
-                            <option value="کلو">کلو</option>
-                            <option value="گرام">گرام</option>
-                            <option value="عدد">عدد</option>
-                            <option value="گچھی">گچھی</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-semibold small d-block">&nbsp;</label>
-                        <button type="button" class="btn btn-sm btn-danger remove-extra-ingredient-btn">
-                            <i class="bi bi-trash"></i> ${reviewTranslations.delete || 'Remove'}
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            extraIngredientsContainer.appendChild(newRow);
-            
-            // Auto-fill unit when ingredient is selected (if unit matches one of the dropdown options)
-            const select = newRow.querySelector('.extra-ingredient-select');
-            const unitSelect = newRow.querySelector('.extra-ingredient-unit');
-            if (select && unitSelect) {
-                select.addEventListener('change', function() {
-                    const ingredientId = this.value;
-                    const ingredient = ingredientsData.find(i => i.id == ingredientId);
-                    if (ingredient && ingredient.unit) {
-                        // Check if the ingredient unit matches one of the dropdown options
-                        const validUnits = ['کلو', 'گرام', 'عدد', 'گچھی'];
-                        if (validUnits.includes(ingredient.unit)) {
-                            unitSelect.value = ingredient.unit;
-                        }
-                    }
-                });
+    let ingredientAdjustModal = null;
+    let ingredientAdjustSelected = null;
+    let ingredientSearchDebounce = null;
+
+    function resetIngredientAdjustModal() {
+        ingredientAdjustSelected = null;
+        const search = document.getElementById('ingredientAdjustSearch');
+        const results = document.getElementById('ingredientAdjustSearchResults');
+        const panel = document.getElementById('ingredientAdjustSelectedPanel');
+        const hint = document.getElementById('ingredientAdjustSearchHint');
+        if (search) search.value = '';
+        if (panel) panel.style.display = 'none';
+        if (results) {
+            results.innerHTML = '';
+            if (hint) {
+                results.appendChild(hint);
+                hint.style.display = 'block';
+                hint.textContent = 'Kam az kam 1 letter type karein…';
             }
-            
-            extraIngredientRowCount++;
+        }
+        const qty = document.getElementById('ingredientAdjustQty');
+        if (qty) qty.value = '1';
+        const modeAdd = document.getElementById('ingredientAdjustModeAdd');
+        if (modeAdd) modeAdd.checked = true;
+        updateIngredientAdjustPreview();
+    }
+
+    function updateIngredientAdjustPreview() {
+        const preview = document.getElementById('ingredientAdjustPreview');
+        if (!preview || !ingredientAdjustSelected) {
+            if (preview) preview.textContent = '';
+            return;
+        }
+        const mode = (document.querySelector('input[name="ingredientAdjustMode"]:checked') || {}).value || 'add';
+        const amt = parseFloat(document.getElementById('ingredientAdjustQty')?.value) || 0;
+        const inDish = isIngredientInSelectedDishRecipes(ingredientAdjustSelected.id);
+        if (inDish) {
+            const cur = getCurrentOrderIngredientQty(ingredientAdjustSelected.id);
+            const next = mode === 'less' ? Math.max(0, cur - amt) : (cur + amt);
+            preview.textContent = 'Dish recipe ingredient — abhi: ' + cur + ' → baad: ' + next +
+                (ingredientAdjustSelected.unit ? ' ' + ingredientAdjustSelected.unit : '');
+        } else {
+            preview.textContent = mode === 'add'
+                ? 'Naya extra ingredient ke tor pe ADD hoga.'
+                : 'Extra list se LESS hoga (agar pehle se maujood ho).';
+        }
+    }
+
+    function renderIngredientSearchResults(term) {
+        const results = document.getElementById('ingredientAdjustSearchResults');
+        if (!results) return;
+        results.innerHTML = '';
+        const q = (term || '').trim().toLowerCase();
+        if (q.length < 1) {
+            const hint = document.createElement('div');
+            hint.className = 'text-muted small p-3 text-center';
+            hint.id = 'ingredientAdjustSearchHint';
+            hint.textContent = 'Kam az kam 1 letter type karein…';
+            results.appendChild(hint);
+            return;
+        }
+        const list = (window.ingredientsData || []).filter(function(ing) {
+            const name = String(ing.name || '').toLowerCase();
+            const unit = String(ing.unit || '').toLowerCase();
+            return name.includes(q) || unit.includes(q) || String(ing.id) === q;
+        }).slice(0, 40);
+
+        if (list.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'text-muted small p-3 text-center';
+            empty.textContent = 'Koi ingredient nahi mila.';
+            results.appendChild(empty);
+            return;
+        }
+
+        list.forEach(function(ing) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+            btn.innerHTML = '<span>' + String(ing.name || '').replace(/</g, '&lt;') + '</span>' +
+                '<small class="text-muted">' + String(ing.unit || '') + '</small>';
+            btn.addEventListener('click', function() {
+                selectIngredientForAdjust(ing);
+            });
+            results.appendChild(btn);
         });
-        
-        // Remove extra ingredient row
-        extraIngredientsContainer.addEventListener('click', function(e) {
-            if (e.target.closest('.remove-extra-ingredient-btn')) {
-                const row = e.target.closest('.extra-ingredient-row');
-                if (row) {
-                    row.remove();
+        if ((window.ingredientsData || []).filter(function(ing) {
+            const name = String(ing.name || '').toLowerCase();
+            return name.includes(q);
+        }).length > 40) {
+            const more = document.createElement('div');
+            more.className = 'small text-muted p-2 text-center';
+            more.textContent = 'Pehle 40 results — search mazeed specific karein.';
+            results.appendChild(more);
+        }
+    }
+
+    function selectIngredientForAdjust(ing) {
+        ingredientAdjustSelected = {
+            id: ing.id,
+            name: ing.name || '',
+            unit: ing.unit || ''
+        };
+        const panel = document.getElementById('ingredientAdjustSelectedPanel');
+        const nameEl = document.getElementById('ingredientAdjustSelectedName');
+        const metaEl = document.getElementById('ingredientAdjustSelectedMeta');
+        const unitEl = document.getElementById('ingredientAdjustUnit');
+        const results = document.getElementById('ingredientAdjustSearchResults');
+        if (panel) panel.style.display = 'block';
+        if (nameEl) nameEl.textContent = ingredientAdjustSelected.name;
+        const inDish = isIngredientInSelectedDishRecipes(ing.id);
+        if (metaEl) {
+            metaEl.textContent = inDish
+                ? ('Dish recipe mein maujood — current: ' + getCurrentOrderIngredientQty(ing.id) + (ing.unit ? ' ' + ing.unit : ''))
+                : 'Dish recipe mein nahi — ADD se Extra banega';
+        }
+        if (unitEl) unitEl.value = ingredientAdjustSelected.unit || '';
+        if (results) results.innerHTML = '';
+        updateIngredientAdjustPreview();
+    }
+
+    if (addExtraIngredientBtn) {
+        addExtraIngredientBtn.addEventListener('click', function() {
+            const modalEl = document.getElementById('ingredientAdjustModal');
+            if (!modalEl) return;
+            if (!ingredientAdjustModal) {
+                ingredientAdjustModal = new bootstrap.Modal(modalEl);
+            }
+            resetIngredientAdjustModal();
+            ingredientAdjustModal.show();
+            setTimeout(function() {
+                const search = document.getElementById('ingredientAdjustSearch');
+                if (search) search.focus();
+            }, 200);
+        });
+    }
+
+    const ingredientAdjustSearch = document.getElementById('ingredientAdjustSearch');
+    if (ingredientAdjustSearch) {
+        ingredientAdjustSearch.addEventListener('input', function() {
+            const val = this.value;
+            clearTimeout(ingredientSearchDebounce);
+            ingredientSearchDebounce = setTimeout(function() {
+                renderIngredientSearchResults(val);
+            }, 200);
+        });
+    }
+    const clearIngredientAdjustSearch = document.getElementById('clearIngredientAdjustSearch');
+    if (clearIngredientAdjustSearch) {
+        clearIngredientAdjustSearch.addEventListener('click', function() {
+            if (ingredientAdjustSearch) {
+                ingredientAdjustSearch.value = '';
+                renderIngredientSearchResults('');
+                ingredientAdjustSearch.focus();
+            }
+        });
+    }
+    const clearSelectionBtn = document.getElementById('ingredientAdjustClearSelection');
+    if (clearSelectionBtn) {
+        clearSelectionBtn.addEventListener('click', function() {
+            ingredientAdjustSelected = null;
+            const panel = document.getElementById('ingredientAdjustSelectedPanel');
+            if (panel) panel.style.display = 'none';
+            if (ingredientAdjustSearch) {
+                renderIngredientSearchResults(ingredientAdjustSearch.value);
+                ingredientAdjustSearch.focus();
+            }
+        });
+    }
+    document.querySelectorAll('input[name="ingredientAdjustMode"]').forEach(function(radio) {
+        radio.addEventListener('change', updateIngredientAdjustPreview);
+    });
+    const qtyInput = document.getElementById('ingredientAdjustQty');
+    if (qtyInput) qtyInput.addEventListener('input', updateIngredientAdjustPreview);
+    const qtyMinus = document.getElementById('ingredientAdjustQtyMinus');
+    const qtyPlus = document.getElementById('ingredientAdjustQtyPlus');
+    if (qtyMinus) {
+        qtyMinus.addEventListener('click', function() {
+            const el = document.getElementById('ingredientAdjustQty');
+            if (!el) return;
+            const v = Math.max(0.01, (parseFloat(el.value) || 1) - 1);
+            el.value = Math.round(v * 100) / 100;
+            updateIngredientAdjustPreview();
+        });
+    }
+    if (qtyPlus) {
+        qtyPlus.addEventListener('click', function() {
+            const el = document.getElementById('ingredientAdjustQty');
+            if (!el) return;
+            const v = (parseFloat(el.value) || 0) + 1;
+            el.value = Math.round(v * 100) / 100;
+            updateIngredientAdjustPreview();
+        });
+    }
+    const applyBtn = document.getElementById('ingredientAdjustApplyBtn');
+    if (applyBtn) {
+        applyBtn.addEventListener('click', function() {
+            if (!ingredientAdjustSelected) {
+                alert('Pehle search se ingredient select karein.');
+                return;
+            }
+            const mode = (document.querySelector('input[name="ingredientAdjustMode"]:checked') || {}).value || 'add';
+            const amount = parseFloat(document.getElementById('ingredientAdjustQty')?.value) || 0;
+            const unit = document.getElementById('ingredientAdjustUnit')?.value || ingredientAdjustSelected.unit || '';
+            const ok = applyIngredientAddLess(
+                ingredientAdjustSelected.id,
+                mode,
+                amount,
+                unit,
+                ingredientAdjustSelected.name
+            );
+            if (ok && ingredientAdjustModal) {
+                ingredientAdjustModal.hide();
+                if (typeof updateReview === 'function' && typeof currentStep !== 'undefined' && currentStep === 4) {
+                    updateReview();
                 }
             }
         });
-        
-        // Auto-fill unit for existing rows
-        document.querySelectorAll('.extra-ingredient-select').forEach(function(select) {
-            const row = select.closest('.extra-ingredient-row');
-            const unitSelect = row ? row.querySelector('.extra-ingredient-unit') : null;
-            if (select && unitSelect) {
-                select.addEventListener('change', function() {
-                    const ingredientId = this.value;
-                    const ingredient = ingredientsData.find(i => i.id == ingredientId);
-                    if (ingredient && ingredient.unit) {
-                        // Check if the ingredient unit matches one of the dropdown options
-                        const validUnits = ['کلو', 'گرام', 'عدد', 'گچھی'];
-                        if (validUnits.includes(ingredient.unit)) {
-                            unitSelect.value = ingredient.unit;
-                        }
-                    }
-                });
+    }
+
+    if (extraIngredientsContainer) {
+        extraIngredientsContainer.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-extra-ingredient-btn')) {
+                const row = e.target.closest('.extra-ingredient-row');
+                if (row) row.remove();
             }
         });
     }
