@@ -89,13 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->exec("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving'");
         }
         if (!db_column_exists($conn, 'dishes', 'image')) {
-            $conn->exec("ALTER TABLE dishes ADD COLUMN image TEXT DEFAULT NULL");
-        } else {
-            try {
-                $conn->exec('ALTER TABLE dishes ALTER COLUMN image TYPE TEXT');
-            } catch (Throwable $e) {
-                // already TEXT
-            }
+            $conn->exec("ALTER TABLE dishes ADD COLUMN image VARCHAR(255) DEFAULT NULL");
         }
         
         // Start transaction
@@ -1642,12 +1636,8 @@ window.addIngredientRow = function() {
                             <i class="bi bi-123 me-2 text-info"></i>
                             Quantity <span class="text-danger">*</span>
                         </label>
-                        <div class="input-group qty-stepper">
-                            <button type="button" class="btn btn-outline-secondary qty-minus" data-target-class="ingredient-qty-input" data-step="0.25">−</button>
-                            <input type="number" class="form-control text-center ingredient-qty-input" name="quantities[]"
-                                   placeholder="0.00" step="0.01" min="0" value="0" required>
-                            <button type="button" class="btn btn-outline-secondary qty-plus" data-target-class="ingredient-qty-input" data-step="0.25">+</button>
-                        </div>
+                        <input type="number" class="form-control" name="quantities[]" 
+                               placeholder="0.00" step="0.01" min="0" required>
                     </div>
                     <div class="col-lg-2 col-md-4 col-sm-6">
                         <label class="form-label fw-semibold mb-2 d-block">
@@ -1973,13 +1963,9 @@ window.populateEditForm = function() {
                                         <i class="bi bi-123 me-2 text-info"></i>
                                         Quantity <span class="text-danger">*</span>
                                     </label>
-                                    <div class="input-group qty-stepper">
-                                        <button type="button" class="btn btn-outline-secondary qty-minus" data-target-class="ingredient-qty-input" data-step="0.25">−</button>
-                                        <input type="number" class="form-control text-center ingredient-qty-input" name="quantities[]"
-                                               placeholder="0.00" step="0.01" min="0"
-                                               value="${quantityValue}" required>
-                                        <button type="button" class="btn btn-outline-secondary qty-plus" data-target-class="ingredient-qty-input" data-step="0.25">+</button>
-                                    </div>
+                                    <input type="number" class="form-control" name="quantities[]" 
+                                           placeholder="0.00" step="0.01" min="0" 
+                                           value="${quantityValue}" required>
                                 </div>
                                 <div class="col-lg-2 col-md-4 col-sm-6">
                                     <label class="form-label fw-semibold mb-2 d-block">
@@ -2855,33 +2841,6 @@ function previewImage(input) {
         }
     }
 }
-
-// +/- quantity steppers for dish ingredients
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.qty-plus, .qty-minus');
-    if (!btn) return;
-    e.preventDefault();
-    let input = null;
-    const targetId = btn.getAttribute('data-target');
-    if (targetId) input = document.getElementById(targetId);
-    if (!input) {
-        const cls = btn.getAttribute('data-target-class');
-        const group = btn.closest('.qty-stepper') || btn.closest('.input-group');
-        if (cls && group) input = group.querySelector('.' + cls);
-    }
-    if (!input) return;
-    const step = parseFloat(btn.getAttribute('data-step') || input.getAttribute('step') || '1') || 1;
-    const minAttr = input.getAttribute('min');
-    const min = minAttr !== null && minAttr !== '' ? parseFloat(minAttr) : 0;
-    let current = parseFloat(input.value);
-    if (isNaN(current)) current = 0;
-    current = btn.classList.contains('qty-plus') ? current + step : current - step;
-    if (current < min) current = min;
-    const decimals = (String(step).split('.')[1] || '').length;
-    input.value = decimals > 0 ? current.toFixed(Math.min(decimals, 2)) : String(Math.round(current));
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-});
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
