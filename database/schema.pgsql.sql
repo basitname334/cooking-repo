@@ -67,6 +67,5 @@ CREATE TABLE IF NOT EXISTS orders (
     delivery_time TIME DEFAULT NULL,
     shift VARCHAR(20) DEFAULT NULL,
     number_of_persons INT DEFAULT NULL,
-    payment_type VARCHAR(20) DEFAULT 'cash',
-    paid_amount DECIMAL(10, 2) DEFAULT 0
+    advance_amount DECIMAL(10, 2) DEFAULT 0
 );

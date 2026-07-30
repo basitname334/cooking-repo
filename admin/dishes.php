@@ -244,7 +244,7 @@ $dishes = db_fetch_all(
     $conn,
     "SELECT d.id, d.name, d.description, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
             d.created_at, c.name as category_name,
-            CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image,
+            CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END as has_image,
             (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
@@ -609,22 +609,18 @@ include __DIR__ . '/../includes/header.php';
                                      style="cursor: pointer;" 
                                      onclick="window.location.href='?edit=<?php echo $dish['id']; ?>'">
                                     <?php 
-                                    $has_image = !empty($dish['has_image']);
-                                    $dish_image_src = $has_image ? dish_image_url((int) $dish['id'], '../') : null;
+                                    $dish_image_src = dish_image_url((int) $dish['id'], '../');
                                     ?>
-                                    <?php if (!empty($dish_image_src)): ?>
-                                        <div style="height: 150px; overflow: hidden; background: #f8f9fa;">
-                                            <img src="<?php echo htmlspecialchars($dish_image_src); ?>" 
-                                                 alt="<?php echo htmlspecialchars($dish['name']); ?>" 
-                                                 loading="lazy" decoding="async"
-                                                 style="width: 100%; height: 100%; object-fit: cover;"
-                                                 onerror="this.parentElement.innerHTML='<div style=\'height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;\'><i class=\'bi bi-egg-fried text-white\' style=\'font-size: 3rem;\'></i></div>'">
+                                    <div style="height: 150px; overflow: hidden; background: #f8f9fa;">
+                                        <img src="<?php echo htmlspecialchars($dish_image_src); ?>" 
+                                             alt="<?php echo htmlspecialchars($dish['name']); ?>" 
+                                             loading="lazy" decoding="async"
+                                             style="width: 100%; height: 100%; object-fit: cover;"
+                                             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                                        <div style="display:none;height:150px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);align-items:center;justify-content:center;">
+                                            <i class="bi bi-egg-fried text-white" style="font-size:3rem;"></i>
                                         </div>
-                                    <?php else: ?>
-                                        <div style="height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
-                                            <i class="bi bi-egg-fried text-white" style="font-size: 3rem;"></i>
-                                        </div>
-                                    <?php endif; ?>
+                                    </div>
                                     <div class="card-body p-3">
                                         <div class="d-flex align-items-start justify-content-between mb-2">
                                             <div class="flex-grow-1">

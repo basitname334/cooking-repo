@@ -15,8 +15,42 @@ define('DB_NAME', $dbConfig['name']);
 define('DB_PORT', (int) $dbConfig['port']);
 define('DB_SSLMODE', $dbConfig['sslmode']);
 
-define('DB_CONNECT_RETRIES', max(1, (int) (getenv('DB_CONNECT_RETRIES') ?: 3)));
-define('DB_CONNECT_RETRY_DELAY_MS', max(0, (int) (getenv('DB_CONNECT_RETRY_DELAY_MS') ?: 500)));
+define('DB_CONNECT_RETRIES', max(1, (int) (getenv('DB_CONNECT_RETRIES') ?: 2)));
+define('DB_CONNECT_RETRY_DELAY_MS', max(0, (int) (getenv('DB_CONNECT_RETRY_DELAY_MS') ?: 200)));
+define('DB_SCHEMA_MARKER_VERSION', 'v4');
+
+function db_schema_marker_path(): string {
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cooking_schema_' . DB_SCHEMA_MARKER_VERSION . '.ok';
+}
+
+function db_table_exists(PDO $pdo, string $table): bool {
+    static $cache = [];
+    if (array_key_exists($table, $cache)) {
+        return $cache[$table];
+    }
+    $row = db_fetch(
+        $pdo,
+        "SELECT 1 AS ok FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = ?",
+        [$table]
+    );
+    return $cache[$table] = ($row !== null);
+}
+
+function db_column_exists(PDO $pdo, string $table, string $column): bool {
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+    $row = db_fetch(
+        $pdo,
+        "SELECT 1 AS ok FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = ? AND column_name = ?",
+        [$table, $column]
+    );
+    return $cache[$key] = ($row !== null);
+}
 
 /**
  * Parse DATABASE_URL or discrete DB_* env vars.
@@ -107,26 +141,6 @@ function db_last_id(PDO $pdo, string $sequenceOrTable = ''): int {
         return (int) $pdo->lastInsertId($sequenceOrTable);
     }
     return (int) $pdo->lastInsertId();
-}
-
-function db_table_exists(PDO $pdo, string $table): bool {
-    $row = db_fetch(
-        $pdo,
-        "SELECT 1 AS ok FROM information_schema.tables
-         WHERE table_schema = 'public' AND table_name = ?",
-        [$table]
-    );
-    return $row !== null;
-}
-
-function db_column_exists(PDO $pdo, string $table, string $column): bool {
-    $row = db_fetch(
-        $pdo,
-        "SELECT 1 AS ok FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = ? AND column_name = ?",
-        [$table, $column]
-    );
-    return $row !== null;
 }
 
 // -----------------------------------------------------------------------------
@@ -226,6 +240,13 @@ function ensureDatabaseSetup(PDO $conn): void {
         return;
     }
 
+    // Skip full migration/seed on warm instances (big win on Render)
+    $marker = db_schema_marker_path();
+    if (is_file($marker) && (time() - (int) @filemtime($marker)) < 86400) {
+        $setup_done = true;
+        return;
+    }
+
     $sqls = [
         'users' => "CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -292,8 +313,7 @@ function ensureDatabaseSetup(PDO $conn): void {
             delivery_time TIME DEFAULT NULL,
             shift VARCHAR(20) DEFAULT NULL,
             number_of_persons INT DEFAULT NULL,
-            payment_type VARCHAR(20) DEFAULT 'cash',
-            paid_amount DECIMAL(10, 2) DEFAULT 0
+            advance_amount DECIMAL(10, 2) DEFAULT 0
         )",
     ];
 
@@ -311,6 +331,7 @@ function ensureDatabaseSetup(PDO $conn): void {
     db_run_column_migrations($conn);
     ensureAdminUser($conn);
     ensureSeedData($conn);
+    @file_put_contents(db_schema_marker_path(), (string) time());
     $setup_done = true;
 }
 
@@ -330,8 +351,7 @@ function db_run_column_migrations(PDO $conn): void {
         ['orders', 'delivery_time', 'ALTER TABLE orders ADD COLUMN delivery_time TIME DEFAULT NULL'],
         ['orders', 'shift', 'ALTER TABLE orders ADD COLUMN shift VARCHAR(20) DEFAULT NULL'],
         ['orders', 'number_of_persons', 'ALTER TABLE orders ADD COLUMN number_of_persons INT DEFAULT NULL'],
-        ['orders', 'payment_type', "ALTER TABLE orders ADD COLUMN payment_type VARCHAR(20) DEFAULT 'cash'"],
-        ['orders', 'paid_amount', 'ALTER TABLE orders ADD COLUMN paid_amount DECIMAL(10, 2) DEFAULT 0'],
+        ['orders', 'advance_amount', 'ALTER TABLE orders ADD COLUMN advance_amount DECIMAL(10, 2) DEFAULT 0'],
     ];
 
     foreach ($migrations as [$table, $column, $alter]) {
@@ -347,12 +367,21 @@ function db_run_column_migrations(PDO $conn): void {
         }
     }
 
-    // Dish images are stored as data URIs on Render — ensure TEXT, not VARCHAR(255)
-    if (db_table_exists($conn, 'dishes') && db_column_exists($conn, 'dishes', 'image')) {
+    // Helpful indexes (IF NOT EXISTS) — cheap on subsequent boots via schema marker
+    try {
+        $conn->exec('CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders (order_number)');
+        $conn->exec('CREATE INDEX IF NOT EXISTS idx_orders_order_date ON orders (order_date DESC)');
+        $conn->exec('CREATE INDEX IF NOT EXISTS idx_dish_ingredients_dish_id ON dish_ingredients (dish_id)');
+    } catch (Throwable $e) {
+        // ignore
+    }
+
+    // Walk-in orders: customer_id may be NULL
+    if (db_table_exists($conn, 'orders') && db_column_exists($conn, 'orders', 'customer_id')) {
         try {
-            $conn->exec('ALTER TABLE dishes ALTER COLUMN image TYPE TEXT');
+            $conn->exec('ALTER TABLE orders ALTER COLUMN customer_id DROP NOT NULL');
         } catch (Throwable $e) {
-            // ignore if already TEXT or unsupported
+            // already nullable
         }
     }
 }
@@ -514,7 +543,7 @@ function ensureAdminUser($conn): bool {
         }
     }
 
-    $admin = db_fetch($conn, "SELECT id, password FROM users WHERE email = ? AND role = 'admin'", [$email]);
+    $admin = db_fetch($conn, "SELECT id FROM users WHERE email = ? AND role = 'admin'", [$email]);
 
     if ($admin === null) {
         try {
@@ -530,18 +559,7 @@ function ensureAdminUser($conn): bool {
         }
     }
 
-    if (!password_verify($password, $admin['password'])) {
-        try {
-            db_exec(
-                $conn,
-                "UPDATE users SET password = ? WHERE email = ? AND role = 'admin'",
-                [password_hash($password, PASSWORD_DEFAULT), $email]
-            );
-        } catch (Throwable $e) {
-            error_log('ensureAdminUser update failed: ' . $e->getMessage());
-        }
-    }
-
+    // Do NOT password_verify/reset on every request — that alone can add 100ms+ per page load.
     return true;
 }
 

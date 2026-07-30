@@ -155,7 +155,7 @@ $dishes = db_fetch_all(
     $conn,
     "SELECT d.id, d.name, d.description, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
             c.name as category_name,
-            CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image
+            CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END as has_image
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
     ORDER BY d.name"
@@ -166,7 +166,7 @@ $previously_used_dishes = db_fetch_all(
     $conn,
     "SELECT o.dish_id, d.id, d.name, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
             c.name as category_name,
-            CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image,
+            CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END as has_image,
             COUNT(o.id) as order_count,
             MAX(o.order_date) as last_used_date
     FROM orders o
@@ -174,7 +174,7 @@ $previously_used_dishes = db_fetch_all(
     LEFT JOIN categories c ON d.category_id = c.id
     WHERE o.order_date >= (NOW() - INTERVAL '30 days')
     GROUP BY o.dish_id, d.id, d.name, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit, c.name,
-             CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END
+             CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END
     ORDER BY order_count DESC, last_used_date DESC
     LIMIT 20"
 );
@@ -536,6 +536,7 @@ include __DIR__ . '/../includes/header.php';
                             <label class="form-label fw-semibold">Shift <span class="text-danger">*</span></label>
                             <select class="form-select" name="shift" required>
                                 <option value="">-- Select Shift --</option>
+                                <option value="morning" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'morning') ? 'selected' : ''; ?>>Morning</option>
                                 <option value="afternoon" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'afternoon') ? 'selected' : ''; ?>>Afternoon</option>
                                 <option value="evening" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'evening') ? 'selected' : ''; ?>>Evening</option>
                             </select>

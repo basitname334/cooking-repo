@@ -45,7 +45,8 @@ if (str_starts_with($image, 'data:')) {
     }
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . strlen($binary));
-    header('Cache-Control: public, max-age=86400');
+    header('Cache-Control: public, max-age=604800, immutable');
+    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 604800) . ' GMT');
     echo $binary;
     exit;
 }

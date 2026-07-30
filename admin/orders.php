@@ -9,6 +9,34 @@ require_once __DIR__ . '/../config/language.php';
 
 requireLogin();
 
+/**
+ * Collect removed dish ingredients from POST dishes[*][removed_ingredients][].
+ * @return array<int, array{dish_id:int,ingredient_id:int}>
+ */
+function parse_removed_ingredients_from_dishes(array $dishes_data): array {
+    $removed = [];
+    foreach ($dishes_data as $dish_data) {
+        $dish_id = intval($dish_data['dish_id'] ?? 0);
+        if ($dish_id <= 0) {
+            continue;
+        }
+        $ids = $dish_data['removed_ingredients'] ?? [];
+        if (!is_array($ids)) {
+            continue;
+        }
+        foreach ($ids as $ing_id) {
+            $ing_id = intval($ing_id);
+            if ($ing_id > 0) {
+                $removed[] = [
+                    'dish_id' => $dish_id,
+                    'ingredient_id' => $ing_id,
+                ];
+            }
+        }
+    }
+    return $removed;
+}
+
 $conn = getDBConnection();
 $error = '';
 $success = '';
@@ -18,38 +46,12 @@ $success = '';
 if (!$conn instanceof PDO) {
     $error = 'Database connection failed. Please try again.';
 } else {
-    static $schema_checked = false;
-    if (!$schema_checked) {
-        $schema_checked = true;
-        try {
-            $order_cols = [
-                'order_number' => 'ALTER TABLE orders ADD COLUMN order_number VARCHAR(50) DEFAULT NULL',
-                'unit' => 'ALTER TABLE orders ADD COLUMN unit VARCHAR(50) DEFAULT NULL',
-                'extra_ingredients' => 'ALTER TABLE orders ADD COLUMN extra_ingredients TEXT',
-                'customer_name' => 'ALTER TABLE orders ADD COLUMN customer_name VARCHAR(100) DEFAULT NULL',
-                'customer_cell' => 'ALTER TABLE orders ADD COLUMN customer_cell VARCHAR(20) DEFAULT NULL',
-                'order_date' => 'ALTER TABLE orders ADD COLUMN order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
-                'delivery_date' => 'ALTER TABLE orders ADD COLUMN delivery_date DATE DEFAULT NULL',
-                'delivery_time' => 'ALTER TABLE orders ADD COLUMN delivery_time TIME DEFAULT NULL',
-                'shift' => 'ALTER TABLE orders ADD COLUMN shift VARCHAR(20) DEFAULT NULL',
-                'number_of_persons' => 'ALTER TABLE orders ADD COLUMN number_of_persons INT DEFAULT NULL',
-                'payment_type' => "ALTER TABLE orders ADD COLUMN payment_type VARCHAR(20) DEFAULT 'cash'",
-                'paid_amount' => 'ALTER TABLE orders ADD COLUMN paid_amount DECIMAL(10, 2) DEFAULT 0',
-            ];
-            foreach ($order_cols as $col => $alter) {
-                if (!db_column_exists($conn, 'orders', $col)) {
-                    $conn->exec($alter);
-                }
-            }
-            $conn->exec("UPDATE orders SET order_number = 'ORD-' || LPAD(id::text, 6, '0') WHERE order_number IS NULL");
-        } catch (Throwable $e) {
-            error_log('Orders schema modification error: ' . $e->getMessage());
-        }
-    }
+    // Schema is ensured in getDBConnection(); avoid per-page ALTER/column scans.
 }
 
-// Handle update order
-if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])) {
+// Handle update order (only when explicitly updating an existing order_number)
+if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])
+    && trim($_POST['order_number'] ?? '') !== '' && !isset($_POST['create_order'])) {
     @set_time_limit(60);
     $order_number = trim($_POST['order_number'] ?? '');
     if ($order_number === '') {
@@ -63,8 +65,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
         $delivery_date = trim($_POST['delivery_date'] ?? '');
         $delivery_time = trim($_POST['delivery_time'] ?? '');
         $notes = translateForDatabase(trim($_POST['notes'] ?? ''));
-        $payment_type = (($_POST['payment_type'] ?? 'cash') === 'udhaar') ? 'udhaar' : 'cash';
-        $paid_amount_input = floatval($_POST['paid_amount'] ?? 0);
+        $advance_amount = max(0, floatval($_POST['advance_amount'] ?? 0));
         $dishes_data = (isset($_POST['dishes']) && is_array($_POST['dishes'])) ? $_POST['dishes'] : [];
 
         $extra_ingredients_data = [];
@@ -112,13 +113,18 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
             if (!empty($additional_items_data)) {
                 $combined_data['additional_items'] = $additional_items_data;
             }
+            $removed_ingredients_data = parse_removed_ingredients_from_dishes($dishes_data);
+            if (!empty($removed_ingredients_data)) {
+                $combined_data['removed_ingredients'] = $removed_ingredients_data;
+            }
             $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
+            $has_advance_col = db_column_exists($conn, 'orders', 'advance_amount');
+            $grand_total_update = 0;
 
             try {
                 $conn->beginTransaction();
                 db_exec($conn, 'DELETE FROM orders WHERE order_number = ?', [$order_number]);
                 $orders_created = 0;
-                $grand_total_update = 0;
                 foreach ($dishes_data as $dish_data) {
                     $dish_id = intval($dish_data['dish_id'] ?? 0);
                     $quantity = floatval($dish_data['quantity'] ?? 0);
@@ -140,41 +146,60 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
                     $order_datetime = date('Y-m-d H:i:s');
 
                     if ($use_new_form) {
-                        db_exec(
-                            $conn,
-                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
-                                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, payment_type, paid_amount)
-                             VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            [
-                                $order_number, $dish_id, $quantity, $unit, $total_amount,
-                                $customer_name, $customer_cell, $order_datetime, $delivery_date,
-                                $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
-                                $payment_type, 0,
-                            ]
-                        );
+                        if ($has_advance_col) {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
+                                    customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, advance_amount)
+                                 VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    $order_number, $dish_id, $quantity, $unit, $total_amount,
+                                    $customer_name, $customer_cell, $order_datetime, $delivery_date,
+                                    $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
+                                    0,
+                                ]
+                            );
+                        } else {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
+                                    customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients)
+                                 VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    $order_number, $dish_id, $quantity, $unit, $total_amount,
+                                    $customer_name, $customer_cell, $order_datetime, $delivery_date,
+                                    $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
+                                ]
+                            );
+                        }
                     } else {
-                        db_exec(
-                            $conn,
-                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients, payment_type, paid_amount)
-                             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
-                            [$order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $notes, $extra_ingredients_json, $payment_type, 0]
-                        );
+                        if ($has_advance_col) {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients, advance_amount)
+                                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+                                [$order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $notes, $extra_ingredients_json, 0]
+                            );
+                        } else {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients)
+                                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+                                [$order_number, $customer_id, $dish_id, $quantity, $unit, $total_amount, $notes, $extra_ingredients_json]
+                            );
+                        }
                     }
                     $orders_created++;
                 }
 
-                $final_paid = ($payment_type === 'cash')
-                    ? $grand_total_update
-                    : max(0, min($paid_amount_input, $grand_total_update));
-                if ($payment_type === 'udhaar' && $final_paid >= $grand_total_update && $grand_total_update > 0) {
-                    $payment_type = 'cash';
-                    $final_paid = $grand_total_update;
+                if ($orders_created > 0 && $has_advance_col) {
+                    $final_advance = max(0, min($advance_amount, $grand_total_update));
+                    db_exec(
+                        $conn,
+                        'UPDATE orders SET advance_amount = ? WHERE order_number = ?',
+                        [$final_advance, $order_number]
+                    );
                 }
-                db_exec(
-                    $conn,
-                    'UPDATE orders SET payment_type = ?, paid_amount = ? WHERE order_number = ?',
-                    [$payment_type, $final_paid, $order_number]
-                );
 
                 if ($orders_created > 0) {
                     $conn->commit();
@@ -205,8 +230,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
     $delivery_date = trim($_POST['delivery_date'] ?? '');
     $delivery_time = trim($_POST['delivery_time'] ?? '');
     $notes = translateForDatabase(trim($_POST['notes'] ?? ''));
-    $payment_type = (($_POST['payment_type'] ?? 'cash') === 'udhaar') ? 'udhaar' : 'cash';
-    $paid_amount_input = floatval($_POST['paid_amount'] ?? 0);
+    $advance_amount = max(0, floatval($_POST['advance_amount'] ?? 0));
     $order_datetime = date('Y-m-d H:i:s');
 
     $dishes_data = [];
@@ -303,56 +327,99 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
             if (!empty($additional_items_data)) {
                 $combined_data['additional_items'] = $additional_items_data;
             }
+            $removed_ingredients_data = parse_removed_ingredients_from_dishes($dishes_data);
+            if (!empty($removed_ingredients_data)) {
+                $combined_data['removed_ingredients'] = $removed_ingredients_data;
+            }
             $extra_ingredients_json = !empty($combined_data) ? json_encode($combined_data) : null;
             $orders_created = 0;
             $errors = [];
+            $has_advance_col = db_column_exists($conn, 'orders', 'advance_amount');
             $grand_total = array_sum(array_column($valid_dishes, 'total_amount'));
-            $final_paid = ($payment_type === 'cash')
-                ? $grand_total
-                : max(0, min($paid_amount_input, $grand_total));
-            if ($payment_type === 'udhaar' && $final_paid >= $grand_total && $grand_total > 0) {
-                $payment_type = 'cash';
-                $final_paid = $grand_total;
+            $final_advance = max(0, min($advance_amount, $grand_total));
+
+            // Normalize empty time/date for Postgres
+            if ($delivery_time === '') {
+                $delivery_time = null;
             }
+            if ($delivery_date === '') {
+                $delivery_date = null;
+            }
+
             try {
+                $conn->beginTransaction();
                 foreach ($valid_dishes as $dish_info) {
                     if ($use_new_form) {
-                        db_exec(
-                            $conn,
-                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
-                                customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, payment_type, paid_amount)
-                             VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            [
-                                $order_number, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'],
-                                $dish_info['total_amount'], $status, $customer_name, $customer_cell, $order_datetime,
-                                $delivery_date, $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
-                                $payment_type, $final_paid,
-                            ]
-                        );
+                        if ($has_advance_col) {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
+                                    customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, advance_amount)
+                                 VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    $order_number, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'],
+                                    $dish_info['total_amount'], $status, $customer_name, $customer_cell, $order_datetime,
+                                    $delivery_date, $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
+                                    $final_advance,
+                                ]
+                            );
+                        } else {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
+                                    customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients)
+                                 VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    $order_number, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'],
+                                    $dish_info['total_amount'], $status, $customer_name, $customer_cell, $order_datetime,
+                                    $delivery_date, $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
+                                ]
+                            );
+                        }
                     } else {
-                        db_exec(
-                            $conn,
-                            "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients, payment_type, paid_amount)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            [
-                                $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'],
-                                $dish_info['unit'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json,
-                                $payment_type, $final_paid,
-                            ]
-                        );
+                        if ($has_advance_col) {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients, advance_amount)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'],
+                                    $dish_info['unit'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json,
+                                    $final_advance,
+                                ]
+                            );
+                        } else {
+                            db_exec(
+                                $conn,
+                                "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status, notes, extra_ingredients)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                [
+                                    $order_number, $customer_id, $dish_info['dish_id'], $dish_info['quantity'],
+                                    $dish_info['unit'], $dish_info['total_amount'], $status, $notes, $extra_ingredients_json,
+                                ]
+                            );
+                        }
                     }
                     $orders_created++;
                 }
+                $conn->commit();
             } catch (Throwable $e) {
+                if ($conn->inTransaction()) {
+                    $conn->rollBack();
+                }
+                $orders_created = 0;
                 $errors[] = $e->getMessage();
                 error_log('Order creation exception: ' . $e->getMessage());
             }
 
             if ($orders_created > 0) {
-                header('Location: orders.php?success=1&created=1&order_number=' . urlencode($order_number));
+                // Show in Recent list (not search-filtered) so the new card is always visible
+                header('Location: orders.php?success=1&created=1&count=' . (int) $orders_created);
                 exit();
             }
-            $error = !empty($errors) ? implode(', ', $errors) : (t('failed_to_create') . ' ' . t('orders_title'));
+            $error = !empty($errors)
+                ? ('Failed to create order: ' . implode(', ', $errors))
+                : (t('failed_to_create') . ' ' . t('orders_title'));
         }
     }
 }
@@ -402,8 +469,13 @@ if (isset($_GET['success'])) {
     if (isset($_GET['created'])) {
         $count = isset($_GET['count']) ? intval($_GET['count']) : 1;
         $success = $count > 1 ? $count . ' orders created successfully!' : 'Order created successfully!';
+        if (!empty($_GET['order_number'])) {
+            $success .= ' (' . $_GET['order_number'] . ')';
+        }
     } elseif (isset($_GET['deleted'])) {
         $success = 'Order deleted successfully!';
+    } elseif (isset($_GET['updated'])) {
+        $success = 'Order updated successfully!';
     } else {
         $success = 'Order status updated successfully!';
     }
@@ -417,6 +489,7 @@ $dish_categories = [];
 $dishes = [];
 $ingredients = [];
 $previously_used_dishes = [];
+$dish_ingredients_for_form = [];
 $orders = [];
 $grouped_orders = [];
 $paginated_orders = [];
@@ -427,7 +500,7 @@ $total_pages = 0;
 $overall_orders_count = 0;
 
 $default_items_per_page = 12;
-$recent_items_limit = 2;
+$recent_items_limit = 10;
 $items_per_page = isset($_GET['per_page']) ? max(5, min(100, intval($_GET['per_page']))) : $default_items_per_page;
 $current_page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $view_mode = (isset($_GET['view']) && $_GET['view'] === 'all') ? 'all' : 'recent';
@@ -480,7 +553,7 @@ if ($conn instanceof PDO) {
         $dishes = db_fetch_all(
             $conn,
             "SELECT d.id, d.name, d.base_unit, d.category_id, c.name as category_name,
-                    CASE WHEN d.image IS NOT NULL AND LENGTH(d.image) > 0 THEN 1 ELSE 0 END as has_image
+                    CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END as has_image
              FROM dishes d
              LEFT JOIN categories c ON d.category_id = c.id
              ORDER BY d.name"
@@ -489,8 +562,35 @@ if ($conn instanceof PDO) {
             if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
                 $dish['name'] = translateToUrdu($dish['name']);
             }
+            // Always expose image endpoint URL; browser falls back if missing
+            $dish['image_url'] = dish_image_url((int) $dish['id'], '../');
         }
         unset($dish);
+
+        // Map of dish_id => ingredients (for order form: remove-from-dish UI)
+        $dish_ingredients_for_form = [];
+        $all_di_rows = db_fetch_all(
+            $conn,
+            "SELECT di.dish_id, di.quantity, di.unit, i.id as ingredient_id, i.name as ingredient_name
+             FROM dish_ingredients di
+             LEFT JOIN ingredients i ON di.ingredient_id = i.id
+             ORDER BY i.name"
+        );
+        foreach ($all_di_rows as $ing) {
+            if ($currentLang === 'ur' && !empty($ing['ingredient_name']) && !preg_match('/[\x{0600}-\x{06FF}]/u', $ing['ingredient_name'])) {
+                $ing['ingredient_name'] = translateToUrdu($ing['ingredient_name']);
+            }
+            $did = (string) intval($ing['dish_id']);
+            if (!isset($dish_ingredients_for_form[$did])) {
+                $dish_ingredients_for_form[$did] = [];
+            }
+            $dish_ingredients_for_form[$did][] = [
+                'ingredient_id' => intval($ing['ingredient_id']),
+                'ingredient_name' => $ing['ingredient_name'] ?? '',
+                'quantity' => $ing['quantity'] ?? 0,
+                'unit' => $ing['unit'] ?? '',
+            ];
+        }
 
         $ingredients = db_fetch_all(
             $conn,
@@ -509,12 +609,13 @@ if ($conn instanceof PDO) {
         $previously_used_dishes = db_fetch_all(
             $conn,
             "SELECT o.dish_id, d.id, d.name,
+                    CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END as has_image,
                     COUNT(o.id) as order_count,
                     MAX(o.order_date) as last_used_date
              FROM orders o
              INNER JOIN dishes d ON o.dish_id = d.id
              WHERE o.order_date >= (NOW() - INTERVAL '30 days')
-             GROUP BY o.dish_id, d.id, d.name
+             GROUP BY o.dish_id, d.id, d.name, d.image
              ORDER BY order_count DESC, last_used_date DESC
              LIMIT 20"
         );
@@ -522,36 +623,66 @@ if ($conn instanceof PDO) {
             if (isset($dish['name']) && $currentLang === 'ur' && !preg_match('/[\x{0600}-\x{06FF}]/u', $dish['name'])) {
                 $dish['name'] = translateToUrdu($dish['name']);
             }
+            $dish['image_url'] = dish_image_url((int) $dish['id'], '../');
         }
         unset($dish);
 
-        $limit = ($view_mode === 'all') ? ($items_per_page * 3) : ($recent_items_limit * 3);
-        $params = [];
-        $query = "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount,
-            o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date,
-            o.delivery_time, o.shift, o.number_of_persons,
-            COALESCE(o.payment_type, 'cash') as payment_type,
-            COALESCE(o.paid_amount, 0) as paid_amount,
-            o.customer_name as order_customer_name,
-            o.customer_cell as order_customer_cell,
-            u.name as user_customer_name,
-            u.email as user_customer_email,
-            COALESCE(u.name, o.customer_name) as customer_name,
-            COALESCE(u.email, o.customer_cell) as customer_email,
-            d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
-            cat.name as dish_category_name
-            FROM orders o
-            LEFT JOIN users u ON o.customer_id = u.id
-            LEFT JOIN dishes d ON o.dish_id = d.id
-            LEFT JOIN categories cat ON d.category_id = cat.id";
+        // Load latest N order_numbers first (not raw rows) so new orders always appear
+        $order_number_limit = ($view_mode === 'all')
+            ? max(50, $items_per_page * 5)
+            : max(20, $recent_items_limit * 3);
+
+        $recent_order_numbers = [];
         if ($is_search_active) {
-            $query .= " WHERE (o.order_number ILIKE ? OR COALESCE(o.customer_cell, '') ILIKE ?)";
             $like = '%' . $order_number_search . '%';
-            $params[] = $like;
-            $params[] = $like;
+            $recent_order_numbers = array_column(db_fetch_all(
+                $conn,
+                "SELECT order_number
+                 FROM orders
+                 WHERE order_number ILIKE ? OR COALESCE(customer_cell, '') ILIKE ? OR COALESCE(customer_name, '') ILIKE ?
+                 GROUP BY order_number
+                 ORDER BY MAX(COALESCE(order_date, TIMESTAMP '1970-01-01')) DESC, order_number DESC
+                 LIMIT 100",
+                [$like, $like, $like]
+            ), 'order_number');
+        } else {
+            $recent_order_numbers = array_column(db_fetch_all(
+                $conn,
+                "SELECT order_number
+                 FROM orders
+                 WHERE order_number IS NOT NULL AND order_number <> ''
+                 GROUP BY order_number
+                 ORDER BY MAX(COALESCE(order_date, TIMESTAMP '1970-01-01')) DESC, order_number DESC
+                 LIMIT " . (int) $order_number_limit
+            ), 'order_number');
         }
-        $query .= " ORDER BY COALESCE(o.order_date, NOW()) DESC, COALESCE(o.order_number, ''), o.id DESC LIMIT " . (int) $limit;
-        $orders = db_fetch_all($conn, $query, $params);
+
+        $orders = [];
+        if (!empty($recent_order_numbers)) {
+            $placeholders = implode(',', array_fill(0, count($recent_order_numbers), '?'));
+            $orders = db_fetch_all(
+                $conn,
+                "SELECT o.id, o.order_number, o.customer_id, o.dish_id, o.quantity, o.unit, o.total_amount,
+                    o.status, o.notes, o.extra_ingredients, o.customer_name, o.customer_cell, o.order_date, o.delivery_date,
+                    o.delivery_time, o.shift, o.number_of_persons,
+                    COALESCE(o.advance_amount, 0) as advance_amount,
+                    o.customer_name as order_customer_name,
+                    o.customer_cell as order_customer_cell,
+                    u.name as user_customer_name,
+                    u.email as user_customer_email,
+                    COALESCE(u.name, o.customer_name) as customer_name,
+                    COALESCE(u.email, o.customer_cell) as customer_email,
+                    d.name as dish_name, d.id as dish_id, d.number_of_persons as dish_number_of_persons, d.category_id,
+                    cat.name as dish_category_name
+                 FROM orders o
+                 LEFT JOIN users u ON o.customer_id = u.id
+                 LEFT JOIN dishes d ON o.dish_id = d.id
+                 LEFT JOIN categories cat ON d.category_id = cat.id
+                 WHERE o.order_number IN ($placeholders)
+                 ORDER BY COALESCE(o.order_date, NOW()) DESC, COALESCE(o.order_number, ''), o.id DESC",
+                array_values($recent_order_numbers)
+            );
+        }
 
         $dish_ids_for_ingredients = array_values(array_filter(array_unique(array_column($orders, 'dish_id'))));
         $ingredients_map = [];
@@ -589,7 +720,28 @@ if ($conn instanceof PDO) {
                 $order['notes'] = translateToUrdu($order['notes']);
             }
             $dish_id = isset($order['dish_id']) ? intval($order['dish_id']) : 0;
-            $order['ingredients'] = $ingredients_map[$dish_id] ?? [];
+            $all_ings = $ingredients_map[$dish_id] ?? [];
+            $removed_ids = [];
+            if (!empty($order['extra_ingredients'])) {
+                $extra_decoded = is_string($order['extra_ingredients'])
+                    ? json_decode($order['extra_ingredients'], true)
+                    : $order['extra_ingredients'];
+                if (is_array($extra_decoded) && !empty($extra_decoded['removed_ingredients'])) {
+                    foreach ($extra_decoded['removed_ingredients'] as $rem) {
+                        if (intval($rem['dish_id'] ?? 0) === $dish_id) {
+                            $removed_ids[intval($rem['ingredient_id'] ?? 0)] = true;
+                        }
+                    }
+                }
+            }
+            $order['removed_ingredient_ids'] = array_keys(array_filter($removed_ids));
+            $order['ingredients'] = array_values(array_filter(
+                $all_ings,
+                static function ($ing) use ($removed_ids) {
+                    $iid = intval($ing['ingredient_id'] ?? 0);
+                    return $iid <= 0 || empty($removed_ids[$iid]);
+                }
+            ));
         }
         unset($order);
 
@@ -617,27 +769,21 @@ if ($conn instanceof PDO) {
                     'status' => $order['status'],
                     'notes' => $order['notes'],
                     'extra_ingredients' => $order['extra_ingredients'] ?? null,
-                    'payment_type' => $order['payment_type'] ?? 'cash',
-                    'paid_amount' => floatval($order['paid_amount'] ?? 0),
                     'id' => $order['id'],
                     'total_amount' => 0,
+                    'advance_amount' => floatval($order['advance_amount'] ?? 0),
                     'dishes' => [],
                 ];
             }
             $grouped_orders[$order_num]['dishes'][] = $order;
             $grouped_orders[$order_num]['total_amount'] += floatval($order['total_amount']);
-            // Keep latest payment fields from any line
-            if (isset($order['payment_type'])) {
-                $grouped_orders[$order_num]['payment_type'] = $order['payment_type'];
-            }
-            if (isset($order['paid_amount'])) {
-                $grouped_orders[$order_num]['paid_amount'] = floatval($order['paid_amount']);
+            if (isset($order['advance_amount'])) {
+                $grouped_orders[$order_num]['advance_amount'] = floatval($order['advance_amount']);
             }
         }
 
         foreach ($grouped_orders as &$go) {
-            $go['due_amount'] = max(0, floatval($go['total_amount']) - floatval($go['paid_amount'] ?? 0));
-            $go['is_udhaar'] = (($go['payment_type'] ?? 'cash') === 'udhaar') && $go['due_amount'] > 0.009;
+            $go['remaining_amount'] = max(0, floatval($go['total_amount']) - floatval($go['advance_amount'] ?? 0));
         }
         unset($go);
 
@@ -650,7 +796,11 @@ if ($conn instanceof PDO) {
 
         $all_grouped_orders = $grouped_orders;
         $display_orders = $all_grouped_orders;
-        $overall_orders_count = count($all_grouped_orders);
+        $count_row = db_fetch(
+            $conn,
+            "SELECT COUNT(DISTINCT order_number) AS c FROM orders WHERE order_number IS NOT NULL AND order_number <> ''"
+        );
+        $overall_orders_count = (int) ($count_row['c'] ?? count($all_grouped_orders));
 
         if ($is_search_active) {
             $searchTerm = strtolower($order_number_search);
@@ -710,8 +860,6 @@ $total_orders_count = count($all_grouped_orders);
 $pending_orders = count(array_filter($all_grouped_orders, fn($o) => $o['status'] == 'pending'));
 $delivered_orders = count(array_filter($all_grouped_orders, fn($o) => $o['status'] == 'delivered'));
 $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
-$udhaar_orders = count(array_filter($all_grouped_orders, fn($o) => !empty($o['is_udhaar'])));
-$udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floatval($o['due_amount'] ?? 0) : 0, $all_grouped_orders));
 ?>
 
 <style>
@@ -1076,23 +1224,6 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
             </div>
         </div>
     </div>
-    <div class="col-lg-3 col-md-6">
-        <a href="udhaar.php" class="text-decoration-none">
-        <div class="order-stat-card info h-100">
-            <div class="card-body p-4">
-                <div class="d-flex align-items-center">
-                    <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
-                        <i class="bi bi-cash-coin fs-4 text-white"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small mb-1" style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Udhaar Due (<?php echo (int) $udhaar_orders; ?>)</div>
-                        <div class="h3 mb-0 fw-bold" style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Rs <?php echo number_format($udhaar_due_total, 0); ?></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        </a>
-    </div>
 </div>
 
 <!-- Alert Messages -->
@@ -1127,7 +1258,7 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                 <h5 class="mb-0 fw-bold">
                     <i class="bi bi-cart-plus-fill me-2"></i>
                     <span id="formTitle"><?php e('create_order'); ?> - 4-Step Process</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="resetFormToCreateMode(); document.getElementById('orderForm').reset();" id="newOrderBtn" style="display: none;">
+                    <button type="button" class="btn btn-sm btn-light ms-2" onclick="resetFormToCreateMode(); document.getElementById('orderForm').reset();" id="newOrderBtn">
                         <i class="bi bi-plus-circle me-1"></i> New Order
                     </button>
                 </h5>
@@ -1158,7 +1289,7 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                     </div>
                 </div>
 
-                <form method="POST" action="" id="orderForm" onsubmit="return validateFormSubmission()">
+                <form method="POST" action="orders.php" id="orderForm" onsubmit="return validateFormSubmission()" novalidate>
                     <!-- Create Order Input - Only active when creating new order -->
                     <input type="hidden" name="create_order" value="1" id="createOrderInput">
                     <!-- Update Order Input - Only active when editing existing order -->
@@ -1228,6 +1359,7 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                 </label>
                                 <select class="form-select form-select-lg" id="shift" name="shift" required>
                                     <option value="">-- شفٹ منتخب کریں --</option>
+                                    <option value="morning" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'morning') ? 'selected' : ''; ?>>صبح</option>
                                     <option value="afternoon" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'afternoon') ? 'selected' : ''; ?>>دوپہر</option>
                                     <option value="evening" <?php echo (isset($_POST['shift']) && $_POST['shift'] === 'evening') ? 'selected' : ''; ?>>شام</option>
                                 </select>
@@ -1239,35 +1371,6 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                 </label>
                                 <input type="time" class="form-control form-control-lg" id="delivery_time" name="delivery_time" 
                                        value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>" required>
-                            </div>
-                            <div class="col-12">
-                                <div class="p-3 rounded-3 border" style="background: #fff7ed; border-color: #fdba74 !important;">
-                                    <label class="form-label fw-semibold mb-2">
-                                        <i class="bi bi-cash-coin me-1 text-warning"></i>
-                                        ادائیگی / ادھار
-                                    </label>
-                                    <div class="d-flex flex-wrap gap-3 mb-3">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="payment_type" id="payment_cash" value="cash"
-                                                   <?php echo (!isset($_POST['payment_type']) || $_POST['payment_type'] !== 'udhaar') ? 'checked' : ''; ?>
-                                                   onchange="toggleUdhaarFields()">
-                                            <label class="form-check-label fw-semibold" for="payment_cash">نقد (Cash)</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="payment_type" id="payment_udhaar" value="udhaar"
-                                                   <?php echo (isset($_POST['payment_type']) && $_POST['payment_type'] === 'udhaar') ? 'checked' : ''; ?>
-                                                   onchange="toggleUdhaarFields()">
-                                            <label class="form-check-label fw-semibold" for="payment_udhaar">ادھار (Udhaar)</label>
-                                        </div>
-                                    </div>
-                                    <div id="udhaarPaidWrap" style="display: none;">
-                                        <label for="paid_amount" class="form-label">ایڈوانس / جمع رقم (Rs)</label>
-                                        <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="paid_amount" name="paid_amount"
-                                               value="<?php echo htmlspecialchars($_POST['paid_amount'] ?? '0'); ?>"
-                                               placeholder="0 = مکمل ادھار">
-                                        <small class="text-muted">باقی رقم ادھار میں رہے گی۔ بعد میں <strong>Udhaar</strong> صفحے سے وصول کر سکتے ہیں۔</small>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         <div class="step-actions mt-4">
@@ -1308,16 +1411,34 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                 <strong>Previously Added Dishes:</strong> These are dishes that were frequently ordered in the last 30 days. Click on a dish to quickly add it to your order.
                             </div>
                             <div class="row g-2 mb-3">
-                                <?php foreach ($previously_used_dishes as $dish): ?>
+                                <?php foreach ($previously_used_dishes as $dish):
+                                    $prevImg = $dish['image_url'] ?? '';
+                                ?>
                                 <div class="col-md-3 col-sm-6">
-                                    <button type="button" class="btn btn-outline-primary w-100 text-start previous-dish-btn" 
+                                    <button type="button" class="btn btn-outline-primary w-100 text-start previous-dish-btn p-2" 
                                             data-dish-id="<?php echo $dish['id']; ?>" 
                                             data-dish-name="<?php echo htmlspecialchars($dish['name']); ?>"
                                             style="white-space: normal; text-align: left;">
-                                        <i class="bi bi-star-fill me-1 text-warning"></i>
-                                        <strong><?php echo htmlspecialchars($dish['name']); ?></strong>
-                                        <br>
-                                        <small class="text-muted">Ordered <?php echo $dish['order_count']; ?> time(s)</small>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div style="width:56px;height:56px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#e2e8f0;">
+                                                <?php if ($prevImg !== ''): ?>
+                                                    <img src="<?php echo htmlspecialchars($prevImg); ?>" alt="" loading="lazy" decoding="async"
+                                                         style="width:100%;height:100%;object-fit:cover;"
+                                                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                                                    <div class="w-100 h-100 align-items-center justify-content-center" style="display:none;background:linear-gradient(135deg,#667eea,#764ba2);">
+                                                        <i class="bi bi-egg-fried text-white"></i>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="w-100 h-100 d-flex align-items-center justify-content-center" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                                                        <i class="bi bi-egg-fried text-white"></i>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="flex-grow-1" style="min-width:0;">
+                                                <strong class="d-block text-truncate"><?php echo htmlspecialchars($dish['name']); ?></strong>
+                                                <small class="text-muted">Ordered <?php echo $dish['order_count']; ?> time(s)</small>
+                                            </div>
+                                        </div>
                                     </button>
                                 </div>
                                 <?php endforeach; ?>
@@ -1338,7 +1459,16 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                             <div id="dishesContainer">
                                 <!-- First dish row -->
                                 <div class="dish-row mb-3 p-3 border rounded" data-row="0">
-                                    <div class="row g-3">
+                                    <div class="row g-3 align-items-end">
+                                        <div class="col-auto">
+                                            <div class="dish-thumb-wrap" style="width:72px;height:72px;border-radius:12px;overflow:hidden;background:#e2e8f0;border:1px solid #cbd5e1;">
+                                                <div class="dish-thumb-placeholder w-100 h-100 d-flex align-items-center justify-content-center" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                                                    <i class="bi bi-egg-fried text-white fs-3"></i>
+                                                </div>
+                                                <img class="dish-thumb-img w-100 h-100" alt="" style="object-fit:cover;display:none;" loading="lazy" decoding="async"
+                                                     onerror="this.style.display='none';this.previousElementSibling.style.display='flex';">
+                                            </div>
+                                        </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-semibold small">
                                                 <?php e('dish'); ?> <span class="text-danger">*</span>
@@ -1347,7 +1477,7 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                                 <select class="form-select dish-select" name="dishes[0][dish_id]" required onfocus="openDishSelectionModal(0)">
                                                     <option value=""><?php e('select_dish'); ?></option>
                                                     <?php foreach ($dishes as $dish): ?>
-                                                        <option value="<?php echo $dish['id']; ?>">
+                                                        <option value="<?php echo $dish['id']; ?>" data-image="<?php echo htmlspecialchars($dish['image_url'] ?? ''); ?>">
                                                             <?php echo htmlspecialchars($dish['name']); ?>
                                                         </option>
                                                     <?php endforeach; ?>
@@ -1394,6 +1524,13 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                                 <i class="bi bi-trash"></i> Remove
                                             </button>
                                         </div>
+                                    </div>
+                                    <div class="dish-ingredients-panel mt-3 pt-2 border-top" style="display: none;">
+                                        <div class="small fw-semibold text-muted mb-2">
+                                            <i class="bi bi-dash-circle me-1"></i>
+                                            Dish ingredients — remove jo is order mein nahi chahiye
+                                        </div>
+                                        <div class="dish-ingredients-list d-flex flex-wrap gap-2"></div>
                                     </div>
                                 </div>
                             </div>
@@ -1693,11 +1830,30 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                 <textarea class="form-control" id="notes" name="notes" rows="3" 
                                           placeholder="<?php e('optional_notes'); ?>"></textarea>
                             </div>
+
+                            <div class="mb-3 p-3 rounded-3 border" style="background:#f0fdf4;border-color:#86efac !important;">
+                                <label for="advance_amount" class="form-label fw-semibold mb-2">
+                                    <i class="bi bi-cash-stack me-1 text-success"></i>
+                                    ایڈوانس / پیشگی رقم (Rs)
+                                </label>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="advance_amount" name="advance_amount"
+                                       value="<?php echo htmlspecialchars($_POST['advance_amount'] ?? '0'); ?>"
+                                       placeholder="0.00" oninput="updateAdvanceSummary()">
+                                <small class="text-muted">گاہک سے لی گئی پیشگی رقم درج کریں۔ باقی رقم نیچے نظر آئے گی۔</small>
+                            </div>
                             
                             <div class="order-total-section p-3 mt-4" style="background: white; border-radius: 8px; border: 2px solid #667eea;">
-                                <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h5 class="mb-0 fw-bold">کل رقم:</h5>
                                     <h4 class="mb-0 fw-bold text-primary" id="reviewTotal">Rs 0.00</h4>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold text-success">ایڈوانس:</span>
+                                    <span class="fw-bold text-success" id="reviewAdvance">Rs 0.00</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                                    <span class="fw-bold">باقی رقم:</span>
+                                    <span class="fw-bold text-danger" id="reviewRemaining">Rs 0.00</span>
                                 </div>
                             </div>
                         </div>
@@ -1816,8 +1972,7 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                 <!-- Dishes Grid (hidden initially, shown after category selection) -->
                 <div id="modalDishesGrid" class="row g-3" style="display: none;">
                     <?php foreach ($dishes as $dish): 
-                        $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
-                        $image_exists = $image_path !== '';
+                        $image_path = dish_image_url((int) $dish['id'], '../');
                     ?>
                         <div class="col-md-4 col-lg-3 modal-dish-item" 
                              data-dish-id="<?php echo $dish['id']; ?>"
@@ -1827,20 +1982,18 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                              onclick="selectDishFromModal(<?php echo $dish['id']; ?>, '<?php echo htmlspecialchars(addslashes($dish['name'])); ?>')">
                             <div class="card h-100 shadow-sm border-0 dish-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
                                 <div style="position: relative; overflow: hidden; height: 200px; background: #f1f5f9;">
-                                    <?php if ($image_exists): ?>
-                                        <img src="<?php echo htmlspecialchars($image_path); ?>" 
-                                             class="w-100 h-100" 
-                                             style="object-fit: cover; transition: transform 0.3s ease;"
-                                             alt="<?php echo htmlspecialchars($dish['name']); ?>"
-                                             loading="lazy" decoding="async"
-                                             onmouseover="this.style.transform='scale(1.1)'"
-                                             onmouseout="this.style.transform='scale(1)'">
-                                    <?php else: ?>
-                                        <div class="w-100 h-100 d-flex align-items-center justify-content-center" 
-                                             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                            <i class="bi bi-egg-fried text-white" style="font-size: 4rem;"></i>
-                                        </div>
-                                    <?php endif; ?>
+                                    <img data-src="<?php echo htmlspecialchars($image_path); ?>" 
+                                         class="w-100 h-100 modal-dish-lazy-img" 
+                                         style="object-fit: cover; transition: transform 0.3s ease;"
+                                         alt="<?php echo htmlspecialchars($dish['name']); ?>"
+                                         decoding="async"
+                                         onmouseover="this.style.transform='scale(1.1)'"
+                                         onmouseout="this.style.transform='scale(1)'"
+                                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                                    <div class="w-100 h-100 align-items-center justify-content-center" 
+                                         style="display:none;background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                        <i class="bi bi-egg-fried text-white" style="font-size: 4rem;"></i>
+                                    </div>
                                     <div class="position-absolute top-0 end-0 m-2">
                                         <span class="badge bg-primary rounded-pill">
                                             <i class="bi bi-check-circle me-1"></i>Select
@@ -2068,13 +2221,6 @@ $visible_orders_count = count($paginated_orders);
                                                 <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-1">
                                                     <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
                                                 </span>
-                                                <?php if (!empty($grouped_order['is_udhaar'])): ?>
-                                                    <span class="badge bg-warning text-dark ms-1" title="Outstanding Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>">
-                                                        <i class="bi bi-cash-coin me-1"></i>ادھار Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>
-                                                    </span>
-                                                <?php elseif (($grouped_order['payment_type'] ?? 'cash') === 'cash'): ?>
-                                                    <span class="badge bg-success ms-1"><i class="bi bi-check2-circle me-1"></i>نقد</span>
-                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -2124,7 +2270,11 @@ $visible_orders_count = count($paginated_orders);
                                                         <span class="me-2 d-inline-block"><?php echo number_format($qty, 2); ?> <?php echo htmlspecialchars($unit_label); ?></span>
                                                     <?php endforeach; ?>
                                                     <?php if ($grouped_order['total_amount'] > 0): ?>
-                                                        • Total: Rs <?php echo number_format($grouped_order['total_amount'], 2); ?>
+                                                        • Total: <span class="text-success fw-bold">Rs <?php echo number_format($grouped_order['total_amount'], 2); ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($grouped_order['advance_amount']) && floatval($grouped_order['advance_amount']) > 0): ?>
+                                                        • Advance: Rs <?php echo number_format($grouped_order['advance_amount'], 2); ?>
+                                                        • باقی: Rs <?php echo number_format($grouped_order['remaining_amount'] ?? 0, 2); ?>
                                                     <?php endif; ?>
                                                 </small>
                                             </div>
@@ -2288,6 +2438,135 @@ const totalSteps = 4;
 // Get customer data for review
 const customersData = <?php echo json_encode($customers); ?>;
 const dishesData = <?php echo json_encode($dishes); ?>;
+window.dishesData = dishesData;
+const dishIngredientsByDishId = <?php echo json_encode($dish_ingredients_for_form ?: new stdClass()); ?>;
+
+function updateDishThumb(row) {
+    if (!row) return;
+    const dishSelect = row.querySelector('.dish-select');
+    const img = row.querySelector('.dish-thumb-img');
+    const placeholder = row.querySelector('.dish-thumb-placeholder');
+    if (!dishSelect || !img || !placeholder) return;
+
+    const dishId = dishSelect.value;
+    let imageUrl = '';
+    if (dishId && Array.isArray(dishesData)) {
+        const dish = dishesData.find(d => String(d.id) === String(dishId));
+        imageUrl = (dish && dish.image_url) ? dish.image_url : '';
+    }
+    if (!imageUrl && dishId) {
+        imageUrl = '../api/dish_image.php?id=' + encodeURIComponent(dishId);
+    }
+
+    if (dishId && imageUrl) {
+        placeholder.style.display = 'none';
+        img.style.display = 'block';
+        img.onload = function () {
+            placeholder.style.display = 'none';
+            img.style.display = 'block';
+        };
+        img.onerror = function () {
+            img.style.display = 'none';
+            placeholder.style.display = 'flex';
+        };
+        img.src = imageUrl;
+    } else {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+        placeholder.style.display = 'flex';
+    }
+}
+window.updateDishThumb = updateDishThumb;
+
+function renderDishIngredientsPanel(row, preRemovedIds) {
+    if (!row) return;
+    const panel = row.querySelector('.dish-ingredients-panel');
+    const list = row.querySelector('.dish-ingredients-list');
+    const dishSelect = row.querySelector('.dish-select');
+    if (!panel || !list || !dishSelect) return;
+
+    const rowIndex = row.getAttribute('data-row') || '0';
+    const dishId = String(dishSelect.value || '');
+    const ingredients = (dishId && dishIngredientsByDishId[dishId]) ? dishIngredientsByDishId[dishId] : [];
+
+    const removedSet = new Set((preRemovedIds || []).map(Number).filter(Boolean));
+    list.querySelectorAll('input.dish-removed-ingredient').forEach(function (inp) {
+        removedSet.add(Number(inp.value));
+    });
+
+    list.innerHTML = '';
+    if (!dishId || ingredients.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+    ingredients.forEach(function (ing) {
+        const id = Number(ing.ingredient_id);
+        const isRemoved = removedSet.has(id);
+        const qty = ing.quantity != null ? ing.quantity : '';
+        const unit = ing.unit || '';
+        const labelText = (ing.ingredient_name || 'Ingredient') + (qty !== '' ? (' (' + qty + (unit ? ' ' + unit : '') + ')') : '');
+
+        const chip = document.createElement('div');
+        chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border ' +
+            (isRemoved ? 'bg-danger-subtle text-decoration-line-through text-muted' : 'bg-light');
+        chip.style.fontSize = '0.85rem';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = (isRemoved ? 'Removed: ' : '') + labelText;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm ' + (isRemoved ? 'btn-outline-success' : 'btn-outline-danger');
+        btn.style.padding = '0 0.4rem';
+        btn.style.fontSize = '0.75rem';
+        btn.textContent = isRemoved ? 'Undo' : 'Remove';
+
+        let hidden = null;
+        if (isRemoved) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.className = 'dish-removed-ingredient';
+            hidden.name = 'dishes[' + rowIndex + '][removed_ingredients][]';
+            hidden.value = String(id);
+            chip.appendChild(hidden);
+        }
+
+        btn.addEventListener('click', function () {
+            if (hidden) {
+                // Undo remove
+                hidden.remove();
+                hidden = null;
+                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-light';
+                nameSpan.textContent = labelText;
+                btn.className = 'btn btn-sm btn-outline-danger';
+                btn.style.padding = '0 0.4rem';
+                btn.style.fontSize = '0.75rem';
+                btn.textContent = 'Remove';
+            } else {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.className = 'dish-removed-ingredient';
+                hidden.name = 'dishes[' + rowIndex + '][removed_ingredients][]';
+                hidden.value = String(id);
+                chip.insertBefore(hidden, nameSpan);
+                chip.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill border bg-danger-subtle text-decoration-line-through text-muted';
+                nameSpan.textContent = 'Removed: ' + labelText;
+                btn.className = 'btn btn-sm btn-outline-success';
+                btn.style.padding = '0 0.4rem';
+                btn.style.fontSize = '0.75rem';
+                btn.textContent = 'Undo';
+            }
+        });
+
+        chip.appendChild(nameSpan);
+        chip.appendChild(btn);
+        list.appendChild(chip);
+    });
+}
+
+window.renderDishIngredientsPanel = renderDishIngredientsPanel;
 
 // Validate form submission - ensure correct mode is set
 function validateFormSubmission() {
@@ -2323,7 +2602,7 @@ function validateFormSubmission() {
     } else {
         // CREATE MODE: Creating new order
         // Ensure create_order input has name attribute
-        if (createOrderInput && !createOrderInput.hasAttribute('name')) {
+        if (createOrderInput) {
             createOrderInput.setAttribute('name', 'create_order');
             createOrderInput.value = '1';
         }
@@ -2337,6 +2616,29 @@ function validateFormSubmission() {
         if (editOrderNumberInput && editOrderNumberInput.hasAttribute('name')) {
             editOrderNumberInput.removeAttribute('name');
             editOrderNumberInput.value = '';
+        }
+
+        const customerCell = (document.getElementById('customer_cell')?.value || '').trim();
+        const persons = parseInt(document.getElementById('number_of_persons')?.value || '0', 10);
+        const shift = document.getElementById('shift')?.value || '';
+        const deliveryDate = document.getElementById('delivery_date')?.value || '';
+        const deliveryTime = document.getElementById('delivery_time')?.value || '';
+        if (!customerCell || persons <= 0 || !shift || !deliveryDate || !deliveryTime) {
+            alert('Please fill all required customer fields in Step 1.');
+            return false;
+        }
+
+        let hasDish = false;
+        document.querySelectorAll('.dish-row').forEach(function (row) {
+            const dishId = row.querySelector('.dish-select')?.value;
+            const qty = parseFloat(row.querySelector('.dish-quantity')?.value || '0');
+            if (dishId && qty > 0) {
+                hasDish = true;
+            }
+        });
+        if (!hasDish) {
+            alert('Please select at least one dish with quantity in Step 2.');
+            return false;
         }
         
         console.log('Submitting form in CREATE mode (new order)');
@@ -2384,7 +2686,8 @@ function resetFormToCreateMode() {
     }
     
     if (newOrderBtn) {
-        newOrderBtn.style.display = 'none';
+        // Keep New Order available so user can always start fresh
+        newOrderBtn.style.display = 'inline-block';
     }
 }
 
@@ -2436,6 +2739,10 @@ function editOrder(orderNumber) {
             const time = order.delivery_time || '';
             deliveryTime.value = time;
         }
+        const advanceInput = document.getElementById('advance_amount');
+        if (advanceInput) {
+            advanceInput.value = order.advance_amount != null ? order.advance_amount : 0;
+        }
         
         // Populate Step 2: Dishes
         const dishesContainer = document.getElementById('dishesContainer');
@@ -2481,6 +2788,9 @@ function editOrder(orderNumber) {
                                 if (unitSelect && dish.unit) {
                                     unitSelect.value = dish.unit;
                                 }
+                                if (typeof renderDishIngredientsPanel === 'function') {
+                                    renderDishIngredientsPanel(row, dish.removed_ingredient_ids || []);
+                                }
                             }, 200);
                         } else {
                             // If updateUnitDropdown not available yet, initialize unit dropdown manually
@@ -2489,6 +2799,9 @@ function editOrder(orderNumber) {
                                 setTimeout(function() {
                                     if (unitSelect && dish.unit) {
                                         unitSelect.value = dish.unit;
+                                    }
+                                    if (typeof renderDishIngredientsPanel === 'function') {
+                                        renderDishIngredientsPanel(row, dish.removed_ingredient_ids || []);
                                     }
                                 }, 100);
                             }
@@ -2586,17 +2899,6 @@ function editOrder(orderNumber) {
 }
 
 // Step navigation functions
-function toggleUdhaarFields() {
-    const isUdhaar = document.getElementById('payment_udhaar')?.checked;
-    const wrap = document.getElementById('udhaarPaidWrap');
-    if (wrap) {
-        wrap.style.display = isUdhaar ? 'block' : 'none';
-    }
-}
-document.addEventListener('DOMContentLoaded', function () {
-    toggleUdhaarFields();
-});
-
 function nextStep(step) {
     // Initialize unit dropdowns before validation
     if (currentStep === 2) {
@@ -2759,7 +3061,7 @@ function validateCurrentStep() {
             return false;
         }
         if (shift && !shift.value) {
-            alert('براہ کرم شفٹ منتخب کریں (دوپہر یا شام)');
+            alert('براہ کرم شفٹ منتخب کریں (صبح، دوپہر یا شام)');
             shift.focus();
             return false;
         }
@@ -2936,11 +3238,17 @@ function updateReview() {
                 
                 if (dish && quantity > 0) {
                     const unitText = unit ? ` ${unit}` : '';
+                    const thumb = dish.image_url
+                        ? `<img src="${escapeHtml(dish.image_url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:8px;margin-right:10px;" onerror="this.style.display='none'">`
+                        : `<div style="width:48px;height:48px;border-radius:8px;margin-right:10px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;"><i class="bi bi-egg-fried text-white"></i></div>`;
                     dishesHTML += `
                         <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: white; border-radius: 6px;">
-                            <div>
-                                <strong>${escapeHtml(dish.name)}</strong><br>
-                                <small class="text-muted">Quantity: ${quantity}${unitText} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
+                            <div class="d-flex align-items-center">
+                                ${thumb}
+                                <div>
+                                    <strong>${escapeHtml(dish.name)}</strong><br>
+                                    <small class="text-muted">Quantity: ${quantity}${unitText} ${unitPrice > 0 ? '× Rs ' + unitPrice.toFixed(2) : ''}</small>
+                                </div>
                             </div>
                             <div class="text-end">
                                 <strong class="text-primary">Rs ${total.toFixed(2)}</strong>
@@ -3094,7 +3402,32 @@ function updateReview() {
     if (reviewTotal) {
         reviewTotal.textContent = 'Rs ' + totalAmount.toFixed(2);
     }
+    if (typeof updateAdvanceSummary === 'function') {
+        updateAdvanceSummary(totalAmount);
+    }
 }
+
+function updateAdvanceSummary(forcedTotal) {
+    let total = typeof forcedTotal === 'number' ? forcedTotal : null;
+    if (total === null) {
+        const reviewTotal = document.getElementById('reviewTotal');
+        const raw = (reviewTotal && reviewTotal.textContent) ? reviewTotal.textContent.replace(/[^\d.]/g, '') : '0';
+        total = parseFloat(raw) || 0;
+    }
+    const advanceInput = document.getElementById('advance_amount');
+    let advance = parseFloat(advanceInput ? advanceInput.value : 0) || 0;
+    if (advance < 0) advance = 0;
+    if (advance > total && total > 0) {
+        advance = total;
+        if (advanceInput) advanceInput.value = advance.toFixed(2);
+    }
+    const remaining = Math.max(0, total - advance);
+    const reviewAdvance = document.getElementById('reviewAdvance');
+    const reviewRemaining = document.getElementById('reviewRemaining');
+    if (reviewAdvance) reviewAdvance.textContent = 'Rs ' + advance.toFixed(2);
+    if (reviewRemaining) reviewRemaining.textContent = 'Rs ' + remaining.toFixed(2);
+}
+window.updateAdvanceSummary = updateAdvanceSummary;
 
 // Escape HTML function (will be defined in the dishes management section)
 function escapeHtml(text) {
@@ -3200,8 +3533,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const addDishBtn = document.getElementById('addDishBtn');
     let dishRowCount = 1; // Start from 1 since we already have row 0
     
-    // Get dishes data for cloning
-    const dishesData = <?php echo json_encode($dishes); ?>;
+    // Get dishes data for cloning (reuse global — avoid double json_encode)
+    const dishesData = window.dishesData || [];
     
     // Get ingredients data for extra ingredients
     const ingredientsData = <?php echo json_encode($ingredients); ?>;
@@ -3242,7 +3575,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function getDishOptionsHTML() {
         let html = '<option value=""><?php e('select_dish'); ?></option>';
         dishesData.forEach(function(dish) {
-            html += '<option value="' + dish.id + '">' + escapeHtml(dish.name) + '</option>';
+            const img = dish.image_url ? String(dish.image_url).replace(/"/g, '&quot;') : '';
+            html += '<option value="' + dish.id + '" data-image="' + img + '">' + escapeHtml(dish.name) + '</option>';
         });
         return html;
     }
@@ -3363,6 +3697,13 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             unitSelect.removeAttribute('required');
         }
+
+        if (typeof renderDishIngredientsPanel === 'function') {
+            renderDishIngredientsPanel(row);
+        }
+        if (typeof updateDishThumb === 'function') {
+            updateDishThumb(row);
+        }
     }
     
     // Make updateUnitDropdown available globally
@@ -3418,7 +3759,16 @@ document.addEventListener('DOMContentLoaded', function() {
         newRow.setAttribute('data-row', dishRowCount);
         
         newRow.innerHTML = `
-            <div class="row g-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-auto">
+                    <div class="dish-thumb-wrap" style="width:72px;height:72px;border-radius:12px;overflow:hidden;background:#e2e8f0;border:1px solid #cbd5e1;">
+                        <div class="dish-thumb-placeholder w-100 h-100 d-flex align-items-center justify-content-center" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+                            <i class="bi bi-egg-fried text-white fs-3"></i>
+                        </div>
+                        <img class="dish-thumb-img w-100 h-100" alt="" style="object-fit:cover;display:none;" loading="lazy" decoding="async"
+                             onerror="this.style.display='none';this.previousElementSibling.style.display='flex';">
+                    </div>
+                </div>
                 <div class="col-md-3">
                     <label class="form-label fw-semibold small">
                         <?php e('dish'); ?> <span class="text-danger">*</span>
@@ -3469,6 +3819,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         <i class="bi bi-trash"></i> Remove
                     </button>
                 </div>
+            </div>
+            <div class="dish-ingredients-panel mt-3 pt-2 border-top" style="display: none;">
+                <div class="small fw-semibold text-muted mb-2">
+                    <i class="bi bi-dash-circle me-1"></i>
+                    Dish ingredients — remove jo is order mein nahi chahiye
+                </div>
+                <div class="dish-ingredients-list d-flex flex-wrap gap-2"></div>
             </div>
         `;
         
@@ -3883,6 +4240,8 @@ try {
             'number_of_persons' => $grouped_order['number_of_persons'] ?? 0,
             'status' => $grouped_order['status'] ?? 'pending',
             'total_amount' => $grouped_order['total_amount'] ?? 0,
+            'advance_amount' => $grouped_order['advance_amount'] ?? 0,
+            'remaining_amount' => $grouped_order['remaining_amount'] ?? 0,
             'notes' => $grouped_order['notes'] ?? '',
             'extra_ingredients' => $extra_ingredients_data,
             'dishes' => []
@@ -3897,7 +4256,8 @@ try {
                 'total_amount' => $dish['total_amount'] ?? 0,
                 'number_of_persons' => $orderData['number_of_persons'] ?? ($dish['number_of_persons'] ?? 1),
                 'category_name' => $dish['dish_category_name'] ?? 'Uncategorized',
-                'ingredients' => $dish['ingredients'] ?? []
+                'ingredients' => $dish['ingredients'] ?? [],
+                'removed_ingredient_ids' => $dish['removed_ingredient_ids'] ?? [],
             ];
         }
         $cleanOrders[] = $orderData;
@@ -3935,6 +4295,7 @@ function printIngredients(orderNumberOrId) {
     
     // Shift translation mapping
     const shiftTranslations = {
+        'morning': 'صبح',
         'afternoon': 'دوپہر',
         'evening': 'شام',
         '': ''
@@ -5469,6 +5830,19 @@ let currentSelectedCategoryId = null;
 let currentDishRowIndex = 0;
 
 // Open dish selection modal
+function loadModalDishImages(scope) {
+    const root = scope || document;
+    root.querySelectorAll('img.modal-dish-lazy-img[data-src]').forEach(function (img) {
+        const parent = img.closest('.modal-dish-item');
+        if (parent && parent.style.display === 'none') {
+            return;
+        }
+        if (!img.getAttribute('src')) {
+            img.setAttribute('src', img.getAttribute('data-src'));
+        }
+    });
+}
+
 function openDishSelectionModal(rowIndex) {
     currentDishRowIndex = rowIndex || 0;
     currentSelectedCategoryId = null;
@@ -5547,10 +5921,8 @@ function selectCategoryInModal(categoryId, categoryName) {
     });
     
     filterItemsInModal('');
+    loadModalDishImages(dishesGrid);
 }
-
-// Filter items in modal (categories or dishes) by search term
-function filterItemsInModal(searchTerm) {
     const searchLower = searchTerm.toLowerCase().trim();
     let visibleCount = 0;
     
@@ -5614,6 +5986,12 @@ function selectDishFromModal(dishId, dishName) {
             select.value = dishId;
             // Trigger change event to update any dependent fields
             select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (typeof updateDishThumb === 'function') {
+            updateDishThumb(row);
+        }
+        if (typeof renderDishIngredientsPanel === 'function') {
+            renderDishIngredientsPanel(row);
         }
     }
     
