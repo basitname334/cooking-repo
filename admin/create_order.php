@@ -595,7 +595,7 @@ include __DIR__ . '/../includes/header.php';
                                     <div class="dish-card card h-100 position-relative" data-dish-id="<?php echo $dish['id']; ?>">
                                         <div style="position: relative; overflow: hidden;">
                                             <?php if ($image_exists): ?>
-                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>" loading="lazy" decoding="async" onerror="this.onerror=null;this.outerHTML='<div class=\'dish-placeholder\'><i class=\'bi bi-egg-fried\'></i></div>';">
+                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>" loading="lazy" decoding="async">
                                             <?php else: ?>
                                                 <div class="dish-placeholder">
                                                     <i class="bi bi-egg-fried"></i>
@@ -639,7 +639,7 @@ include __DIR__ . '/../includes/header.php';
                                         </div>
                                         <div style="position: relative; overflow: hidden;">
                                             <?php if ($image_exists): ?>
-                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>" loading="lazy" decoding="async" onerror="this.onerror=null;this.outerHTML='<div class=\'dish-placeholder\'><i class=\'bi bi-egg-fried\'></i></div>';">
+                                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="dish-image" alt="<?php echo htmlspecialchars($dish['name']); ?>" loading="lazy" decoding="async">
                                             <?php else: ?>
                                                 <div class="dish-placeholder">
                                                     <i class="bi bi-egg-fried"></i>
@@ -850,13 +850,8 @@ include __DIR__ . '/../includes/header.php';
                                              style="object-fit: cover; transition: transform 0.3s ease;"
                                              alt="<?php echo htmlspecialchars($dish['name']); ?>"
                                              loading="lazy" decoding="async"
-                                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                              onmouseover="this.style.transform='scale(1.1)'"
                                              onmouseout="this.style.transform='scale(1)'">
-                                        <div class="w-100 h-100 align-items-center justify-content-center" 
-                                             style="display:none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                            <i class="bi bi-egg-fried text-white" style="font-size: 4rem;"></i>
-                                        </div>
                                     <?php else: ?>
                                         <div class="w-100 h-100 d-flex align-items-center justify-content-center" 
                                              style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">

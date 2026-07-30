@@ -41,12 +41,6 @@ if (!$conn instanceof PDO) {
                     $conn->exec($alter);
                 }
             }
-            // New order form stores customer_name/cell; customer_id may be null
-            try {
-                $conn->exec('ALTER TABLE orders ALTER COLUMN customer_id DROP NOT NULL');
-            } catch (Throwable $e) {
-                // Already nullable or not supported — ignore
-            }
             $conn->exec("UPDATE orders SET order_number = 'ORD-' || LPAD(id::text, 6, '0') WHERE order_number IS NULL");
         } catch (Throwable $e) {
             error_log('Orders schema modification error: ' . $e->getMessage());
@@ -70,11 +64,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
         $delivery_time = trim($_POST['delivery_time'] ?? '');
         $notes = translateForDatabase(trim($_POST['notes'] ?? ''));
         $payment_type = (($_POST['payment_type'] ?? 'cash') === 'udhaar') ? 'udhaar' : 'cash';
-        $paid_amount_input = floatval($_POST['advance_from_party'] ?? $_POST['paid_amount'] ?? 0);
-        if ($paid_amount_input > 0 && $payment_type === 'cash' && isset($_POST['advance_from_party'])) {
-            // Advance entered on step 3 → treat remaining as udhaar unless fully covered later
-            $payment_type = 'udhaar';
-        }
+        $paid_amount_input = floatval($_POST['paid_amount'] ?? 0);
         $dishes_data = (isset($_POST['dishes']) && is_array($_POST['dishes'])) ? $_POST['dishes'] : [];
 
         $extra_ingredients_data = [];
@@ -129,14 +119,6 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
                 db_exec($conn, 'DELETE FROM orders WHERE order_number = ?', [$order_number]);
                 $orders_created = 0;
                 $grand_total_update = 0;
-
-                if ($use_new_form) {
-                    $resolved = resolve_order_customer_id($conn, $customer_name, $customer_cell, $customer_id);
-                    if ($resolved) {
-                        $customer_id = $resolved;
-                    }
-                }
-
                 foreach ($dishes_data as $dish_data) {
                     $dish_id = intval($dish_data['dish_id'] ?? 0);
                     $quantity = floatval($dish_data['quantity'] ?? 0);
@@ -162,11 +144,9 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
                             $conn,
                             "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
                                 customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, payment_type, paid_amount)
-                             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             [
-                                $order_number,
-                                $customer_id > 0 ? $customer_id : null,
-                                $dish_id, $quantity, $unit, $total_amount,
+                                $order_number, $dish_id, $quantity, $unit, $total_amount,
                                 $customer_name, $customer_cell, $order_datetime, $delivery_date,
                                 $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
                                 $payment_type, 0,
@@ -183,13 +163,10 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
                     $orders_created++;
                 }
 
-                $final_paid = ($payment_type === 'cash' && $paid_amount_input <= 0)
+                $final_paid = ($payment_type === 'cash')
                     ? $grand_total_update
-                    : max(0, min($paid_amount_input > 0 ? $paid_amount_input : (($payment_type === 'cash') ? $grand_total_update : 0), $grand_total_update));
-                if ($paid_amount_input > 0 && $paid_amount_input + 0.009 < $grand_total_update) {
-                    $payment_type = 'udhaar';
-                }
-                if ($final_paid >= $grand_total_update && $grand_total_update > 0) {
+                    : max(0, min($paid_amount_input, $grand_total_update));
+                if ($payment_type === 'udhaar' && $final_paid >= $grand_total_update && $grand_total_update > 0) {
                     $payment_type = 'cash';
                     $final_paid = $grand_total_update;
                 }
@@ -229,7 +206,7 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
     $delivery_time = trim($_POST['delivery_time'] ?? '');
     $notes = translateForDatabase(trim($_POST['notes'] ?? ''));
     $payment_type = (($_POST['payment_type'] ?? 'cash') === 'udhaar') ? 'udhaar' : 'cash';
-    $paid_amount_input = floatval($_POST['advance_from_party'] ?? $_POST['paid_amount'] ?? 0);
+    $paid_amount_input = floatval($_POST['paid_amount'] ?? 0);
     $order_datetime = date('Y-m-d H:i:s');
 
     $dishes_data = [];
@@ -330,26 +307,13 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
             $orders_created = 0;
             $errors = [];
             $grand_total = array_sum(array_column($valid_dishes, 'total_amount'));
-            // Advance from party
-            if ($paid_amount_input > 0 && $paid_amount_input + 0.009 < $grand_total) {
-                $payment_type = 'udhaar';
-            }
-            $final_paid = ($payment_type === 'cash' && $paid_amount_input <= 0)
+            $final_paid = ($payment_type === 'cash')
                 ? $grand_total
-                : max(0, min($paid_amount_input > 0 ? $paid_amount_input : (($payment_type === 'cash') ? $grand_total : 0), $grand_total));
-            if ($final_paid >= $grand_total && $grand_total > 0) {
+                : max(0, min($paid_amount_input, $grand_total));
+            if ($payment_type === 'udhaar' && $final_paid >= $grand_total && $grand_total > 0) {
                 $payment_type = 'cash';
                 $final_paid = $grand_total;
             }
-
-            // Resolve customer_id so NOT NULL schemas / FK still work
-            if ($use_new_form) {
-                $resolved = resolve_order_customer_id($conn, $customer_name, $customer_cell, $customer_id);
-                if ($resolved) {
-                    $customer_id = $resolved;
-                }
-            }
-
             try {
                 foreach ($valid_dishes as $dish_info) {
                     if ($use_new_form) {
@@ -357,11 +321,9 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
                             $conn,
                             "INSERT INTO orders (order_number, customer_id, dish_id, quantity, unit, total_amount, status,
                                 customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, notes, extra_ingredients, payment_type, paid_amount)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             [
-                                $order_number,
-                                $customer_id > 0 ? $customer_id : null,
-                                $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'],
+                                $order_number, $dish_info['dish_id'], $dish_info['quantity'], $dish_info['unit'],
                                 $dish_info['total_amount'], $status, $customer_name, $customer_cell, $order_datetime,
                                 $delivery_date, $delivery_time, $shift, $number_of_persons, $notes, $extra_ingredients_json,
                                 $payment_type, $final_paid,
@@ -796,49 +758,35 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
 .order-stat-card.info { --stat-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
 
 .order-card {
-    background: rgba(255, 255, 255, 0.98);
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 12px;
     font-size: 0.875rem;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-    cursor: pointer;
 }
 
 .order-card:hover {
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-    border-color: rgba(59, 130, 246, 0.45);
-    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.order-card .card-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .order-card .card-body {
-    padding: 1.15rem 1.25rem 0.85rem;
+    padding: 1rem;
 }
 
 .order-card .card-footer {
     padding: 0.75rem 1rem;
-    border-top: 1px solid rgba(226, 232, 240, 0.7);
-    background: #f8fafc;
+    border-top: 1px solid rgba(226, 232, 240, 0.6);
 }
 
-.order-card .preview-name {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #0f172a;
-    margin-bottom: 0.65rem;
-    line-height: 1.3;
-}
-
-.order-card .preview-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    color: #475569;
-    font-size: 0.86rem;
-}
-
-.order-card .preview-meta i {
-    width: 1.1rem;
-    color: #3b82f6;
+.order-card h6 {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
 }
 
 .order-card .badge {
@@ -847,12 +795,13 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
 }
 
 .order-card .btn-sm {
-    font-size: 0.78rem;
-    padding: 0.4rem 0.65rem;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
 }
 
-.qty-stepper .form-control {
-    max-width: 5.5rem;
+.order-card .form-select-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
 }
 
 /* Responsive adjustments for order cards */
@@ -1291,9 +1240,35 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                 <input type="time" class="form-control form-control-lg" id="delivery_time" name="delivery_time" 
                                        value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>" required>
                             </div>
-                            <!-- payment/udhaar (khata) section removed — use Advance from party on Step 3 -->
-                            <input type="hidden" name="payment_type" id="payment_type_hidden" value="cash">
-                            <input type="hidden" name="paid_amount" id="paid_amount" value="0">
+                            <div class="col-12">
+                                <div class="p-3 rounded-3 border" style="background: #fff7ed; border-color: #fdba74 !important;">
+                                    <label class="form-label fw-semibold mb-2">
+                                        <i class="bi bi-cash-coin me-1 text-warning"></i>
+                                        ادائیگی / ادھار
+                                    </label>
+                                    <div class="d-flex flex-wrap gap-3 mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="payment_type" id="payment_cash" value="cash"
+                                                   <?php echo (!isset($_POST['payment_type']) || $_POST['payment_type'] !== 'udhaar') ? 'checked' : ''; ?>
+                                                   onchange="toggleUdhaarFields()">
+                                            <label class="form-check-label fw-semibold" for="payment_cash">نقد (Cash)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="payment_type" id="payment_udhaar" value="udhaar"
+                                                   <?php echo (isset($_POST['payment_type']) && $_POST['payment_type'] === 'udhaar') ? 'checked' : ''; ?>
+                                                   onchange="toggleUdhaarFields()">
+                                            <label class="form-check-label fw-semibold" for="payment_udhaar">ادھار (Udhaar)</label>
+                                        </div>
+                                    </div>
+                                    <div id="udhaarPaidWrap" style="display: none;">
+                                        <label for="paid_amount" class="form-label">ایڈوانس / جمع رقم (Rs)</label>
+                                        <input type="number" step="0.01" min="0" class="form-control form-control-lg" id="paid_amount" name="paid_amount"
+                                               value="<?php echo htmlspecialchars($_POST['paid_amount'] ?? '0'); ?>"
+                                               placeholder="0 = مکمل ادھار">
+                                        <small class="text-muted">باقی رقم ادھار میں رہے گی۔ بعد میں <strong>Udhaar</strong> صفحے سے وصول کر سکتے ہیں۔</small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="step-actions mt-4">
                             <button type="button" class="btn btn-primary btn-lg" onclick="nextStep(2)">
@@ -1396,12 +1371,8 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                             <label class="form-label fw-semibold small">
                                                 <?php e('quantity'); ?> <span class="text-danger">*</span>
                                             </label>
-                                            <div class="input-group qty-stepper">
-                                                <button type="button" class="btn btn-outline-secondary qty-minus" data-target-class="dish-quantity" data-step="0.25">−</button>
-                                                <input type="number" class="form-control dish-quantity text-center" name="dishes[0][quantity]"
-                                                       placeholder="1" step="0.01" min="0.01" value="1" required>
-                                                <button type="button" class="btn btn-outline-secondary qty-plus" data-target-class="dish-quantity" data-step="0.25">+</button>
-                                            </div>
+                                            <input type="number" class="form-control dish-quantity" name="dishes[0][quantity]" 
+                                                   placeholder="1" step="0.01" min="0.01" value="1" required>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label fw-semibold small">
@@ -1448,7 +1419,7 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                             <label class="form-label fw-semibold small">
                                                 <?php e('ingredient_name'); ?> <span class="text-danger">*</span>
                                             </label>
-                                            <select class="form-select extra-ingredient-select" name="extra_ingredients[0][ingredient_id]" disabled>
+                                            <select class="form-select extra-ingredient-select" name="extra_ingredients[0][ingredient_id]">
                                                 <option value=""><?php e('select_ingredient'); ?></option>
                                                 <?php foreach ($ingredients as $ingredient): ?>
                                                     <option value="<?php echo $ingredient['id']; ?>">
@@ -1464,19 +1435,15 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                             <label class="form-label fw-semibold small">
                                                 <?php e('quantity'); ?> <span class="text-danger">*</span>
                                             </label>
-                                            <div class="input-group qty-stepper">
-                                                <button type="button" class="btn btn-outline-secondary qty-minus" data-target-class="extra-ingredient-quantity" data-step="0.25">−</button>
-                                                <input type="number" class="form-control extra-ingredient-quantity text-center"
-                                                       name="extra_ingredients[0][quantity]"
-                                                       placeholder="0.00" step="0.01" min="0" disabled>
-                                                <button type="button" class="btn btn-outline-secondary qty-plus" data-target-class="extra-ingredient-quantity" data-step="0.25">+</button>
-                                            </div>
+                                            <input type="number" class="form-control extra-ingredient-quantity" 
+                                                   name="extra_ingredients[0][quantity]" 
+                                                   placeholder="0.00" step="0.01" min="0.01">
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-semibold small">
                                                 <?php e('unit_label'); ?>
                                             </label>
-                                            <select class="form-select extra-ingredient-unit" name="extra_ingredients[0][unit]" disabled>
+                                            <select class="form-select extra-ingredient-unit" name="extra_ingredients[0][unit]">
                                                 <option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>
                                                 <option value="کلو">کلو</option>
                                                 <option value="گرام">گرام</option>
@@ -1512,94 +1479,174 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                 <i class="bi bi-box-seam me-2 text-primary"></i>
                                 مرحلہ 3: لازمی اشیاء
                             </h4>
-                            <p class="text-muted">اشیاء کو دو اقسام میں تقسیم کیا گیا ہے — ٹینٹ کا سامان اور اضافی سامان۔</p>
+                            <p class="text-muted">آرڈر کے لیے ضروری اضافی اشیاء شامل کریں۔</p>
                         </div>
-
-                        <!-- (a) Tent Ka Saman -->
-                        <div class="card border-0 shadow-sm mb-4">
-                            <div class="card-header fw-bold" style="background: #fff7ed;">
-                                <i class="bi bi-house me-2 text-warning"></i>(a) ٹینٹ کا سامان
-                            </div>
-                            <div class="card-body">
-                                <div class="row g-3">
-                                    <?php
-                                    $tent_items = [
-                                        'shamiana' => ['شامیانہ', 'عدد'],
-                                        'qanat' => ['قنات', 'عدد'],
-                                        'dari' => ['دری', 'عدد'],
-                                        'charpai' => ['چارپائی', 'عدد'],
-                                    ];
-                                    foreach ($tent_items as $key => [$label, $unit]):
-                                    ?>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold"><?php echo $label; ?></label>
-                                        <div class="input-group qty-stepper">
-                                            <button type="button" class="btn btn-outline-secondary qty-minus" data-target="additional_items_<?php echo $key; ?>">−</button>
-                                            <input type="number" class="form-control additional-item text-center" id="additional_items_<?php echo $key; ?>"
-                                                   name="additional_items[<?php echo $key; ?>]" placeholder="0" step="1" min="0" value="0">
-                                            <button type="button" class="btn btn-outline-secondary qty-plus" data-target="additional_items_<?php echo $key; ?>">+</button>
-                                            <span class="input-group-text"><?php echo $unit; ?></span>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- (b) Izafi Saman -->
-                        <div class="card border-0 shadow-sm mb-4">
-                            <div class="card-header fw-bold" style="background: #eff6ff;">
-                                <i class="bi bi-box2 me-2 text-primary"></i>(b) اضافی سامان
-                            </div>
-                            <div class="card-body">
-                                <div class="row g-3">
-                                    <?php
-                                    $izafi_items = [
-                                        'cloth_malmal' => ['کپڑا ململ', 'عدد'],
-                                        'match_box' => ['ماچس', 'عدد'],
-                                        'surrf' => ['سرف', 'کلو'],
-                                        'wood' => ['لکڑی', 'کلو'],
-                                        'sobi_iron' => ['صوبی (لوہے والی)', 'عدد'],
-                                        'steam_pot_with_lid' => ['سٹیم پتیلہ جال ڈھکن', 'عدد'],
-                                        'deg' => ['دیگ', 'عدد'],
-                                        'karahi' => ['کڑاہی', 'عدد'],
-                                        'chulhe' => ['چولہے', 'عدد'],
-                                        'parat' => ['پرات', 'عدد'],
-                                        'tub' => ['ٹب', 'عدد'],
-                                        'coal' => ['کوئلہ', 'کلو'],
-                                        'steam_pot_without_lid' => ['سٹیم پتیلہ بغیر ڈھکن', 'عدد'],
-                                    ];
-                                    foreach ($izafi_items as $key => [$label, $unit]):
-                                    ?>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold"><?php echo $label; ?></label>
-                                        <div class="input-group qty-stepper">
-                                            <button type="button" class="btn btn-outline-secondary qty-minus" data-target="additional_items_<?php echo $key; ?>">−</button>
-                                            <input type="number" class="form-control additional-item text-center" id="additional_items_<?php echo $key; ?>"
-                                                   name="additional_items[<?php echo $key; ?>]" placeholder="0" step="1" min="0" value="0">
-                                            <button type="button" class="btn btn-outline-secondary qty-plus" data-target="additional_items_<?php echo $key; ?>">+</button>
-                                            <span class="input-group-text"><?php echo $unit; ?></span>
-                                        </div>
-                                    </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Advance from party -->
-                        <div class="card border-0 shadow-sm mb-3" style="border: 2px solid #f59e0b !important;">
-                            <div class="card-body">
-                                <label for="advance_from_party" class="form-label fw-bold">
-                                    <i class="bi bi-cash-stack me-1 text-warning"></i>
-                                    Advance from party
+                        
+                        <!-- Additional Items Section -->
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    کپڑا ململ
                                 </label>
-                                <div class="input-group input-group-lg">
-                                    <span class="input-group-text">Rs</span>
-                                    <input type="number" step="0.01" min="0" class="form-control" id="advance_from_party" name="advance_from_party"
-                                           value="<?php echo htmlspecialchars($_POST['advance_from_party'] ?? $_POST['paid_amount'] ?? '0'); ?>"
-                                           placeholder="0.00" onchange="syncAdvancePayment()">
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[cloth_malmal]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
                                 </div>
-                                <small class="text-muted">پارٹی سے لی گئی ایڈوانس رقم۔ اگر ایڈوانس &gt; 0 ہو تو آرڈر ادھار میں بھی جا سکتا ہے۔</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    ماچس
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[match_box]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    سرف
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[surrf]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">گرام</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    لکڑی
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[wood]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">کلو</span>
+                                </div>
+                            </div>
+                          
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    صوبی(لوہے والی )
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[sobi_iron]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    سٹیم پتیلہ جال ڈھکن
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[steam_pot_with_lid]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    دیگ
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[deg]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    کڑاہی
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[karahi]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    چولہے
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control additional-item" 
+                                           name="additional_items[chulhe]" 
+                                           placeholder="0" step="1" min="0" value="0">
+                                    <span class="input-group-text">عدد</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    پرات
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[parat]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    ٹب
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[tub]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    شامیانہ
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[shamiana]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    قنات
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[qanat]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    دری
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[dari]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    چارپائی
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[charpai]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    کوئلہ
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[coal]" 
+                                       placeholder="0" step="1" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    سٹیم پتیلہ بغیر ڈھکن
+                                </label>
+                                <input type="number" class="form-control additional-item" 
+                                       name="additional_items[steam_pot_without_lid]" 
+                                       placeholder="0" step="1" min="0" value="0">
                             </div>
                         </div>
                         
@@ -1786,13 +1833,8 @@ $udhaar_due_total = array_sum(array_map(fn($o) => !empty($o['is_udhaar']) ? floa
                                              style="object-fit: cover; transition: transform 0.3s ease;"
                                              alt="<?php echo htmlspecialchars($dish['name']); ?>"
                                              loading="lazy" decoding="async"
-                                             onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';"
                                              onmouseover="this.style.transform='scale(1.1)'"
                                              onmouseout="this.style.transform='scale(1)'">
-                                        <div class="w-100 h-100 align-items-center justify-content-center" 
-                                             style="display:none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                            <i class="bi bi-egg-fried text-white" style="font-size: 4rem;"></i>
-                                        </div>
                                     <?php else: ?>
                                         <div class="w-100 h-100 d-flex align-items-center justify-content-center" 
                                              style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
@@ -2003,59 +2045,112 @@ $visible_orders_count = count($paginated_orders);
                                  data-customer="<?php echo strtolower(htmlspecialchars($grouped_order['customer_name'])); ?>"
                                  data-phone="<?php echo strtolower(htmlspecialchars($grouped_order['customer_cell'] ?? '')); ?>"
                                  data-status="<?php echo $grouped_order['status']; ?>">
-                                <div class="card border-0 shadow-sm h-100 order-card"
-                                     onclick="printOrder('<?php echo htmlspecialchars($grouped_order['order_number'], ENT_QUOTES); ?>')"
-                                     title="PDF preview — click to open">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div class="preview-name">
-                                                <?php echo htmlspecialchars($grouped_order['customer_name'] ?: '—'); ?>
+                                <div class="card border-0 shadow-sm h-100 order-card">
+                                    <div class="card-header bg-white">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <h6 class="mb-1 fw-bold text-primary">
+                                                    <i class="bi bi-hash me-1"></i><?php echo htmlspecialchars($grouped_order['order_number']); ?>
+                                                </h6>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-calendar3 me-1"></i>
+                                                    <?php echo date('M d, Y', strtotime($grouped_order['order_date'])); ?>
+                                                </small>
                                             </div>
-                                            <div class="d-flex flex-wrap gap-1 justify-content-end" onclick="event.stopPropagation();">
-                                                <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?>">
+                                            <div class="d-flex align-items-center gap-1">
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-warning" 
+                                                        title="<?php e('edit'); ?>"
+                                                        onclick="editOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                        style="font-size: 0.7rem; padding: 0.2rem 0.4rem; min-width: 28px;">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <span class="badge bg-<?php echo getStatusBadgeClass($grouped_order['status']); ?> ms-1">
                                                     <i class="bi bi-<?php echo getStatusIcon($grouped_order['status']); ?>"></i>
                                                 </span>
                                                 <?php if (!empty($grouped_order['is_udhaar'])): ?>
-                                                    <span class="badge bg-warning text-dark" title="Outstanding Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>">
-                                                        ادھار
+                                                    <span class="badge bg-warning text-dark ms-1" title="Outstanding Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>">
+                                                        <i class="bi bi-cash-coin me-1"></i>ادھار Rs <?php echo number_format($grouped_order['due_amount'] ?? 0, 0); ?>
                                                     </span>
+                                                <?php elseif (($grouped_order['payment_type'] ?? 'cash') === 'cash'): ?>
+                                                    <span class="badge bg-success ms-1"><i class="bi bi-check2-circle me-1"></i>نقد</span>
                                                 <?php endif; ?>
                                             </div>
                                         </div>
-                                        <div class="preview-meta">
-                                            <div>
-                                                <i class="bi bi-calendar3 me-1"></i>
-                                                <?php
-                                                $card_date = $grouped_order['delivery_date'] ?: $grouped_order['order_date'];
-                                                echo $card_date ? date('d M Y', strtotime($card_date)) : '—';
-                                                ?>
-                                            </div>
-                                            <div>
-                                                <i class="bi bi-telephone me-1"></i>
-                                                <?php echo htmlspecialchars($grouped_order['customer_cell'] ?: '—'); ?>
-                                            </div>
-                                            <div class="text-muted" style="font-size: 0.75rem;">
-                                                <i class="bi bi-hash me-1"></i><?php echo htmlspecialchars($grouped_order['order_number']); ?>
-                                                <span class="ms-1">• Tap for PDF preview</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="bg-primary bg-opacity-10 rounded p-1 me-2" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+                                                    <i class="bi bi-person-fill text-primary" style="font-size: 0.75rem;"></i>
+                                                </div>
+                                                <div class="flex-grow-1" style="min-width: 0;">
+                                                    <div class="fw-semibold" style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><?php echo htmlspecialchars($grouped_order['customer_name']); ?></div>
+                                                    <small class="text-muted d-block" style="font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><?php echo htmlspecialchars($grouped_order['customer_email']); ?></small>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div class="card-footer" onclick="event.stopPropagation();">
-                                        <div class="d-flex gap-1 flex-wrap align-items-center">
-                                            <button type="button" class="btn btn-sm btn-primary flex-fill"
-                                                    title="Share PDF"
-                                                    onclick="shareOrderPdf('<?php echo htmlspecialchars($grouped_order['order_number'], ENT_QUOTES); ?>')">
-                                                <i class="bi bi-file-earmark-pdf me-1"></i>Share PDF
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-warning"
-                                                    title="<?php e('edit'); ?>"
-                                                    onclick="editOrder('<?php echo htmlspecialchars($grouped_order['order_number'], ENT_QUOTES); ?>')">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <form method="POST" action="" class="flex-fill" style="min-width: 110px;">
+                                        
+                                        <div class="mb-2 pb-2 border-bottom">
+                                            <div class="fw-semibold mb-1" style="font-size: 0.75rem;">
+                                                <i class="bi bi-egg-fried text-success me-1"></i>Dishes (<?php echo count($grouped_order['dishes']); ?>)
+                                            </div>
+                                            <div>
+                                                <?php 
+                                                $max_display = 3;
+                                                $displayed_dishes = [];
+                                                $default_unit_label = t('units', 'Units');
+                                                foreach ($grouped_order['dishes'] as $index => $dish): 
+                                                    if ($index < $max_display) {
+                                                        $quantity_value = number_format(floatval($dish['quantity']), 2);
+                                                        $unit_label = !empty($dish['unit']) ? htmlspecialchars($dish['unit']) : $default_unit_label;
+                                                        $displayed_dishes[] = htmlspecialchars($dish['dish_name']) . ' (' . $quantity_value . ' ' . $unit_label . ')';
+                                                    }
+                                                endforeach; 
+                                                $unit_totals = [];
+                                                foreach ($grouped_order['dishes'] as $dish) {
+                                                    $unit_label = !empty($dish['unit']) ? $dish['unit'] : $default_unit_label;
+                                                    $unit_totals[$unit_label] = ($unit_totals[$unit_label] ?? 0) + floatval($dish['quantity']);
+                                                }
+                                                ?>
+                                                <small class="fw-semibold d-block" style="font-size: 0.75rem; line-height: 1.4;">
+                                                    <?php echo implode(', ', $displayed_dishes); ?>
+                                                    <?php if (count($grouped_order['dishes']) > $max_display): ?>
+                                                        <span class="text-muted">+<?php echo count($grouped_order['dishes']) - $max_display; ?> more</span>
+                                                    <?php endif; ?>
+                                                </small>
+                                                <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                                    <?php foreach ($unit_totals as $unit_label => $qty): ?>
+                                                        <span class="me-2 d-inline-block"><?php echo number_format($qty, 2); ?> <?php echo htmlspecialchars($unit_label); ?></span>
+                                                    <?php endforeach; ?>
+                                                    <?php if ($grouped_order['total_amount'] > 0): ?>
+                                                        • Total: Rs <?php echo number_format($grouped_order['total_amount'], 2); ?>
+                                                    <?php endif; ?>
+                                                </small>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="text-muted" style="font-size: 0.75rem;">Total</span>
+                                                <span class="fw-bold text-success" style="font-size: 0.95rem;">Rs <?php echo number_format($grouped_order['total_amount'], 2); ?></span>
+                                            </div>
+                                        </div>
+                                        
+                                        <?php if (!empty($grouped_order['notes'])): ?>
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block" style="font-size: 0.7rem; max-height: 40px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                                    <i class="bi bi-card-text me-1"></i>
+                                                    <?php echo htmlspecialchars($grouped_order['notes']); ?>
+                                                </small>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <div class="mb-0">
+                                            <form method="POST" action="">
                                                 <input type="hidden" name="order_id" value="<?php echo $grouped_order['id']; ?>">
                                                 <input type="hidden" name="order_number" value="<?php echo htmlspecialchars($grouped_order['order_number']); ?>">
-                                                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="font-size: 0.72rem;">
+                                                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="font-size: 0.7rem;">
                                                     <option value="pending" <?php echo $grouped_order['status'] == 'pending' ? 'selected' : ''; ?>>Pending</option>
                                                     <option value="confirmed" <?php echo $grouped_order['status'] == 'confirmed' ? 'selected' : ''; ?>>Confirmed</option>
                                                     <option value="preparing" <?php echo $grouped_order['status'] == 'preparing' ? 'selected' : ''; ?>>Preparing</option>
@@ -2065,9 +2160,38 @@ $visible_orders_count = count($paginated_orders);
                                                 </select>
                                                 <input type="hidden" name="update_status" value="1">
                                             </form>
-                                            <a href="?delete=<?php echo $grouped_order['id']; ?>" class="btn btn-sm btn-outline-danger"
-                                               title="<?php e('delete'); ?>"
-                                               onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');">
+                                        </div>
+                                    </div>
+                                    <div class="card-footer bg-white">
+                                        <div class="d-flex gap-1 flex-wrap">
+                                            <a href="order_preview.php?order_number=<?php echo urlencode($grouped_order['order_number']); ?>" 
+                                               class="btn btn-sm btn-success flex-fill" 
+                                               title="View Order Preview"
+                                               style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-info flex-fill" 
+                                                    title="<?php e('print_ingredients'); ?>" 
+                                                    onclick="printIngredients('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-printer"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-primary flex-fill" 
+                                                    title="<?php e('print_order'); ?>" 
+                                                    onclick="printOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-printer-fill"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-warning flex-fill" 
+                                                    title="Share Order" 
+                                                    onclick="shareOrder('<?php echo htmlspecialchars($grouped_order['order_number']); ?>')"
+                                                    style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
+                                                <i class="bi bi-share-fill"></i>
+                                            </button>
+                                            <a href="?delete=<?php echo $grouped_order['id']; ?>" class="btn btn-sm btn-danger" 
+                                               title="<?php e('delete'); ?>" 
+                                               onclick="return confirm('<?php echo addslashes(t('confirm_delete_order', 'Are you sure you want to delete this order?')); ?>');"
+                                               style="font-size: 0.7rem; padding: 0.2rem 0.4rem;">
                                                 <i class="bi bi-trash"></i>
                                             </a>
                                         </div>
@@ -2312,17 +2436,6 @@ function editOrder(orderNumber) {
             const time = order.delivery_time || '';
             deliveryTime.value = time;
         }
-
-        // Payment / Advance from party
-        const paidAmountInput = document.getElementById('paid_amount');
-        const advanceInput = document.getElementById('advance_from_party');
-        const paymentTypeHidden = document.getElementById('payment_type_hidden');
-        const paidVal = (order.paid_amount != null && order.paid_amount !== '') ? parseFloat(order.paid_amount) : 0;
-        if (paidAmountInput) paidAmountInput.value = isNaN(paidVal) ? '0' : paidVal;
-        if (advanceInput) advanceInput.value = isNaN(paidVal) ? '0' : paidVal;
-        if (paymentTypeHidden) {
-            paymentTypeHidden.value = order.payment_type || 'cash';
-        }
         
         // Populate Step 2: Dishes
         const dishesContainer = document.getElementById('dishesContainer');
@@ -2473,6 +2586,17 @@ function editOrder(orderNumber) {
 }
 
 // Step navigation functions
+function toggleUdhaarFields() {
+    const isUdhaar = document.getElementById('payment_udhaar')?.checked;
+    const wrap = document.getElementById('udhaarPaidWrap');
+    if (wrap) {
+        wrap.style.display = isUdhaar ? 'block' : 'none';
+    }
+}
+document.addEventListener('DOMContentLoaded', function () {
+    toggleUdhaarFields();
+});
+
 function nextStep(step) {
     // Initialize unit dropdowns before validation
     if (currentStep === 2) {
@@ -2893,56 +3017,70 @@ function updateReview() {
         }
     }
     
-    // Add additional items to review — 2 categories (Tent / Izafi), units only کلو or عدد
-    const additionalItemMeta = {
-        shamiana: { name: 'شامیانہ', unit: 'عدد', cat: 'tent' },
-        qanat: { name: 'قنات', unit: 'عدد', cat: 'tent' },
-        dari: { name: 'دری', unit: 'عدد', cat: 'tent' },
-        charpai: { name: 'چارپائی', unit: 'عدد', cat: 'tent' },
-        cloth_malmal: { name: 'کپڑا ململ', unit: 'عدد', cat: 'izafi' },
-        match_box: { name: 'ماچس', unit: 'عدد', cat: 'izafi' },
-        surrf: { name: 'سرف', unit: 'کلو', cat: 'izafi' },
-        wood: { name: 'لکڑی', unit: 'کلو', cat: 'izafi' },
-        sobi_iron: { name: 'صوبی (لوہے والی)', unit: 'عدد', cat: 'izafi' },
-        sponjis_iron: { name: 'اسپنجز (آئرن)', unit: 'عدد', cat: 'izafi' },
-        steam_pot_with_lid: { name: 'سٹیم پتیلہ جال ڈھکن', unit: 'عدد', cat: 'izafi' },
-        deg: { name: 'دیگ', unit: 'عدد', cat: 'izafi' },
-        karahi: { name: 'کڑاہی', unit: 'عدد', cat: 'izafi' },
-        chulhe: { name: 'چولہے', unit: 'عدد', cat: 'izafi' },
-        parat: { name: 'پرات', unit: 'عدد', cat: 'izafi' },
-        tub: { name: 'ٹب', unit: 'عدد', cat: 'izafi' },
-        coal: { name: 'کوئلہ', unit: 'کلو', cat: 'izafi' },
-        steam_pot_without_lid: { name: 'سٹیم پتیلہ بغیر ڈھکن', unit: 'عدد', cat: 'izafi' }
-    };
-
-    const tentLines = [];
-    const izafiLines = [];
-    document.querySelectorAll('.additional-item').forEach(function(input) {
-        const quantity = parseInt(input.value, 10) || 0;
-        if (quantity <= 0) return;
-        const match = input.name.match(/\[([^\]]+)\]/);
-        const key = match ? match[1] : '';
-        const meta = additionalItemMeta[key] || { name: key, unit: 'عدد', cat: 'izafi' };
-        const line = `
-            <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: ${meta.cat === 'tent' ? '#fff7ed' : '#eff6ff'}; border-radius: 6px; border-left: 3px solid ${meta.cat === 'tent' ? '#f59e0b' : '#3b82f6'};">
-                <div>
-                    <strong>${escapeHtml(meta.name)}</strong><br>
-                    <small class="text-muted">${reviewTranslations.quantity}: ${quantity} ${meta.unit}</small>
+    // Add additional items to review
+    const additionalItemInputs = document.querySelectorAll('.additional-item');
+    let hasAdditionalItems = false;
+    let additionalItemsHTML = '';
+    
+    additionalItemInputs.forEach(function(input) {
+        const quantity = parseInt(input.value) || 0;
+        if (quantity > 0) {
+            if (!hasAdditionalItems) {
+                additionalItemsHTML = '<div class="mt-3 pt-3 border-top"><strong class="text-info"><i class="bi bi-box-seam me-1"></i>' + reviewTranslations.additional_items + ':</strong></div>';
+                hasAdditionalItems = true;
+            }
+            
+            // Get the item name from the input name attribute
+            const itemName = input.name.match(/\[([^\]]+)\]/);
+            let displayName = '';
+            let unit = 'عدد'; // Default to pieces
+            if (itemName) {
+                const key = itemName[1];
+                const nameMap = {
+                    'cloth_malmal': reviewTranslations.cloth_malmal || 'کپڑا ململ',
+                    'match_box': reviewTranslations.match_box || 'ماچس',
+                    'surrf': reviewTranslations.surrf || 'سرف',
+                    'wood': reviewTranslations.wood || 'لکڑی',
+                    'sponjis_iron': reviewTranslations.sponjis_iron || 'اسپنجز (آئرن)',
+                    'sobi_iron': reviewTranslations.sobi_iron || 'صوبی(لوہے والی )',
+                    'steam_pot_with_lid': reviewTranslations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
+                    'deg': reviewTranslations.deg || 'دیگ',
+                    'karahi': reviewTranslations.karahi || 'کڑاہی',
+                    'chulhe': reviewTranslations.chulhe || 'چولہے',
+                    'parat': reviewTranslations.parat || 'پرات',
+                    'tub': reviewTranslations.tub || 'ٹب',
+                    'shamiana': reviewTranslations.shamiana || 'شامیانہ',
+                    'qanat': reviewTranslations.qanat || 'قنات',
+                    'dari': reviewTranslations.dari || 'دری',
+                    'charpai': reviewTranslations.charpai || 'چارپائی',
+                    'coal': reviewTranslations.coal || 'کوئلہ',
+                    'steam_pot_without_lid': reviewTranslations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
+                };
+                displayName = nameMap[key] || key;
+                
+                // Set unit: meter for cloth_malmal, gram for surrf, kilo for wood, pieces for others
+                if (key === 'cloth_malmal') {
+                    unit = 'میٹر'; // Meter for cloth
+                } else if (key === 'surrf') {
+                    unit = 'گرام'; // Gram for surrf
+                } else if (key === 'wood') {
+                    unit = 'کلو'; // Kilo for wood
+                }
+            }
+            
+            additionalItemsHTML += `
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2" style="background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                    <div>
+                        <strong class="text-info">${escapeHtml(displayName)}</strong><br>
+                        <small class="text-muted">${reviewTranslations.quantity}: ${quantity} ${unit}</small>
+                    </div>
                 </div>
-            </div>`;
-        if (meta.cat === 'tent') tentLines.push(line);
-        else izafiLines.push(line);
+            `;
+        }
     });
-
-    if (tentLines.length || izafiLines.length) {
-        dishesHTML += '<div class="mt-3 pt-3 border-top">';
-        if (tentLines.length) {
-            dishesHTML += '<strong class="text-warning d-block mb-2"><i class="bi bi-house me-1"></i>(a) ٹینٹ کا سامان:</strong>' + tentLines.join('');
-        }
-        if (izafiLines.length) {
-            dishesHTML += '<strong class="text-primary d-block mb-2 mt-3"><i class="bi bi-box2 me-1"></i>(b) اضافی سامان:</strong>' + izafiLines.join('');
-        }
-        dishesHTML += '</div>';
+    
+    if (hasAdditionalItems) {
+        dishesHTML += additionalItemsHTML;
     }
     
     if (dishesHTML) {
@@ -2955,23 +3093,6 @@ function updateReview() {
     const reviewTotal = document.getElementById('reviewTotal');
     if (reviewTotal) {
         reviewTotal.textContent = 'Rs ' + totalAmount.toFixed(2);
-    }
-
-    // Show Advance from party on review
-    const advanceEl = document.getElementById('advance_from_party');
-    const advanceVal = advanceEl ? (parseFloat(advanceEl.value) || 0) : 0;
-    let advanceReview = document.getElementById('reviewAdvance');
-    if (!advanceReview && reviewTotal) {
-        const wrap = reviewTotal.closest('.order-total-section');
-        if (wrap) {
-            advanceReview = document.createElement('div');
-            advanceReview.id = 'reviewAdvance';
-            advanceReview.className = 'd-flex justify-content-between align-items-center mt-2';
-            wrap.appendChild(advanceReview);
-        }
-    }
-    if (advanceReview) {
-        advanceReview.innerHTML = '<span class="text-muted">Advance from party:</span><strong class="text-warning">Rs ' + advanceVal.toFixed(2) + '</strong>';
     }
 }
 
@@ -3325,12 +3446,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <label class="form-label fw-semibold small">
                         <?php e('quantity'); ?> <span class="text-danger">*</span>
                     </label>
-                    <div class="input-group qty-stepper">
-                        <button type="button" class="btn btn-outline-secondary qty-minus" data-target-class="dish-quantity" data-step="0.25">−</button>
-                        <input type="number" class="form-control dish-quantity text-center" name="dishes[${dishRowCount}][quantity]"
-                               placeholder="1" step="0.01" min="0.01" value="1" required>
-                        <button type="button" class="btn btn-outline-secondary qty-plus" data-target-class="dish-quantity" data-step="0.25">+</button>
-                    </div>
+                    <input type="number" class="form-control dish-quantity" name="dishes[${dishRowCount}][quantity]" 
+                           placeholder="1" step="0.01" min="0.01" value="1" required>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold small">
@@ -3423,21 +3540,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Extra Ingredients Management
     const extraIngredientsContainer = document.getElementById('extraIngredientsContainer');
     const addExtraIngredientBtn = document.getElementById('addExtraIngredientBtn');
-    let extraIngredientRowCount = 1;
+    let extraIngredientRowCount = 0;
     
     // Add extra ingredient row
     if (addExtraIngredientBtn && extraIngredientsContainer) {
         addExtraIngredientBtn.addEventListener('click', function() {
-            // First use the hidden template row if present
-            const templateRow = extraIngredientsContainer.querySelector('.extra-ingredient-row[style*="none"], .extra-ingredient-row[data-row="0"]');
-            if (templateRow && (templateRow.style.display === 'none' || getComputedStyle(templateRow).display === 'none')) {
-                templateRow.style.display = 'block';
-                templateRow.querySelectorAll('input, select').forEach(function(el) { el.disabled = false; });
-                const qty = templateRow.querySelector('.extra-ingredient-quantity');
-                if (qty && (!qty.value || qty.value === '')) qty.value = '0';
-                return;
-            }
-
             const newRow = document.createElement('div');
             newRow.className = 'extra-ingredient-row mb-3 p-3 border rounded';
             newRow.setAttribute('data-row', extraIngredientRowCount);
@@ -3458,13 +3565,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <label class="form-label fw-semibold small">
                             ${reviewTranslations.quantity || 'Quantity'} <span class="text-danger">*</span>
                         </label>
-                        <div class="input-group qty-stepper">
-                            <button type="button" class="btn btn-outline-secondary qty-minus" data-target-class="extra-ingredient-quantity" data-step="0.25">−</button>
-                            <input type="number" class="form-control extra-ingredient-quantity text-center"
-                                   name="extra_ingredients[${extraIngredientRowCount}][quantity]"
-                                   placeholder="0.00" step="0.01" min="0" value="0">
-                            <button type="button" class="btn btn-outline-secondary qty-plus" data-target-class="extra-ingredient-quantity" data-step="0.25">+</button>
-                        </div>
+                        <input type="number" class="form-control extra-ingredient-quantity" 
+                               name="extra_ingredients[${extraIngredientRowCount}][quantity]" 
+                               placeholder="0.00" step="0.01" min="0.01">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-semibold small">
@@ -3514,18 +3617,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target.closest('.remove-extra-ingredient-btn')) {
                 const row = e.target.closest('.extra-ingredient-row');
                 if (row) {
-                    const visibleRows = extraIngredientsContainer.querySelectorAll('.extra-ingredient-row');
-                    // Keep at least the template: hide instead of removing the last/template row
-                    if (row.getAttribute('data-row') === '0' && visibleRows.length === 1) {
-                        row.style.display = 'none';
-                        row.querySelectorAll('input, select').forEach(function(el) {
-                            if (el.tagName === 'SELECT') el.selectedIndex = 0;
-                            else el.value = '';
-                            el.disabled = true;
-                        });
-                    } else {
-                        row.remove();
-                    }
+                    row.remove();
                 }
             }
         });
@@ -4181,68 +4273,79 @@ function printIngredients(orderNumberOrId) {
                 });
             }
             
-            // Process additional_items — split into Tent Ka saman + Izafi saman (units: کلو / عدد only)
+            // Process additional_items object
             if (extraIngredientsData && extraIngredientsData.additional_items && typeof extraIngredientsData.additional_items === 'object') {
-                const additionalItemMeta = {
-                    shamiana: { name: translations.shamiana || 'شامیانہ', unit: 'عدد', cat: 'tent' },
-                    qanat: { name: translations.qanat || 'قنات', unit: 'عدد', cat: 'tent' },
-                    dari: { name: translations.dari || 'دری', unit: 'عدد', cat: 'tent' },
-                    charpai: { name: translations.charpai || 'چارپائی', unit: 'عدد', cat: 'tent' },
-                    cloth_malmal: { name: translations.cloth_malmal || 'کپڑا ململ', unit: 'عدد', cat: 'izafi' },
-                    match_box: { name: translations.match_box || 'ماچس', unit: 'عدد', cat: 'izafi' },
-                    surrf: { name: translations.surrf || 'سرف', unit: 'کلو', cat: 'izafi' },
-                    wood: { name: translations.wood || 'لکڑی', unit: 'کلو', cat: 'izafi' },
-                    sobi_iron: { name: translations.sobi_iron || 'صوبی(لوہے والی )', unit: 'عدد', cat: 'izafi' },
-                    sponjis_iron: { name: translations.sponjis_iron || 'اسپنجز (آئرن)', unit: 'عدد', cat: 'izafi' },
-                    steam_pot_with_lid: { name: translations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن', unit: 'عدد', cat: 'izafi' },
-                    deg: { name: translations.deg || 'دیگ', unit: 'عدد', cat: 'izafi' },
-                    karahi: { name: translations.karahi || 'کڑاہی', unit: 'عدد', cat: 'izafi' },
-                    chulhe: { name: translations.chulhe || 'چولہے', unit: 'عدد', cat: 'izafi' },
-                    parat: { name: translations.parat || 'پرات', unit: 'عدد', cat: 'izafi' },
-                    tub: { name: translations.tub || 'ٹب', unit: 'عدد', cat: 'izafi' },
-                    coal: { name: translations.coal || 'کوئلہ', unit: 'کلو', cat: 'izafi' },
-                    steam_pot_without_lid: { name: translations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن', unit: 'عدد', cat: 'izafi' }
+                const additionalItemsMap = {
+                    'cloth_malmal': translations.cloth_malmal || 'کپڑا ململ',
+                    'match_box': translations.match_box || 'ماچس',
+                    'surrf': translations.surrf || 'سرف',
+                    'wood': translations.wood || 'لکڑی',
+                    'sponjis_iron': translations.sponjis_iron || 'اسپنجز (آئرن)',
+                    'sobi_iron': translations.sobi_iron || 'صوبی(لوہے والی )',
+                    'steam_pot_with_lid': translations.steam_pot_with_lid || 'سٹیم پتیلہ جال ڈھکن',
+                    'deg': translations.deg || 'دیگ',
+                    'karahi': translations.karahi || 'کڑاہی',
+                    'chulhe': translations.chulhe || 'چولہے',
+                    'parat': translations.parat || 'پرات',
+                    'tub': translations.tub || 'ٹب',
+                    'shamiana': translations.shamiana || 'شامیانہ',
+                    'qanat': translations.qanat || 'قنات',
+                    'dari': translations.dari || 'دری',
+                    'charpai': translations.charpai || 'چارپائی',
+                    'coal': translations.coal || 'کوئلہ',
+                    'steam_pot_without_lid': translations.steam_pot_without_lid || 'سٹیم پتیلہ بغیر ڈھکن'
                 };
-
-                const tentDishId = 'tent_items_dish';
-                const izafiDishId = 'izafi_items_dish';
-
-                function ensureCatDish(dishId, dishName, categoryId, categoryName) {
-                    if (!ingredientsByDish[dishId]) {
-                        ingredientsByDish[dishId] = {
-                            dish_name: dishName,
-                            dish_id: dishId,
-                            quantity: 1,
-                            categories: {}
-                        };
-                    }
-                    if (!ingredientsByDish[dishId].categories[categoryId]) {
-                        ingredientsByDish[dishId].categories[categoryId] = {
-                            category_name: categoryName,
-                            ingredients: {}
-                        };
-                    }
+                
+                // Create a special category for additional items
+                const additionalItemsCategoryId = 'additional_items';
+                const additionalItemsCategoryName = translations.additional_items || 'اضافی اشیاء';
+                const additionalItemsDishId = 'additional_items_dish';
+                
+                if (!ingredientsByDish[additionalItemsDishId]) {
+                    ingredientsByDish[additionalItemsDishId] = {
+                        dish_name: translations.additional_items || 'اضافی اشیاء',
+                        dish_id: additionalItemsDishId,
+                        quantity: 1,
+                        categories: {}
+                    };
                 }
-
+                
+                // Initialize category if not exists
+                if (!ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId]) {
+                    ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId] = {
+                        category_name: additionalItemsCategoryName,
+                        ingredients: {}
+                    };
+                }
+                
+                // Process each additional item
                 Object.keys(extraIngredientsData.additional_items).forEach(function(itemKey) {
-                    const quantity = parseInt(extraIngredientsData.additional_items[itemKey], 10) || 0;
-                    if (quantity <= 0) return;
-                    const meta = additionalItemMeta[itemKey] || { name: itemKey, unit: 'عدد', cat: 'izafi' };
-                    const isTent = meta.cat === 'tent';
-                    const dishId = isTent ? tentDishId : izafiDishId;
-                    const dishName = isTent ? '(a) ٹینٹ کا سامان' : '(b) اضافی سامان';
-                    const categoryId = isTent ? 'tent_items' : 'izafi_items';
-                    ensureCatDish(dishId, dishName, categoryId, dishName);
-                    const key = 'additional_' + itemKey;
-                    const bucket = ingredientsByDish[dishId].categories[categoryId].ingredients;
-                    if (bucket[key]) {
-                        bucket[key].quantity += quantity;
-                    } else {
-                        bucket[key] = {
-                            ingredient_name: meta.name,
-                            quantity: quantity,
-                            unit: meta.unit
-                        };
+                    const quantity = parseInt(extraIngredientsData.additional_items[itemKey]) || 0;
+                    
+                    if (quantity > 0) {
+                        const itemName = additionalItemsMap[itemKey] || itemKey;
+                        const key = 'additional_' + itemKey;
+                        
+                        // Set unit: meter for cloth_malmal, gram for surrf, kilo for wood, pieces for others
+                        let unit = 'عدد'; // Default to pieces
+                        if (itemKey === 'cloth_malmal') {
+                            unit = 'میٹر'; // Meter for cloth
+                        } else if (itemKey === 'surrf') {
+                            unit = 'گرام'; // Gram for surrf
+                        } else if (itemKey === 'wood') {
+                            unit = 'کلو'; // Kilo for wood
+                        }
+                        
+                        // Add or update additional item in category
+                        if (ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key]) {
+                            ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key].quantity += quantity;
+                        } else {
+                            ingredientsByDish[additionalItemsDishId].categories[additionalItemsCategoryId].ingredients[key] = {
+                                ingredient_name: itemName,
+                                quantity: quantity,
+                                unit: unit
+                            };
+                        }
                     }
                 });
             }
@@ -5328,78 +5431,6 @@ function shareOrder(orderNumber) {
         alert('Sharing is not supported in this browser.');
     }
 }
-
-// Share PDF: open print/PDF preview so user can Save as PDF / share
-function shareOrderPdf(orderNumber) {
-    printOrder(orderNumber);
-    setTimeout(function() {
-        alert('Print dialog mein "Save as PDF" select karke PDF share karein.');
-    }, 600);
-}
-
-function syncAdvancePayment() {
-    const advance = document.getElementById('advance_from_party');
-    const paid = document.getElementById('paid_amount');
-    const paymentTypeHidden = document.getElementById('payment_type_hidden');
-    if (!advance) return;
-    const val = advance.value || '0';
-    if (paid) paid.value = val;
-    const amount = parseFloat(val) || 0;
-    if (paymentTypeHidden) {
-        paymentTypeHidden.value = amount > 0 ? 'udhaar' : 'cash';
-    }
-}
-
-document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.qty-plus, .qty-minus');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    let input = null;
-    const targetId = btn.getAttribute('data-target');
-    if (targetId) {
-        input = document.getElementById(targetId);
-    }
-    if (!input) {
-        const cls = btn.getAttribute('data-target-class');
-        const group = btn.closest('.qty-stepper') || btn.closest('.input-group');
-        if (cls && group) {
-            input = group.querySelector('.' + cls);
-        }
-    }
-    if (!input) return;
-
-    const step = parseFloat(btn.getAttribute('data-step') || input.getAttribute('step') || '1') || 1;
-    const minAttr = input.getAttribute('min');
-    const min = minAttr !== null && minAttr !== '' ? parseFloat(minAttr) : 0;
-    let current = parseFloat(input.value);
-    if (isNaN(current)) current = 0;
-
-    if (btn.classList.contains('qty-plus')) {
-        current += step;
-    } else {
-        current -= step;
-    }
-    if (current < min) current = min;
-
-    // Keep nice decimals
-    const decimals = (String(step).split('.')[1] || '').length;
-    input.value = decimals > 0 ? current.toFixed(Math.min(decimals, 2)) : String(Math.round(current));
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-    const paid = document.getElementById('paid_amount');
-    const advance = document.getElementById('advance_from_party');
-    if (paid && advance) {
-        paid.addEventListener('input', function() {
-            advance.value = paid.value || '0';
-        });
-        advance.addEventListener('input', syncAdvancePayment);
-    }
-});
 
 // Helper functions to format date and time for print
 function formatDateForPrint(dateString) {
