@@ -108,6 +108,10 @@ function db_resolve_config(): array {
             if (db_render_internal_host($host) === $host) {
                 $sslmode = 'disable';
             }
+            // Railway private networking does not require TLS.
+            if (str_contains($host, 'railway.internal')) {
+                $sslmode = 'disable';
+            }
             return db_prefer_render_internal([
                 'host' => $host,
                 'port' => $parts['port'] ?? 5432,
