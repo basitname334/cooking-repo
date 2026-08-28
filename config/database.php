@@ -52,6 +52,42 @@ function db_column_exists(PDO $pdo, string $table, string $column): bool {
     return $cache[$key] = ($row !== null);
 }
 
+function db_is_on_render(): bool {
+    $v = getenv('RENDER');
+    return $v === 'true' || $v === '1';
+}
+
+/**
+ * Render internal hostname (dpg-xxxxx-a). External hosts look like
+ * dpg-xxxxx-a.oregon-postgres.render.com and require public TLS.
+ */
+function db_render_internal_host(string $host): ?string {
+    if (preg_match('/^(dpg-[a-z0-9-]+)(?:\.[a-z0-9.-]+)?\.render\.com$/i', $host, $m)) {
+        return $m[1];
+    }
+    if (preg_match('/^dpg-[a-z0-9-]+$/i', $host)) {
+        return $host;
+    }
+    return null;
+}
+
+/**
+ * Apps on Render must use the internal Postgres hostname. The public
+ * *.oregon-postgres.render.com endpoint currently fails TLS with
+ * "SSL connection has been closed unexpectedly".
+ */
+function db_prefer_render_internal(array $cfg): array {
+    if (!db_is_on_render()) {
+        return $cfg;
+    }
+    $internal = db_render_internal_host((string) ($cfg['host'] ?? ''));
+    if ($internal) {
+        $cfg['host'] = $internal;
+        $cfg['sslmode'] = 'disable';
+    }
+    return $cfg;
+}
+
 /**
  * Parse DATABASE_URL or discrete DB_* env vars.
  */
@@ -67,14 +103,19 @@ function db_resolve_config(): array {
                     $sslmode = $q['sslmode'];
                 }
             }
-            return [
-                'host' => $parts['host'],
+            $host = $parts['host'];
+            // Bare Render internal hosts do not speak TLS the same way.
+            if (db_render_internal_host($host) === $host) {
+                $sslmode = 'disable';
+            }
+            return db_prefer_render_internal([
+                'host' => $host,
                 'port' => $parts['port'] ?? 5432,
                 'user' => isset($parts['user']) ? urldecode($parts['user']) : '',
                 'pass' => isset($parts['pass']) ? urldecode($parts['pass']) : '',
                 'name' => isset($parts['path']) ? ltrim($parts['path'], '/') : 'postgres',
                 'sslmode' => $sslmode,
-            ];
+            ]);
         }
     }
 
@@ -83,14 +124,14 @@ function db_resolve_config(): array {
         || str_contains($host, 'render.com')
         || str_contains($host, 'aivencloud.com');
 
-    return [
+    return db_prefer_render_internal([
         'host' => $host,
         'port' => (int) (getenv('DB_PORT') ?: 5432),
         'user' => getenv('DB_USER') ?: 'postgres',
         'pass' => getenv('DB_PASS') ?: '',
         'name' => getenv('DB_NAME') ?: 'food_management_system',
         'sslmode' => $sslRequired ? 'require' : (getenv('DB_SSLMODE') ?: 'prefer'),
-    ];
+    ]);
 }
 
 function db_ssl_required(): bool {
@@ -182,24 +223,36 @@ function getDBConnection() {
     return false;
 }
 
-/**
- * @return PDO|false
- */
-function db_connect_once() {
+function db_pdo_open(string $host, int $port, string $name, string $user, string $pass, string $sslmode): PDO {
     $dsn = sprintf(
         'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s',
-        DB_HOST,
-        DB_PORT,
-        DB_NAME,
-        DB_SSLMODE
+        $host,
+        $port,
+        $name,
+        $sslmode
     );
 
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+    return new PDO($dsn, $user, $pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
-    return $pdo;
+}
+
+/**
+ * @return PDO|false
+ */
+function db_connect_once() {
+    try {
+        return db_pdo_open(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, DB_SSLMODE);
+    } catch (Throwable $e) {
+        $internal = db_render_internal_host(DB_HOST);
+        if ($internal && ($internal !== DB_HOST || DB_SSLMODE === 'require' || DB_SSLMODE === 'verify-full')) {
+            error_log('DB connect retry via Render internal host: ' . $e->getMessage());
+            return db_pdo_open($internal, DB_PORT, DB_NAME, DB_USER, DB_PASS, 'disable');
+        }
+        throw $e;
+    }
 }
 
 function db_ensure_schema_once(?PDO $existingConn = null): void {
