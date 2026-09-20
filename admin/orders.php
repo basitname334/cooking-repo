@@ -5935,18 +5935,32 @@ function printIngredients(orderNumberOrId, shareAsPdf) {
                     }
                     .category-header {
                         font-size: 15px !important;
-                        font-weight: 900 !important;
+                        font-weight: 700 !important;
                         padding: 10px 14px !important;
                         margin: 0 0 8px 0 !important;
                         background-color: #4c51bf !important;
                         background: #4c51bf !important;
                         color: #ffffff !important;
-                        border: 3px solid #2d3748 !important;
-                        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
-                        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5) !important;
+                        border: 2px solid #2d3748 !important;
+                        box-shadow: none !important;
+                        text-shadow: none !important;
+                        -webkit-text-stroke: 0 !important;
+                        letter-spacing: normal !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                         color-adjust: exact !important;
+                    }
+                    .ingredient-item .name {
+                        font-size: 13px !important;
+                        margin-bottom: 3px !important;
+                        font-weight: 700 !important;
+                        color: #1e293b !important;
+                        text-shadow: none !important;
+                        -webkit-text-stroke: 0 !important;
+                    }
+                    .ingredient-item .quantity {
+                        font-size: 11px !important;
+                        text-shadow: none !important;
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
@@ -5959,13 +5973,6 @@ function printIngredients(orderNumberOrId, shareAsPdf) {
                     }
                     .ingredient-item {
                         padding: 5px 6px !important;
-                    }
-                    .ingredient-item .name {
-                        font-size: 13px !important;
-                        margin-bottom: 3px !important;
-                    }
-                    .ingredient-item .quantity {
-                        font-size: 11px !important;
                     }
                 }
                 body { 
@@ -6069,18 +6076,20 @@ function printIngredients(orderNumberOrId, shareAsPdf) {
                     margin-bottom: 8px;
                 }
                 .category-header {
-                    font-size: 17px;
-                    font-weight: 900;
+                    font-size: 16px;
+                    font-weight: 700;
                     color: #ffffff;
-                    padding: 12px 16px;
+                    padding: 10px 14px;
                     background: #4c51bf;
                     background-color: #4c51bf;
                     border-radius: 6px;
                     margin: 0 0 10px 0;
-                    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-                    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-                    border: 3px solid #2d3748;
-                    letter-spacing: 0.8px;
+                    box-shadow: none;
+                    text-shadow: none;
+                    -webkit-text-stroke: 0;
+                    border: 2px solid #2d3748;
+                    letter-spacing: normal;
+                    line-height: 1.5;
                     -webkit-print-color-adjust: exact;
                     print-color-adjust: exact;
                     color-adjust: exact;
@@ -6099,15 +6108,18 @@ function printIngredients(orderNumberOrId, shareAsPdf) {
                 }
                 .ingredient-item .name {
                     font-size: 14px;
-                    font-weight: bold;
+                    font-weight: 700;
                     color: #1e293b;
                     margin-bottom: 3px;
-                    line-height: 1.4;
+                    line-height: 1.45;
+                    text-shadow: none;
+                    -webkit-text-stroke: 0;
                 }
                 .ingredient-item .quantity {
                     font-size: 12px;
-                    color: #8b5cf6;
+                    color: #6d28d9;
                     font-weight: 600;
+                    text-shadow: none;
                 }
                 
                 .table-note {
@@ -6665,20 +6677,17 @@ function offerSharePdfFile(blob, fileName, order) {
     const old = document.getElementById('share-pdf-ready-modal');
     if (old) old.remove();
 
-    // Always download first so user has the file for WhatsApp attach
-    downloadBlobFile(blob, fileName);
-
     const modal = document.createElement('div');
     modal.id = 'share-pdf-ready-modal';
     modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
     modal.innerHTML =
         '<div style="background:#fff;border-radius:16px;max-width:440px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:Segoe UI,Tahoma,sans-serif;direction:ltr;text-align:left;">' +
-            '<h5 style="margin:0 0 8px;font-weight:700;color:#0f172a;">✅ Print slip ready</h5>' +
-            '<p style="margin:0 0 14px;color:#64748b;font-size:14px;line-height:1.45;">File <b>' + fileName +
-            '</b> downloaded. Click <b>Share now</b> to send on WhatsApp / apps, or attach it from Downloads.</p>' +
+            '<h5 style="margin:0 0 8px;font-weight:700;color:#0f172a;">Print slip ready</h5>' +
+            '<p style="margin:0 0 14px;color:#64748b;font-size:14px;line-height:1.45;">PDF for <b>' + fileName +
+            '</b> is ready. Click <b>Share now</b> to send, or <b>Download</b> only if you want to save it.</p>' +
             '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
                 '<button type="button" id="sharePdfNowBtn" style="flex:1;min-width:140px;padding:12px 14px;border:0;border-radius:10px;background:#25D366;color:#fff;font-weight:700;cursor:pointer;">Share now</button>' +
-                '<button type="button" id="downloadPdfNowBtn" style="flex:1;min-width:120px;padding:12px 14px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Download again</button>' +
+                '<button type="button" id="downloadPdfNowBtn" style="flex:1;min-width:120px;padding:12px 14px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Download</button>' +
                 '<button type="button" id="closeSharePdfBtn" style="width:100%;padding:10px;border:0;border-radius:10px;background:#e2e8f0;color:#334155;font-weight:600;cursor:pointer;">Close</button>' +
             '</div>' +
         '</div>';
@@ -6694,10 +6703,9 @@ function offerSharePdfFile(blob, fileName, order) {
                 modal.remove();
             }).catch(function (err) {
                 if (err && err.name === 'AbortError') return;
-                alert('Share sheet closed. File is in Downloads — open WhatsApp and attach it.');
             });
         } else {
-            alert('File is in your Downloads folder.\n\nOpen WhatsApp → attach document/photo → choose:\n' + fileName);
+            alert('Share not supported here. Click Download, then attach the file in WhatsApp.');
         }
     };
     modal.querySelector('#downloadPdfNowBtn').onclick = function () {
@@ -6705,7 +6713,7 @@ function offerSharePdfFile(blob, fileName, order) {
     };
     modal.querySelector('#closeSharePdfBtn').onclick = function () { modal.remove(); };
 
-    // Auto-open system share when supported (phones / some desktops)
+    // Auto-open system share when supported (no auto-download)
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
         navigator.share({
             files: [file],
@@ -6801,7 +6809,10 @@ function shareIngredientsPrintPdf(printHtml, order) {
                     el.style.display = 'none';
                 });
                 const st = printWindow.document.createElement('style');
-                st.textContent = 'body::before{display:none!important;} .no-print{display:none!important;}';
+                st.textContent = 'body::before{display:none!important;} .no-print{display:none!important;}' +
+                    '*{text-shadow:none!important;-webkit-text-stroke:0!important;}' +
+                    '.category-header{color:#fff!important;font-weight:700!important;letter-spacing:normal!important;box-shadow:none!important;}' +
+                    '.ingredient-item .name,.ingredient-item .quantity{text-shadow:none!important;-webkit-text-stroke:0!important;}';
                 printWindow.document.head.appendChild(st);
             } catch (e) {}
             return html2canvas(printWindow.document.body, {
