@@ -45,8 +45,7 @@ if (str_starts_with($image, 'data:')) {
     }
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . strlen($binary));
-    header('Cache-Control: public, max-age=604800, immutable');
-    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 604800) . ' GMT');
+    header('Cache-Control: public, max-age=300, must-revalidate');
     echo $binary;
     exit;
 }
@@ -68,6 +67,7 @@ $mimeMap = [
 ];
 header('Content-Type: ' . ($mimeMap[$ext] ?? 'application/octet-stream'));
 header('Content-Length: ' . filesize($full));
-header('Cache-Control: public, max-age=86400');
+header('Cache-Control: public, max-age=300, must-revalidate');
+header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($full)) . ' GMT');
 readfile($full);
 exit;

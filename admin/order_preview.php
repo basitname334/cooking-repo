@@ -67,9 +67,9 @@ if (!empty($dish_ids)) {
 }
 
 // Helper function to convert units to grams (base unit)
-function convertToGrams($quantity, $unit) {
+function convertToGrams($quantity, $unit = '') {
     if (empty($quantity) || !is_numeric($quantity)) return 0;
-    $unitLower = strtolower(trim($unit ?? ''));
+    $unitLower = strtolower(trim((string) ($unit ?? '')));
     $qty = floatval($quantity);
     
     // Convert to grams (base unit)
@@ -153,7 +153,7 @@ foreach ($ingredients as $ing) {
     }
 }
 
-$conn->close();
+$conn = null;
 
 $pageTitle = 'Order Preview - ' . $order_number;
 include __DIR__ . '/../includes/header.php';
@@ -325,22 +325,27 @@ include __DIR__ . '/../includes/header.php';
         <div class="card-body p-4">
             <div class="row g-3">
                 <?php foreach ($orders as $order): 
-                    $image_path = !empty($order['dish_image']) ? '../' . $order['dish_image'] : '';
-                    $image_exists = !empty($order['dish_image']) && file_exists(__DIR__ . '/../' . $order['dish_image']);
+                    $dishId = (int) ($order['dish_id'] ?? 0);
+                    $hasImage = !empty($order['dish_image']);
+                    $image_src = ($hasImage && $dishId > 0) ? dish_image_url($dishId, '../') : '';
                 ?>
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-4">
                         <div class="card border-0 shadow-sm h-100">
-                            <?php if ($image_exists): ?>
-                                <img src="<?php echo htmlspecialchars($image_path); ?>" class="card-img-top" style="height: 200px; object-fit: cover;" alt="<?php echo htmlspecialchars($order['dish_name']); ?>">
+                            <?php if ($image_src !== ''): ?>
+                                <img src="<?php echo htmlspecialchars($image_src); ?>" class="card-img-top" style="height: 200px; object-fit: cover;" alt="<?php echo htmlspecialchars($order['dish_name'] ?? ''); ?>"
+                                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top align-items-center justify-content-center" style="display:none;height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="bi bi-egg-fried text-white" style="font-size: 3rem;"></i>
+                                </div>
                             <?php else: ?>
                                 <div class="card-img-top d-flex align-items-center justify-content-center" style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                                     <i class="bi bi-egg-fried text-white" style="font-size: 3rem;"></i>
                                 </div>
                             <?php endif; ?>
                             <div class="card-body">
-                                <h6 class="card-title fw-bold"><?php echo htmlspecialchars($order['dish_name']); ?></h6>
+                                <h6 class="card-title fw-bold"><?php echo htmlspecialchars($order['dish_name'] ?? ''); ?></h6>
                                 <span class="dish-badge">
-                                    Quantity: <?php echo htmlspecialchars($order['quantity']); ?>
+                                    Quantity: <?php echo htmlspecialchars((string) ($order['quantity'] ?? '')); ?>
                                     <?php if (!empty($order['unit'])): ?>
                                         <?php echo ' ' . htmlspecialchars($order['unit']); ?>
                                     <?php endif; ?>

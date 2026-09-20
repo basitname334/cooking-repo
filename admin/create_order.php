@@ -31,18 +31,20 @@ $required_columns = [
     'order_date' => "TIMESTAMP DEFAULT NULL"
 ];
 
-foreach ($required_columns as $column => $definition) {
-    if (!db_column_exists($conn, 'orders', $column)) {
-        try {
-            $conn->exec("ALTER TABLE orders ADD COLUMN {$column} {$definition}");
-        } catch (PDOException $e) {
-            error_log('create_order migration failed: ' . $e->getMessage());
+if ($conn instanceof PDO) {
+    foreach ($required_columns as $column => $definition) {
+        if (!db_column_exists($conn, 'orders', $column)) {
+            try {
+                $conn->exec("ALTER TABLE orders ADD COLUMN {$column} {$definition}");
+            } catch (Throwable $e) {
+                error_log('create_order migration failed: ' . $e->getMessage());
+            }
         }
     }
 }
 
 // Handle order creation
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
+if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     $customer_id = intval($_POST['customer_id'] ?? 0);
     $customer_name = trim($_POST['customer_name'] ?? '');
     $customer_cell = trim($_POST['customer_cell'] ?? '');
@@ -54,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
     $shift = trim($_POST['shift'] ?? '');
     $delivery_date = trim($_POST['delivery_date'] ?? '');
     $delivery_time = trim($_POST['delivery_time'] ?? '');
+    $advance_amount = max(0, floatval($_POST['advance_amount'] ?? 0));
     
     // Compulsory items
     $cloth_malmal_quantity = intval($_POST['cloth_malmal_quantity'] ?? 0);
@@ -83,46 +86,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
         $error = 'Please select at least one dish in Step 2.';
     } else {
         // Generate order number
-        $order_number = 'ORD-' . date('Ymd') . '-' . str_pad(time() % 1000000, 6, '0', STR_PAD_LEFT);
+        $order_number = 'ORD-' . date('Ymd') . '-' . str_pad((string) (time() % 1000000), 6, '0', STR_PAD_LEFT);
         
         // Combine order date and time
         $order_datetime = $order_date . ' ' . $order_time . ':00';
+        if (is_string($delivery_time) && preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $delivery_time, $tm)) {
+            $delivery_time = sprintf('%02d:%02d:%02d', (int)$tm[1], (int)$tm[2], isset($tm[3]) ? (int)$tm[3] : 0);
+        } elseif ($delivery_time === '') {
+            $delivery_time = null;
+        }
+        if ($delivery_date === '') {
+            $delivery_date = null;
+        }
         
+        $has_cloth = db_column_exists($conn, 'orders', 'cloth_malmal_quantity');
+        $has_advance = db_column_exists($conn, 'orders', 'advance_amount');
+        $final_advance = $has_advance ? $advance_amount : 0;
+
         // Create order records for each dish
         $orders_created = 0;
-        foreach ($dishes_data as $dish_info) {
-            $final_customer_id = ($customer_id > 0) ? $customer_id : null;
-            
-            try {
-                db_exec(
-                    $conn,
-                    "INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
-                        customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons,
-                        cloth_malmal_quantity, match_box_quantity, surrf_quantity, sponjis_quantity, wood_quantity) 
-                        VALUES (?, ?, ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [
-                        $order_number,
-                        $final_customer_id,
-                        $dish_info['dish_id'],
-                        $dish_info['quantity'],
-                        $customer_name,
-                        $customer_cell,
-                        $order_datetime,
-                        $delivery_date,
-                        $delivery_time,
-                        $shift,
-                        $number_of_persons,
-                        $cloth_malmal_quantity,
-                        $match_box_quantity,
-                        $surrf_quantity,
-                        $sponjis_quantity,
-                        $wood_quantity
-                    ]
-                );
+        try {
+            $conn->beginTransaction();
+            foreach ($dishes_data as $dish_info) {
+                $final_customer_id = ($customer_id > 0) ? $customer_id : null;
+
+                if ($has_cloth && $has_advance) {
+                    db_exec(
+                        $conn,
+                        "INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                            customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons,
+                            cloth_malmal_quantity, match_box_quantity, surrf_quantity, sponjis_quantity, wood_quantity, advance_amount) 
+                            VALUES (?, ?, ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            $order_number, $final_customer_id, $dish_info['dish_id'], $dish_info['quantity'],
+                            $customer_name, $customer_cell, $order_datetime, $delivery_date, $delivery_time,
+                            $shift, $number_of_persons, $cloth_malmal_quantity, $match_box_quantity,
+                            $surrf_quantity, $sponjis_quantity, $wood_quantity, $final_advance,
+                        ]
+                    );
+                } elseif ($has_advance) {
+                    db_exec(
+                        $conn,
+                        "INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                            customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons, advance_amount) 
+                            VALUES (?, ?, ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            $order_number, $final_customer_id, $dish_info['dish_id'], $dish_info['quantity'],
+                            $customer_name, $customer_cell, $order_datetime, $delivery_date, $delivery_time,
+                            $shift, $number_of_persons, $final_advance,
+                        ]
+                    );
+                } else {
+                    db_exec(
+                        $conn,
+                        "INSERT INTO orders (order_number, customer_id, dish_id, quantity, total_amount, status, 
+                            customer_name, customer_cell, order_date, delivery_date, delivery_time, shift, number_of_persons) 
+                            VALUES (?, ?, ?, ?, 0, 'pending', ?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            $order_number, $final_customer_id, $dish_info['dish_id'], $dish_info['quantity'],
+                            $customer_name, $customer_cell, $order_datetime, $delivery_date, $delivery_time,
+                            $shift, $number_of_persons,
+                        ]
+                    );
+                }
                 $orders_created++;
-            } catch (PDOException $e) {
-                $error = 'Failed to create order: ' . $e->getMessage();
             }
+            $conn->commit();
+        } catch (Throwable $e) {
+            if ($conn->inTransaction()) {
+                $conn->rollBack();
+            }
+            $orders_created = 0;
+            $error = 'Failed to create order: ' . $e->getMessage();
+            error_log('create_order insert failed: ' . $e->getMessage());
         }
         
         if ($orders_created > 0) {
@@ -190,6 +226,50 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <style>
+.delivery-time-picker {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    padding: 0.85rem 1rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+}
+.delivery-time-picker .dtp-segment {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+    flex: 1 1 88px;
+}
+.delivery-time-picker .dtp-ampm { flex: 0 0 110px; }
+.delivery-time-picker .dtp-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+.delivery-time-picker .dtp-select {
+    border-radius: 10px;
+    border-color: #cbd5e1;
+    font-weight: 600;
+    font-size: 1.05rem;
+    padding: 0.55rem 0.65rem;
+    background: #fff;
+}
+.delivery-time-picker .dtp-select:focus {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 0.2rem rgba(15, 118, 110, 0.18);
+}
+.delivery-time-picker .dtp-colon {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #0f766e;
+    line-height: 1;
+    padding-bottom: 0.55rem;
+}
 .order-steps {
     display: flex;
     justify-content: space-between;
@@ -559,8 +639,54 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Delivery Time <span class="text-danger">*</span></label>
-                            <input type="time" class="form-control" name="delivery_time" required 
-                                   value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>">
+                            <?php
+                            $dt_post = trim((string)($_POST['delivery_time'] ?? ''));
+                            $dt_hour12 = '';
+                            $dt_minute = '';
+                            $dt_ampm = 'AM';
+                            if (preg_match('/^(\d{1,2}):(\d{2})/', $dt_post, $dtm)) {
+                                $h24 = (int)$dtm[1];
+                                $dt_minute = $dtm[2];
+                                $dt_ampm = ($h24 >= 12) ? 'PM' : 'AM';
+                                $h12 = $h24 % 12;
+                                if ($h12 === 0) {
+                                    $h12 = 12;
+                                }
+                                $dt_hour12 = (string)$h12;
+                            }
+                            ?>
+                            <input type="hidden" id="delivery_time" name="delivery_time"
+                                   value="<?php echo htmlspecialchars($dt_post); ?>" required>
+                            <div class="delivery-time-picker">
+                                <div class="dtp-segment">
+                                    <span class="dtp-label">Hour</span>
+                                    <select class="form-select dtp-select" id="delivery_hour" aria-label="Hour">
+                                        <option value="">--</option>
+                                        <?php for ($h = 1; $h <= 12; $h++): ?>
+                                            <option value="<?php echo $h; ?>" <?php echo ($dt_hour12 !== '' && (int)$dt_hour12 === $h) ? 'selected' : ''; ?>><?php echo $h; ?></option>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                                <span class="dtp-colon" aria-hidden="true">:</span>
+                                <div class="dtp-segment">
+                                    <span class="dtp-label">Min</span>
+                                    <select class="form-select dtp-select" id="delivery_minute" aria-label="Minute">
+                                        <option value="">--</option>
+                                        <?php for ($m = 0; $m <= 59; $m++):
+                                            $mm = str_pad((string)$m, 2, '0', STR_PAD_LEFT);
+                                        ?>
+                                            <option value="<?php echo $mm; ?>" <?php echo ($dt_minute === $mm) ? 'selected' : ''; ?>><?php echo $mm; ?></option>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                                <div class="dtp-segment dtp-ampm">
+                                    <span class="dtp-label">AM / PM</span>
+                                    <select class="form-select dtp-select" id="delivery_ampm" aria-label="AM/PM">
+                                        <option value="AM" <?php echo ($dt_ampm === 'AM') ? 'selected' : ''; ?>>AM</option>
+                                        <option value="PM" <?php echo ($dt_ampm === 'PM') ? 'selected' : ''; ?>>PM</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="mt-4">
@@ -608,7 +734,7 @@ include __DIR__ . '/../includes/header.php';
                                 $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
                                 $image_exists = $image_path !== '';
                             ?>
-                                <div class="col-md-4 col-lg-3">
+                                <div class="col-6 col-md-3">
                                     <div class="dish-card card h-100 position-relative" data-dish-id="<?php echo $dish['id']; ?>">
                                         <div style="position: relative; overflow: hidden;">
                                             <?php if ($image_exists): ?>
@@ -649,7 +775,7 @@ include __DIR__ . '/../includes/header.php';
                                 $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
                                 $image_exists = $image_path !== '';
                             ?>
-                                <div class="col-md-4 col-lg-3">
+                                <div class="col-6 col-md-3">
                                     <div class="dish-card card h-100 position-relative" data-dish-id="<?php echo $dish['id']; ?>">
                                         <div class="previously-used-badge">
                                             <i class="bi bi-star-fill me-1"></i>Popular
@@ -786,14 +912,14 @@ include __DIR__ . '/../includes/header.php';
                 <!-- Categories Grid (shown first) -->
                 <div id="modalCategoriesGrid" class="row g-3">
                     <?php foreach ($dish_categories as $cat): ?>
-                        <div class="col-md-4 col-lg-3 modal-category-item" 
+                        <div class="col-6 col-md-3 modal-category-item" 
                              data-category-id="<?php echo $cat['id']; ?>"
                              data-category-name="<?php echo htmlspecialchars($cat['name']); ?>"
                              onclick="selectCategoryInModal(<?php echo $cat['id']; ?>, '<?php echo htmlspecialchars(addslashes($cat['name'])); ?>')">
                             <div class="card h-100 shadow-sm border-0 category-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
                                 <div class="w-100 d-flex align-items-center justify-content-center" 
-                                     style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                    <i class="bi bi-folder-fill text-white" style="font-size: 4rem;"></i>
+                                     style="height: 140px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="bi bi-folder-fill text-white" style="font-size: 2.75rem;"></i>
                                 </div>
                                 <div class="card-body p-3">
                                     <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
@@ -820,14 +946,14 @@ include __DIR__ . '/../includes/header.php';
                     });
                     if (!empty($uncategorized_dishes)):
                     ?>
-                        <div class="col-md-4 col-lg-3 modal-category-item" 
+                        <div class="col-6 col-md-3 modal-category-item" 
                              data-category-id="0"
                              data-category-name="Uncategorized"
                              onclick="selectCategoryInModal(0, 'Uncategorized')">
                             <div class="card h-100 shadow-sm border-0 category-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
                                 <div class="w-100 d-flex align-items-center justify-content-center" 
-                                     style="height: 200px; background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
-                                    <i class="bi bi-folder-x text-white" style="font-size: 4rem;"></i>
+                                     style="height: 140px; background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
+                                    <i class="bi bi-folder-x text-white" style="font-size: 2.75rem;"></i>
                     </div>
                                 <div class="card-body p-3">
                                     <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
@@ -853,14 +979,14 @@ include __DIR__ . '/../includes/header.php';
                         $image_path = !empty($dish['has_image']) ? dish_image_url((int) $dish['id'], '../') : '';
                         $image_exists = $image_path !== '';
                     ?>
-                        <div class="col-md-4 col-lg-3 modal-dish-item" 
+                        <div class="col-6 col-md-3 modal-dish-item" 
                              data-dish-id="<?php echo $dish['id']; ?>"
                              data-dish-name="<?php echo htmlspecialchars($dish['name']); ?>"
                              data-category-id="<?php echo $dish['category_id'] ?? '0'; ?>"
                              data-category="<?php echo htmlspecialchars($dish['category_name'] ?? 'Uncategorized'); ?>"
                              onclick="selectDishFromModal(<?php echo $dish['id']; ?>, '<?php echo htmlspecialchars(addslashes($dish['name'])); ?>', '<?php echo htmlspecialchars($image_path); ?>', <?php echo $image_exists ? 'true' : 'false'; ?>)">
                             <div class="card h-100 shadow-sm border-0 dish-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
-                                <div style="position: relative; overflow: hidden; height: 200px; background: #f1f5f9;">
+                                <div style="position: relative; overflow: hidden; height: 140px; background: #f1f5f9;">
                                     <?php if ($image_exists): ?>
                                         <img src="<?php echo htmlspecialchars($image_path); ?>" 
                                              class="w-100 h-100" 
@@ -952,9 +1078,38 @@ let selectedDishes = {};
 let allCustomers = <?php echo json_encode($customers); ?>;
 let customerDropdownTimeout = null;
 
+function syncDeliveryTimeHidden() {
+    const hidden = document.getElementById('delivery_time');
+    const hourEl = document.getElementById('delivery_hour');
+    const minEl = document.getElementById('delivery_minute');
+    const ampmEl = document.getElementById('delivery_ampm');
+    if (!hidden || !hourEl || !minEl || !ampmEl) return;
+    const h12 = parseInt(hourEl.value, 10);
+    const min = minEl.value;
+    const ampm = ampmEl.value;
+    if (!h12 || min === '' || !ampm) {
+        hidden.value = '';
+        return;
+    }
+    let h24 = h12 % 12;
+    if (ampm === 'PM') h24 += 12;
+    hidden.value = String(h24).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+}
+
 // Initialize - update inputs on page load if needed
 document.addEventListener('DOMContentLoaded', function() {
     updateSelectedDishesInputs();
+    ['delivery_hour', 'delivery_minute', 'delivery_ampm'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', syncDeliveryTimeHidden);
+    });
+    syncDeliveryTimeHidden();
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function () {
+            syncDeliveryTimeHidden();
+        });
+    }
 });
 
 // Load customer data when customer is selected from dropdown
@@ -1199,10 +1354,23 @@ function goToStep(step) {
 }
 
 function validateStep1() {
+    if (typeof syncDeliveryTimeHidden === 'function') {
+        syncDeliveryTimeHidden();
+    }
     const form = document.getElementById('orderForm');
     const required = form.querySelectorAll('#step1 [required]');
     for (let field of required) {
-        if (!field.value.trim()) {
+        // Hidden delivery_time is filled from Hour/Min/AM-PM
+        if (field.id === 'delivery_time') {
+            if (!field.value || !String(field.value).trim()) {
+                alert('Please select delivery time (Hour, Min, AM/PM).');
+                const hourEl = document.getElementById('delivery_hour');
+                if (hourEl) hourEl.focus();
+                return false;
+            }
+            continue;
+        }
+        if (!field.value || !String(field.value).trim()) {
             field.focus();
             alert('Please fill all required fields.');
             return false;
@@ -1235,9 +1403,6 @@ function showDishTab(tab) {
     }
 }
 
-// Dish Selection Modal Functions
-let currentSelectedCategoryId = null;
-
 // Open dish selection modal
 function openDishSelectionModal() {
     currentSelectedCategoryId = null;
@@ -1264,7 +1429,7 @@ function showCategoriesInModal() {
     const backBtn = document.getElementById('backToCategoriesBtn');
     const searchInput = document.getElementById('dishSearchInput');
     
-    if (categoriesGrid) categoriesGrid.style.display = 'block';
+    if (categoriesGrid) categoriesGrid.style.display = 'flex';
     if (dishesGrid) dishesGrid.style.display = 'none';
     if (backBtn) backBtn.style.display = 'none';
     if (searchInput) {
@@ -1290,7 +1455,7 @@ function selectCategoryInModal(categoryId, categoryName) {
     const searchInput = document.getElementById('dishSearchInput');
     
     if (categoriesGrid) categoriesGrid.style.display = 'none';
-    if (dishesGrid) dishesGrid.style.display = 'block';
+    if (dishesGrid) dishesGrid.style.display = 'flex';
     if (backBtn) backBtn.style.display = 'block';
     if (searchInput) {
         searchInput.value = '';
@@ -1308,11 +1473,9 @@ function selectCategoryInModal(categoryId, categoryName) {
     dishItems.forEach(item => {
         const itemCategoryId = item.getAttribute('data-category-id');
         if (categoryId == 0) {
-            // Show uncategorized dishes
-            item.style.display = (!itemCategoryId || itemCategoryId == '0') ? 'block' : 'none';
+            item.style.display = (!itemCategoryId || itemCategoryId == '0') ? '' : 'none';
         } else {
-            // Show dishes from selected category
-            item.style.display = (itemCategoryId == categoryId) ? 'block' : 'none';
+            item.style.display = (itemCategoryId == categoryId) ? '' : 'none';
         }
     });
     
@@ -1328,34 +1491,40 @@ function filterItemsInModal(searchTerm) {
         // Filtering categories
         const categoryItems = document.querySelectorAll('.modal-category-item');
         categoryItems.forEach(item => {
-            const categoryName = item.getAttribute('data-category-name').toLowerCase();
+            const categoryName = (item.getAttribute('data-category-name') || '').toLowerCase();
             const matchesSearch = !searchTerm || categoryName.includes(searchLower);
             
             if (matchesSearch) {
-                item.style.display = 'block';
+                item.style.display = '';
                 visibleCount++;
             } else {
                 item.style.display = 'none';
             }
         });
     } else {
-        // Filtering dishes
+        // Filtering dishes within selected category
         const dishItems = document.querySelectorAll('.modal-dish-item');
-    dishItems.forEach(item => {
-            // Only filter visible dishes (already filtered by category)
-            if (item.style.display === 'none') return;
-            
-        const dishName = item.getAttribute('data-dish-name').toLowerCase();
-        const category = item.getAttribute('data-category').toLowerCase();
-        const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
-        
-            if (matchesSearch) {
-                item.style.display = 'block';
-            visibleCount++;
-        } else {
+        dishItems.forEach(item => {
+            const itemCategoryId = item.getAttribute('data-category-id');
+            const inCategory = (currentSelectedCategoryId == 0)
+                ? (!itemCategoryId || itemCategoryId == '0')
+                : (itemCategoryId == currentSelectedCategoryId);
+            if (!inCategory) {
                 item.style.display = 'none';
-        }
-    });
+                return;
+            }
+
+            const dishName = (item.getAttribute('data-dish-name') || '').toLowerCase();
+            const category = (item.getAttribute('data-category') || '').toLowerCase();
+            const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
+            
+            if (matchesSearch) {
+                item.style.display = '';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
     }
     
     // Show/hide no results message

@@ -4,6 +4,12 @@
  * Supports DATABASE_URL (Render) or DB_HOST/DB_USER/DB_PASS/DB_NAME/DB_PORT.
  */
 
+// Optional local overrides for XAMPP (config/local.env.php)
+$localEnvFile = __DIR__ . '/local.env.php';
+if (is_file($localEnvFile)) {
+    require $localEnvFile;
+}
+
 // -----------------------------------------------------------------------------
 // Resolve connection settings from env
 // -----------------------------------------------------------------------------
@@ -409,6 +415,11 @@ function db_run_column_migrations(PDO $conn): void {
         ['orders', 'shift', 'ALTER TABLE orders ADD COLUMN shift VARCHAR(20) DEFAULT NULL'],
         ['orders', 'number_of_persons', 'ALTER TABLE orders ADD COLUMN number_of_persons INT DEFAULT NULL'],
         ['orders', 'advance_amount', 'ALTER TABLE orders ADD COLUMN advance_amount DECIMAL(10, 2) DEFAULT 0'],
+        ['orders', 'cloth_malmal_quantity', 'ALTER TABLE orders ADD COLUMN cloth_malmal_quantity INT DEFAULT 0'],
+        ['orders', 'match_box_quantity', 'ALTER TABLE orders ADD COLUMN match_box_quantity INT DEFAULT 0'],
+        ['orders', 'surrf_quantity', 'ALTER TABLE orders ADD COLUMN surrf_quantity INT DEFAULT 0'],
+        ['orders', 'sponjis_quantity', 'ALTER TABLE orders ADD COLUMN sponjis_quantity INT DEFAULT 0'],
+        ['orders', 'wood_quantity', 'ALTER TABLE orders ADD COLUMN wood_quantity INT DEFAULT 0'],
     ];
 
     foreach ($migrations as [$table, $column, $alter]) {
@@ -623,8 +634,12 @@ function ensureAdminUser($conn): bool {
 /**
  * Public URL for a dish image (lazy-loaded endpoint — keeps list pages fast).
  */
-function dish_image_url(int $dishId, string $relativePrefix = '../'): string {
-    return $relativePrefix . 'api/dish_image.php?id=' . $dishId;
+function dish_image_url(int $dishId, string $relativePrefix = '../', $cacheBust = null): string {
+    $url = $relativePrefix . 'api/dish_image.php?id=' . $dishId;
+    if ($cacheBust !== null && $cacheBust !== '') {
+        $url .= '&v=' . rawurlencode((string) $cacheBust);
+    }
+    return $url;
 }
 
 /**
@@ -696,7 +711,7 @@ function dish_image_from_upload(array $file, ?string &$errorMessage = null, int 
         return null;
     }
     $tmp = $file['tmp_name'] ?? '';
-    if ($tmp === '' || !is_uploaded_file($tmp)) {
+    if ($tmp === '' || (!is_uploaded_file($tmp) && !is_readable($tmp))) {
         $errorMessage = 'Uploaded file is not valid.';
         return null;
     }
@@ -711,12 +726,38 @@ function dish_image_from_upload(array $file, ?string &$errorMessage = null, int 
         $errorMessage = 'Invalid image format. Allowed: JPG, JPEG, PNG, GIF, WEBP';
         return null;
     }
-    $compressed = dish_image_compress_file($tmp, 800, 72);
-    if ($compressed === null) {
-        $errorMessage = 'Could not process uploaded image.';
+
+    $uploadDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'dishes' . DIRECTORY_SEPARATOR;
+    if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+        $errorMessage = 'Upload folder could not be created.';
         return null;
     }
-    return 'data:' . $compressed['mime'] . ';base64,' . base64_encode($compressed['binary']);
+    if (!is_writable($uploadDir)) {
+        $errorMessage = 'Upload folder is not writable.';
+        return null;
+    }
+
+    // Compress when possible; always store a real file path (reliable on XAMPP + api/dish_image.php)
+    $compressed = dish_image_compress_file($tmp, 800, 72);
+    $cacheName = 'dish_' . str_replace('.', '', uniqid('', true)) . '.jpg';
+    $dest = $uploadDir . $cacheName;
+
+    if ($compressed !== null && !empty($compressed['binary'])) {
+        if (@file_put_contents($dest, $compressed['binary']) === false) {
+            $errorMessage = 'Could not save uploaded image.';
+            return null;
+        }
+    } else {
+        $safeExt = in_array($ext, $allowed, true) ? $ext : 'jpg';
+        $cacheName = 'dish_' . str_replace('.', '', uniqid('', true)) . '.' . $safeExt;
+        $dest = $uploadDir . $cacheName;
+        if (!@move_uploaded_file($tmp, $dest) && !@copy($tmp, $dest)) {
+            $errorMessage = 'Could not save uploaded image to disk.';
+            return null;
+        }
+    }
+
+    return 'uploads/dishes/' . $cacheName;
 }
 
 function db_die_connection_error(string $message): void {

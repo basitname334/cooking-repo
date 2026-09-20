@@ -437,8 +437,10 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
             $grand_total = array_sum(array_column($valid_dishes, 'total_amount'));
             $final_advance = max(0, min($advance_amount, $grand_total));
 
-            // Normalize empty time/date for Postgres
-            if ($delivery_time === '') {
+            // Normalize time for Postgres TIME (HH:MM:SS)
+            if (is_string($delivery_time) && preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $delivery_time, $tm)) {
+                $delivery_time = sprintf('%02d:%02d:%02d', (int)$tm[1], (int)$tm[2], isset($tm[3]) ? (int)$tm[3] : 0);
+            } elseif ($delivery_time === '') {
                 $delivery_time = null;
             }
             if ($delivery_date === '') {
@@ -512,8 +514,11 @@ if ($conn instanceof PDO && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
             }
 
             if ($orders_created > 0) {
-                // Show in Recent list (not search-filtered) so the new card is always visible
-                header('Location: recent_orders.php?success=1&created=1&count=' . (int) $orders_created);
+                // Prefer recent list; fall back to orders list if missing
+                $dest = is_file(__DIR__ . '/recent_orders.php')
+                    ? ('recent_orders.php?success=1&created=1&count=' . (int) $orders_created)
+                    : ('orders.php?success=1&created=1&count=' . (int) $orders_created);
+                header('Location: ' . $dest);
                 exit();
             }
             $error = !empty($errors)
@@ -752,12 +757,17 @@ if ($conn instanceof PDO) {
         }
         unset($dish);
 
+        // Heavy orders list only on list page (or when editing one order on create page)
+        $edit_order_number = isset($_GET['edit']) ? trim((string) $_GET['edit']) : '';
+        $load_orders_list = ($orders_page_mode === 'list') || ($edit_order_number !== '');
+
+        $recent_order_numbers = [];
+        if ($load_orders_list) {
         // Load latest N order_numbers first (not raw rows) so new orders always appear
         $order_number_limit = ($view_mode === 'all')
             ? max(50, $items_per_page * 5)
             : max(20, $recent_items_limit * 3);
 
-        $recent_order_numbers = [];
         if ($is_search_active) {
             $like = '%' . $order_number_search . '%';
             $recent_order_numbers = array_column(db_fetch_all(
@@ -783,13 +793,17 @@ if ($conn instanceof PDO) {
         }
 
         // Ensure order being edited is included in dataset (create page)
-        $edit_order_number = isset($_GET['edit']) ? trim((string) $_GET['edit']) : '';
         if ($edit_order_number !== '' && !in_array($edit_order_number, $recent_order_numbers, true)) {
             array_unshift($recent_order_numbers, $edit_order_number);
         }
+        // When only editing on create page, load just that one order
+        if ($orders_page_mode === 'create' && $edit_order_number !== '') {
+            $recent_order_numbers = [$edit_order_number];
+        }
+        } // end load_orders_list gate for numbers
 
         $orders = [];
-        if (!empty($recent_order_numbers)) {
+        if ($load_orders_list && !empty($recent_order_numbers)) {
             $placeholders = implode(',', array_fill(0, count($recent_order_numbers), '?'));
             $orders = db_fetch_all(
                 $conn,
@@ -986,6 +1000,9 @@ $host = $_SERVER['HTTP_HOST'];
 $scriptPath = dirname($_SERVER['SCRIPT_NAME']);
 $baseUrl = $protocol . '://' . $host . $scriptPath;
 $logoPath = str_replace('/admin', '', $baseUrl) . '/images/logo.jpg';
+// Absolute URL only — embedding ~800KB base64 blanks html2canvas PDFs and slows the page
+$bannerAbsUrl = rtrim(str_replace('/admin', '', $baseUrl), '/') . '/images/newimage.png';
+$bannerDataUri = $bannerAbsUrl;
 
 $pageTitle = ($orders_page_mode === 'list')
     ? t('recent_orders', 'Recent Orders')
@@ -1002,6 +1019,56 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
 ?>
 
 <style>
+/* Delivery time Hour / Min / AM-PM picker */
+.delivery-time-picker {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    padding: 0.85rem 1rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+}
+.delivery-time-picker .dtp-segment {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+    flex: 1 1 88px;
+}
+.delivery-time-picker .dtp-ampm {
+    flex: 0 0 110px;
+}
+.delivery-time-picker .dtp-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+.delivery-time-picker .dtp-select {
+    border-radius: 10px;
+    border-color: #cbd5e1;
+    font-weight: 600;
+    font-size: 1.05rem;
+    padding: 0.55rem 0.65rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.delivery-time-picker .dtp-select:focus {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 0.2rem rgba(15, 118, 110, 0.18);
+}
+.delivery-time-picker .dtp-colon {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #0f766e;
+    line-height: 1;
+    padding-bottom: 0.55rem;
+    flex: 0 0 auto;
+}
+
 .page-header-modern {
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(240, 147, 251, 0.1) 100%);
     border-radius: 20px;
@@ -1716,12 +1783,58 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label for="delivery_time" class="form-label fw-semibold">
+                                <label class="form-label fw-semibold">
                                     <i class="bi bi-clock-history me-1 text-primary"></i>
                                     ڈیلیوری وقت <span class="text-danger">*</span>
                                 </label>
-                                <input type="time" class="form-control form-control-lg" id="delivery_time" name="delivery_time" 
-                                       value="<?php echo htmlspecialchars($_POST['delivery_time'] ?? ''); ?>" required>
+                                <?php
+                                $dt_post = trim((string)($_POST['delivery_time'] ?? ''));
+                                $dt_hour12 = '';
+                                $dt_minute = '';
+                                $dt_ampm = 'AM';
+                                if (preg_match('/^(\d{1,2}):(\d{2})/', $dt_post, $dtm)) {
+                                    $h24 = (int)$dtm[1];
+                                    $dt_minute = $dtm[2];
+                                    $dt_ampm = ($h24 >= 12) ? 'PM' : 'AM';
+                                    $h12 = $h24 % 12;
+                                    if ($h12 === 0) {
+                                        $h12 = 12;
+                                    }
+                                    $dt_hour12 = (string)$h12;
+                                }
+                                ?>
+                                <input type="hidden" id="delivery_time" name="delivery_time"
+                                       value="<?php echo htmlspecialchars($dt_post); ?>" required>
+                                <div class="delivery-time-picker">
+                                    <div class="dtp-segment">
+                                        <span class="dtp-label">Hour</span>
+                                        <select class="form-select dtp-select" id="delivery_hour" aria-label="Hour">
+                                            <option value="">--</option>
+                                            <?php for ($h = 1; $h <= 12; $h++): ?>
+                                                <option value="<?php echo $h; ?>" <?php echo ($dt_hour12 !== '' && (int)$dt_hour12 === $h) ? 'selected' : ''; ?>><?php echo $h; ?></option>
+                                            <?php endfor; ?>
+                                        </select>
+                                    </div>
+                                    <span class="dtp-colon" aria-hidden="true">:</span>
+                                    <div class="dtp-segment">
+                                        <span class="dtp-label">Min</span>
+                                        <select class="form-select dtp-select" id="delivery_minute" aria-label="Minute">
+                                            <option value="">--</option>
+                                            <?php for ($m = 0; $m <= 59; $m++):
+                                                $mm = str_pad((string)$m, 2, '0', STR_PAD_LEFT);
+                                            ?>
+                                                <option value="<?php echo $mm; ?>" <?php echo ($dt_minute === $mm) ? 'selected' : ''; ?>><?php echo $mm; ?></option>
+                                            <?php endfor; ?>
+                                        </select>
+                                    </div>
+                                    <div class="dtp-segment dtp-ampm">
+                                        <span class="dtp-label">AM / PM</span>
+                                        <select class="form-select dtp-select" id="delivery_ampm" aria-label="AM/PM">
+                                            <option value="AM" <?php echo ($dt_ampm === 'AM') ? 'selected' : ''; ?>>AM</option>
+                                            <option value="PM" <?php echo ($dt_ampm === 'PM') ? 'selected' : ''; ?>>PM</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="step-actions mt-4">
@@ -2110,14 +2223,14 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                 <!-- Categories Grid (shown first) -->
                 <div id="modalCategoriesGrid" class="row g-3">
                     <?php foreach ($dish_categories as $cat): ?>
-                        <div class="col-md-4 col-lg-3 modal-category-item" 
+                        <div class="col-6 col-md-3 modal-category-item" 
                              data-category-id="<?php echo $cat['id']; ?>"
                              data-category-name="<?php echo htmlspecialchars($cat['name']); ?>"
                              onclick="selectCategoryInModal(<?php echo $cat['id']; ?>, '<?php echo htmlspecialchars(addslashes($cat['name'])); ?>')">
                             <div class="card h-100 shadow-sm border-0 category-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
                                 <div class="w-100 d-flex align-items-center justify-content-center" 
-                                     style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                                    <i class="bi bi-folder-fill text-white" style="font-size: 4rem;"></i>
+                                     style="height: 140px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="bi bi-folder-fill text-white" style="font-size: 2.75rem;"></i>
                                 </div>
                                 <div class="card-body p-3">
                                     <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
@@ -2144,14 +2257,14 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                     });
                     if (!empty($uncategorized_dishes)):
                     ?>
-                        <div class="col-md-4 col-lg-3 modal-category-item" 
+                        <div class="col-6 col-md-3 modal-category-item" 
                              data-category-id="0"
                              data-category-name="Uncategorized"
                              onclick="selectCategoryInModal(0, 'Uncategorized')">
                             <div class="card h-100 shadow-sm border-0 category-modal-card" style="cursor: pointer; transition: all 0.3s ease; border-radius: 16px; overflow: hidden;">
                                 <div class="w-100 d-flex align-items-center justify-content-center" 
-                                     style="height: 200px; background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
-                                    <i class="bi bi-folder-x text-white" style="font-size: 4rem;"></i>
+                                     style="height: 140px; background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
+                                    <i class="bi bi-folder-x text-white" style="font-size: 2.75rem;"></i>
                                 </div>
                                 <div class="card-body p-3">
                                     <h6 class="card-title fw-bold mb-1" style="color: #1e293b;">
@@ -2176,7 +2289,7 @@ $total_revenue = array_sum(array_column($all_grouped_orders, 'total_amount'));
                     <?php foreach ($dishes as $dish): 
                         $image_path = dish_image_url((int) $dish['id'], '../');
                     ?>
-                        <div class="col-md-4 col-lg-3 modal-dish-item" 
+                        <div class="col-6 col-md-3 modal-dish-item" 
                              data-dish-id="<?php echo $dish['id']; ?>"
                              data-dish-name="<?php echo htmlspecialchars($dish['name']); ?>"
                              data-category-id="<?php echo $dish['category_id'] ?? '0'; ?>"
@@ -2681,6 +2794,77 @@ const dishesData = <?php echo json_encode($dishes); ?>;
 window.dishesData = dishesData;
 const dishIngredientsByDishId = <?php echo json_encode($dish_ingredients_for_form ?: new stdClass()); ?>;
 
+// 12-hour delivery time picker → hidden delivery_time (HH:MM 24h for DB)
+function syncDeliveryTimeHidden() {
+    const hidden = document.getElementById('delivery_time');
+    const hourEl = document.getElementById('delivery_hour');
+    const minEl = document.getElementById('delivery_minute');
+    const ampmEl = document.getElementById('delivery_ampm');
+    if (!hidden || !hourEl || !minEl || !ampmEl) return;
+    const h12 = parseInt(hourEl.value, 10);
+    const min = minEl.value;
+    const ampm = ampmEl.value;
+    if (!h12 || min === '' || !ampm) {
+        hidden.value = '';
+        return;
+    }
+    let h24 = h12 % 12;
+    if (ampm === 'PM') h24 += 12;
+    hidden.value = String(h24).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+}
+
+function setDeliveryTimePicker(timeStr) {
+    const hourEl = document.getElementById('delivery_hour');
+    const minEl = document.getElementById('delivery_minute');
+    const ampmEl = document.getElementById('delivery_ampm');
+    const hidden = document.getElementById('delivery_time');
+    if (!hourEl || !minEl || !ampmEl) return;
+    const raw = String(timeStr || '').trim();
+    const m = raw.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) {
+        hourEl.value = '';
+        minEl.value = '';
+        ampmEl.value = 'AM';
+        if (hidden) hidden.value = '';
+        return;
+    }
+    let h24 = parseInt(m[1], 10);
+    const mins = m[2];
+    const ampm = h24 >= 12 ? 'PM' : 'AM';
+    let h12 = h24 % 12;
+    if (h12 === 0) h12 = 12;
+    hourEl.value = String(h12);
+    minEl.value = mins;
+    ampmEl.value = ampm;
+    syncDeliveryTimeHidden();
+}
+
+function getDeliveryTimeDisplay() {
+    const hourEl = document.getElementById('delivery_hour');
+    const minEl = document.getElementById('delivery_minute');
+    const ampmEl = document.getElementById('delivery_ampm');
+    if (hourEl && minEl && ampmEl && hourEl.value && minEl.value && ampmEl.value) {
+        return hourEl.value + ':' + minEl.value + ' ' + ampmEl.value;
+    }
+    const hidden = document.getElementById('delivery_time');
+    return hidden ? formatTimeForPrint(hidden.value) : '';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    ['delivery_hour', 'delivery_minute', 'delivery_ampm'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', function () {
+                syncDeliveryTimeHidden();
+                if (typeof currentStep !== 'undefined' && currentStep === 4 && typeof updateReview === 'function') {
+                    updateReview();
+                }
+            });
+        }
+    });
+    syncDeliveryTimeHidden();
+});
+
 
 // Ingredient adjustments stay in JS state — defaults are NOT shown on the main form.
 window.ingredientOverrideState = window.ingredientOverrideState || {}; // dish-recipe absolute qty
@@ -2983,6 +3167,9 @@ window.updateDishThumb = updateDishThumb;
 
 // Validate form submission - ensure correct mode is set
 function validateFormSubmission() {
+    if (typeof syncDeliveryTimeHidden === 'function') {
+        syncDeliveryTimeHidden();
+    }
     const createOrderInput = document.getElementById('createOrderInput');
     const updateOrderInput = document.getElementById('updateOrderInput');
     const editOrderNumberInput = document.getElementById('editOrderNumber');
@@ -3037,7 +3224,9 @@ function validateFormSubmission() {
         const shift = document.getElementById('shift')?.value || '';
         const deliveryDate = document.getElementById('delivery_date')?.value || '';
         const deliveryTime = document.getElementById('delivery_time')?.value || '';
-        if (!customerCell || persons <= 0 || !shift || !deliveryDate || !deliveryTime) {
+        syncDeliveryTimeHidden();
+        const deliveryTimeSynced = document.getElementById('delivery_time')?.value || '';
+        if (!customerCell || persons <= 0 || !shift || !deliveryDate || !deliveryTimeSynced) {
             alert('Please fill all required customer fields in Step 1.');
             return false;
         }
@@ -3056,7 +3245,27 @@ function validateFormSubmission() {
         }
         
         console.log('Submitting form in CREATE mode (new order)');
-        if (typeof writeIngredientFormPayload === 'function') writeIngredientFormPayload();
+        try {
+            if (typeof writeIngredientFormPayload === 'function') {
+                writeIngredientFormPayload();
+            }
+        } catch (err) {
+            console.error('writeIngredientFormPayload failed (continuing submit):', err);
+        }
+        // Allow Rs 0 total — price fields are optional
+        const submitBtn = document.getElementById('orderSubmitButton');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.dataset.originalHtml = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
+            // If save hangs / errors without navigation, unlock after 25s
+            setTimeout(function () {
+                if (submitBtn.disabled) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = submitBtn.dataset.originalHtml || 'Create Order';
+                }
+            }, 25000);
+        }
         return true;
     }
 }
@@ -3179,8 +3388,7 @@ function editOrder(orderNumber) {
             deliveryDate.value = date;
         }
         if (deliveryTime) {
-            const time = order.delivery_time || '';
-            deliveryTime.value = time;
+            setDeliveryTimePicker(order.delivery_time || '');
         }
         const advanceInput = document.getElementById('advance_amount');
         if (advanceInput) {
@@ -3483,11 +3691,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function validateCurrentStep() {
     if (currentStep === 1) {
-        // Validate new customer information fields
-        const customerName = document.getElementById('customer_name');
+        // Validate customer fields present on this form (no separate order_date/time inputs)
         const customerCell = document.getElementById('customer_cell');
-        const orderDate = document.getElementById('order_date');
-        const orderTime = document.getElementById('order_time');
         const numberOfPersons = document.getElementById('number_of_persons');
         const shift = document.getElementById('shift');
         const deliveryDate = document.getElementById('delivery_date');
@@ -3508,16 +3713,6 @@ function validateCurrentStep() {
             }
             customerCell.value = cellVal.replace(/[^0-9+\s\-]/g, '');
         }
-        if (orderDate && !orderDate.value) {
-            alert('Please select order date');
-            orderDate.focus();
-            return false;
-        }
-        if (orderTime && !orderTime.value) {
-            alert('Please select order time');
-            orderTime.focus();
-            return false;
-        }
         if (numberOfPersons && (!numberOfPersons.value || parseInt(numberOfPersons.value) <= 0)) {
             alert('Please enter number of persons (must be greater than 0)');
             numberOfPersons.focus();
@@ -3534,8 +3729,12 @@ function validateCurrentStep() {
             return false;
         }
         if (deliveryTime && !deliveryTime.value) {
-            alert('Please select delivery time');
-            deliveryTime.focus();
+            syncDeliveryTimeHidden();
+        }
+        if (deliveryTime && !deliveryTime.value) {
+            alert('Please select delivery time (Hour, Minute, AM/PM)');
+            const hourEl = document.getElementById('delivery_hour');
+            if (hourEl) hourEl.focus();
             return false;
         }
         return true;
@@ -3651,7 +3850,7 @@ function updateReview() {
                 <strong>Number of Persons:</strong> ${escapeHtml(numberOfPersons ? numberOfPersons.value : '')}<br>
                 <strong>Delivery Date:</strong> ${escapeHtml(deliveryDate ? deliveryDate.value : '')}<br>
                 <strong>شفٹ:</strong> ${escapeHtml(shift ? shift.options[shift.selectedIndex].text : '')}<br>
-                <strong>Delivery Time:</strong> ${escapeHtml(deliveryTime ? deliveryTime.value : '')}
+                <strong>Delivery Time:</strong> ${escapeHtml(getDeliveryTimeDisplay() || (deliveryTime ? deliveryTime.value : ''))}
             </div>
         `;
         reviewCustomer.innerHTML = customerInfo;
@@ -4247,8 +4446,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Clear existing options
         unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
         
-        // Always show these 4 units in the specified order
-        const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+        // Always show these units in the specified order
+        const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو', 'افراد'];
         defaultUnits.forEach(unit => {
             const option = document.createElement('option');
             option.value = unit;
@@ -4286,7 +4485,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Always ensure dropdown has options
                 if (unitSelect.children.length <= 1) {
                     unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
-                    const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+                    const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو', 'افراد'];
                     defaultUnits.forEach(unit => {
                         const option = document.createElement('option');
                         option.value = unit;
@@ -4398,7 +4597,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const unitSelect = newRow.querySelector('.dish-unit');
         if (unitSelect) {
             unitSelect.innerHTML = '<option value=""><?php echo t('select_unit', 'Select Unit'); ?></option>';
-            const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو'];
+            const defaultUnits = ['دیگ', 'لیٹر', 'عدد', 'کلو', 'افراد'];
             defaultUnits.forEach(unit => {
                 const option = document.createElement('option');
                 option.value = unit;
@@ -4837,7 +5036,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php endif; ?>
 
 // Print Ingredients Function
-function printIngredients(orderNumberOrId) {
+function printIngredients(orderNumberOrId, shareAsPdf) {
     if (!ordersData || ordersData.length === 0) {
         alert('No orders data available.');
         return;
@@ -4855,8 +5054,8 @@ function printIngredients(orderNumberOrId) {
                      window.location.pathname.includes('/user/') || 
                      window.location.pathname.includes('/auth/') ? '../' : '';
     const cakeImagePath = basePath + 'images/cake.png';
-    // Use relative path - base tag in print window will handle it
-    const bannerImagePath = 'images/newimage.png';
+    // Embedded banner so print + share PDF never go blank from missing image URL
+    const bannerImagePath = <?php echo $bannerDataUri !== '' ? json_encode($bannerDataUri, JSON_UNESCAPED_SLASHES) : json_encode('images/newimage.png'); ?>;
     
     // Get number of persons from order level
     const totalPersons = parseInt(order.number_of_persons) || 0;
@@ -5609,23 +5808,41 @@ function printIngredients(orderNumberOrId) {
     function formatTimeForPrint(dateString) {
         if (!dateString) return '';
         try {
-            const date = new Date(dateString);
-            return date.toLocaleTimeString('ur-PK', { hour: '2-digit', minute: '2-digit' });
+            const raw = String(dateString).trim();
+            const timeMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+            if (timeMatch) {
+                let h = parseInt(timeMatch[1], 10);
+                const min = timeMatch[2];
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                let h12 = h % 12;
+                if (h12 === 0) h12 = 12;
+                return h12 + ':' + min + ' ' + ampm;
+            }
+            const date = new Date(raw);
+            if (isNaN(date.getTime())) return raw;
+            let h = date.getHours();
+            const min = String(date.getMinutes()).padStart(2, '0');
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            let h12 = h % 12;
+            if (h12 === 0) h12 = 12;
+            return h12 + ':' + min + ' ' + ampm;
         } catch (e) {
             return dateString;
         }
     }
     
-    // Get order date and time
+    // Get order date and delivery time (12-hour)
     const orderDate = order.order_date ? formatDateForPrint(order.order_date) : '';
     const orderTime = order.order_date ? formatTimeForPrint(order.order_date) : '';
     const deliveryDate = order.delivery_date ? formatDateForPrint(order.delivery_date) : '';
+    const deliveryTimeText = order.delivery_time
+        ? formatTimeForPrint(order.delivery_time)
+        : (orderTime || '');
     const shiftText = order.shift ? (shiftTranslations[order.shift] || order.shift) : '';
     
-    const printWindow = window.open('', '_blank');
     // Get base URL for images
     const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/admin/') + 1);
-    printWindow.document.write(`
+    const printHtml = `
         <!DOCTYPE html>
         <html dir="rtl" lang="ur">
         <head>
@@ -5733,7 +5950,7 @@ function printIngredients(orderNumberOrId) {
                     }
                     [style*="grid-template-columns"] {
                         display: grid !important;
-                        grid-template-columns: repeat(5, 1fr) !important;
+                        grid-template-columns: repeat(4, 1fr) !important;
                         gap: 3px !important;
                     }
                     [style*="grid-template-columns"] > div {
@@ -5870,7 +6087,7 @@ function printIngredients(orderNumberOrId) {
                 }
                 .ingredients-grid {
                     display: grid;
-                    grid-template-columns: repeat(5, 1fr);
+                    grid-template-columns: repeat(4, 1fr);
                     gap: 4px;
                     margin-bottom: 8px;
                 }
@@ -5923,7 +6140,7 @@ function printIngredients(orderNumberOrId) {
         <body>
             <!-- Header Image -->
             <div class="header-image">
-                <img src="images/newimage.png" alt="Header Banner" onerror="console.error('Failed to load header image:', this.src);">
+                <img src="${bannerImagePath}" alt="Header Banner" style="width:100%;height:auto;display:block;">
             </div>
             
             <!-- Order Details Table -->
@@ -5935,7 +6152,7 @@ function printIngredients(orderNumberOrId) {
                         <td><strong>افراد:</strong> ${totalPersons > 0 ? totalPersons : ''}</td>
                         <td><strong>تاريخ:</strong> ${deliveryDate}</td>
                         <td><strong>شفٹ:</strong> ${shiftText}</td>
-                        <td><strong>وقت:</strong> ${orderTime}</td>
+                        <td><strong>وقت:</strong> ${deliveryTimeText}</td>
                     </tr>
                     <!-- Additional rows with dish names -->
                     ${(() => {
@@ -5994,37 +6211,28 @@ function printIngredients(orderNumberOrId) {
             </div>
         </body>
         </html>
-    `);
+    `;
+
+    if (shareAsPdf) {
+        shareIngredientsPrintPdf(printHtml, order);
+        return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert('Please allow popups to print.');
+        return;
+    }
+    printWindow.document.write(printHtml);
     printWindow.document.close();
     
-    // Add share function to the print window
+    // Add share function to the print window — generate same PDF as list Share button
     printWindow.shareIngredientsPDFForOrder = function(orderNumber) {
-        // First, trigger print dialog so user can save as PDF
-        printWindow.print();
-        
-        // After a short delay, show share options
-        setTimeout(() => {
-            const shareTitle = (translations.ingredients_list || 'Ingredients List') + ' - ' + (translations.order_id || 'Order ID') + ' ' + orderNumber;
-            const shareText = (translations.ingredients_share_text || 'Ingredients list for order') + ' ' + orderNumber + '. Please save as PDF from the print dialog and share it.';
-            
-            if (navigator.share) {
-                navigator.share({
-                    title: shareTitle,
-                    text: shareText,
-                    url: printWindow.location.href
-                }).catch(err => {
-                    if (err.name !== 'AbortError') {
-                        alert('Please save the PDF from the print dialog, then share it manually.');
-                    }
-                });
-            } else if (navigator.clipboard) {
-                navigator.clipboard.writeText(printWindow.location.href)
-                    .then(() => alert('Link copied! Please save as PDF from print dialog (Ctrl+P > Save as PDF), then share the PDF file.'))
-                    .catch(() => alert('Please save as PDF from the print dialog (Ctrl+P > Save as PDF), then share the PDF file.'));
-            } else {
-                alert('Please save as PDF from the print dialog (Ctrl+P or Cmd+P > Save as PDF), then share the PDF file manually.');
-            }
-        }, 500);
+        if (window.opener && typeof window.opener.shareOrder === 'function') {
+            window.opener.shareOrder(orderNumber);
+            return;
+        }
+        shareIngredientsPrintPdf(printHtml, order);
     };
     
     setTimeout(() => printWindow.print(), 250);
@@ -6050,7 +6258,7 @@ function printOrder(orderNumberOrId) {
                      window.location.pathname.includes('/auth/') ? '../' : '';
     const cakeImagePath = basePath + 'images/cake.png';
     // Use relative path - base tag in print window will handle it
-    const bannerImagePath = 'images/newimage.png';
+    const bannerImagePath = <?php echo $bannerDataUri !== '' ? json_encode($bannerDataUri, JSON_UNESCAPED_SLASHES) : json_encode('images/newimage.png'); ?>;
     
     // Get status translation
     const statusTranslations = <?php echo json_encode([
@@ -6325,11 +6533,11 @@ function printOrder(orderNumberOrId) {
                 }).join('')}
                 <div class="fillable-field">
                     <span class="fillable-label">تاریخ:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatDateForPrint(order.order_date) : formatDateForPrint(new Date().toISOString())}</div>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.delivery_date ? formatDateForPrint(order.delivery_date) : (order.order_date ? formatDateForPrint(order.order_date) : formatDateForPrint(new Date().toISOString()))}</div>
                 </div>
                 <div class="fillable-field">
                     <span class="fillable-label">وقت:</span>
-                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.order_date ? formatTimeForPrint(order.order_date) : formatTimeForPrint(new Date().toISOString())}</div>
+                    <div class="fillable-space" style="text-align: center; font-weight: bold;">${order.delivery_time ? formatTimeForPrint(order.delivery_time) : (order.order_date ? formatTimeForPrint(order.order_date) : formatTimeForPrint(new Date().toISOString()))}</div>
                 </div>
                 <div class="fillable-field">
                     <span class="fillable-label">${translations.number_of_persons}:</span>
@@ -6400,60 +6608,352 @@ function printOrder(orderNumberOrId) {
     setTimeout(() => printWindow.print(), 250);
 }
 
-// Share order details using Web Share API or clipboard fallback
+// Share uses the exact same HTML as Print Ingredients
 function shareOrder(orderNumber) {
-    const previewUrl = new URL('order_preview.php', window.location.href);
-    previewUrl.searchParams.set('order_number', orderNumber);
-    const shareData = {
-        title: `Order ${orderNumber}`,
-        text: `Order details for ${orderNumber}`,
-        url: previewUrl.toString()
-    };
+    printIngredients(orderNumber, true);
+}
 
-    if (navigator.share) {
-        navigator.share(shareData).catch(err => {
-            if (err.name !== 'AbortError') {
-                alert('Sharing failed. Please copy the link instead.');
+function loadShareCaptureLibs() {
+    function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+            const existing = document.querySelector('script[src="' + src + '"]');
+            if (existing && (src.indexOf('html2canvas') !== -1 ? window.html2canvas : (window.jspdf || window.jsPDF))) {
+                resolve();
+                return;
             }
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = function () { resolve(); };
+            s.onerror = function () { reject(new Error('Failed: ' + src)); };
+            document.head.appendChild(s);
         });
-    } else if (navigator.clipboard) {
-        navigator.clipboard.writeText(previewUrl.toString())
-            .then(() => alert('Link copied to clipboard!'))
-            .catch(() => alert('Unable to copy link. Please copy it manually: ' + previewUrl.toString()));
-    } else {
-        alert('Sharing is not supported in this browser.');
+    }
+    const base = '../assets/js/';
+    const abs = (window.location.origin || '') + '/cooking-repo/assets/js/';
+    return Promise.resolve()
+        .then(function () {
+            if (window.html2canvas) return;
+            return loadScript(base + 'html2canvas.min.js').catch(function () {
+                return loadScript(abs + 'html2canvas.min.js');
+            });
+        })
+        .then(function () {
+            if ((window.jspdf && window.jspdf.jsPDF) || window.jsPDF) return;
+            return loadScript(base + 'jspdf.umd.min.js').catch(function () {
+                return loadScript(abs + 'jspdf.umd.min.js');
+            });
+        })
+        .then(function () {
+            if (!window.html2canvas) throw new Error('html2canvas not loaded');
+            if (!((window.jspdf && window.jspdf.jsPDF) || window.jsPDF)) throw new Error('jsPDF not loaded');
+        });
+}
+
+function downloadBlobFile(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function offerSharePdfFile(blob, fileName, order) {
+    const file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
+    const old = document.getElementById('share-pdf-ready-modal');
+    if (old) old.remove();
+
+    // Always download first so user has the file for WhatsApp attach
+    downloadBlobFile(blob, fileName);
+
+    const modal = document.createElement('div');
+    modal.id = 'share-pdf-ready-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML =
+        '<div style="background:#fff;border-radius:16px;max-width:440px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:Segoe UI,Tahoma,sans-serif;direction:ltr;text-align:left;">' +
+            '<h5 style="margin:0 0 8px;font-weight:700;color:#0f172a;">✅ Print slip ready</h5>' +
+            '<p style="margin:0 0 14px;color:#64748b;font-size:14px;line-height:1.45;">File <b>' + fileName +
+            '</b> downloaded. Click <b>Share now</b> to send on WhatsApp / apps, or attach it from Downloads.</p>' +
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+                '<button type="button" id="sharePdfNowBtn" style="flex:1;min-width:140px;padding:12px 14px;border:0;border-radius:10px;background:#25D366;color:#fff;font-weight:700;cursor:pointer;">Share now</button>' +
+                '<button type="button" id="downloadPdfNowBtn" style="flex:1;min-width:120px;padding:12px 14px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Download again</button>' +
+                '<button type="button" id="closeSharePdfBtn" style="width:100%;padding:10px;border:0;border-radius:10px;background:#e2e8f0;color:#334155;font-weight:600;cursor:pointer;">Close</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(modal);
+
+    modal.querySelector('#sharePdfNowBtn').onclick = function () {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            navigator.share({
+                files: [file],
+                title: 'Order ' + (order.order_number || order.id),
+                text: 'Print slip — Order ' + (order.order_number || order.id)
+            }).then(function () {
+                modal.remove();
+            }).catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                alert('Share sheet closed. File is in Downloads — open WhatsApp and attach it.');
+            });
+        } else {
+            alert('File is in your Downloads folder.\n\nOpen WhatsApp → attach document/photo → choose:\n' + fileName);
+        }
+    };
+    modal.querySelector('#downloadPdfNowBtn').onclick = function () {
+        downloadBlobFile(blob, fileName);
+    };
+    modal.querySelector('#closeSharePdfBtn').onclick = function () { modal.remove(); };
+
+    // Auto-open system share when supported (phones / some desktops)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({
+            files: [file],
+            title: 'Order ' + (order.order_number || order.id),
+            text: 'Print slip — Order ' + (order.order_number || order.id)
+        }).then(function () {
+            modal.remove();
+        }).catch(function () { /* keep modal */ });
     }
 }
+
+function shareIngredientsPrintPdf(printHtml, order) {
+    const orderLabel = order.order_number || order.id;
+    const pdfName = 'Ingredients-' + orderLabel + '.pdf';
+    const jpgName = 'Ingredients-' + orderLabel + '.jpg';
+
+    const loading = document.createElement('div');
+    loading.id = 'share-pdf-loading';
+    loading.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,0.45);display:flex;align-items:center;justify-content:center;';
+    loading.innerHTML = '<div style="background:#fff;padding:18px 22px;border-radius:12px;font:600 15px Segoe UI,sans-serif;color:#0f172a;">Preparing print slip to share…</div>';
+    document.body.appendChild(loading);
+
+    const printWindow = window.open('', '_blank', 'width=900,height=1200');
+    if (!printWindow) {
+        loading.remove();
+        alert('Please allow popups, then click Share again.');
+        return;
+    }
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
+
+    function doneLoading() {
+        const el = document.getElementById('share-pdf-loading');
+        if (el) el.remove();
+    }
+
+    function waitImages(doc) {
+        const imgs = Array.prototype.slice.call((doc && doc.images) || []);
+        return Promise.all(imgs.map(function (img) {
+            if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+            return new Promise(function (resolve) {
+                img.onload = img.onerror = function () { resolve(); };
+                setTimeout(resolve, 5000);
+            });
+        }));
+    }
+
+    function canvasToPdfBlob(canvas) {
+        const JsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
+        const imgData = canvas.toDataURL('image/jpeg', 0.93);
+        const pdf = new JsPDF('p', 'mm', 'a4');
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 4;
+        const imgW = pageW - margin * 2;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        let heightLeft = imgH;
+        let y = margin;
+        pdf.addImage(imgData, 'JPEG', margin, y, imgW, imgH);
+        heightLeft -= (pageH - margin * 2);
+        while (heightLeft > 6) {
+            y = margin - (imgH - heightLeft);
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', margin, y, imgW, imgH);
+            heightLeft -= (pageH - margin * 2);
+        }
+        return pdf.output('blob');
+    }
+
+    function canvasToJpegBlob(canvas) {
+        return new Promise(function (resolve) {
+            if (canvas.toBlob) {
+                canvas.toBlob(function (b) { resolve(b); }, 'image/jpeg', 0.92);
+            } else {
+                const data = canvas.toDataURL('image/jpeg', 0.92);
+                const bin = atob(data.split(',')[1]);
+                const arr = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                resolve(new Blob([arr], { type: 'image/jpeg' }));
+            }
+        });
+    }
+
+    loadShareCaptureLibs()
+        .then(function () {
+            return waitImages(printWindow.document).then(function () {
+                return new Promise(function (r) { setTimeout(r, 400); });
+            });
+        })
+        .then(function () {
+            try {
+                printWindow.document.querySelectorAll('.no-print').forEach(function (el) {
+                    el.style.display = 'none';
+                });
+                const st = printWindow.document.createElement('style');
+                st.textContent = 'body::before{display:none!important;} .no-print{display:none!important;}';
+                printWindow.document.head.appendChild(st);
+            } catch (e) {}
+            return html2canvas(printWindow.document.body, {
+                scale: 1.5,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                imageTimeout: 10000,
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: Math.max(printWindow.document.body.scrollWidth, 800),
+                windowHeight: Math.max(printWindow.document.body.scrollHeight, 1000)
+            });
+        })
+        .then(function (canvas) {
+            if (!canvas || canvas.width < 40) throw new Error('blank canvas');
+            const ctx = canvas.getContext('2d');
+            const sample = ctx.getImageData(
+                Math.floor(canvas.width * 0.15),
+                Math.floor(canvas.height * 0.12),
+                80,
+                80
+            ).data;
+            let nonWhite = 0;
+            for (let i = 0; i < sample.length; i += 4) {
+                if (sample[i] < 246 || sample[i + 1] < 246 || sample[i + 2] < 246) nonWhite++;
+            }
+            if (nonWhite < 10) throw new Error('white canvas');
+
+            const pdfBlob = canvasToPdfBlob(canvas);
+            return canvasToJpegBlob(canvas).then(function (jpgBlob) {
+                return { pdfBlob: pdfBlob, jpgBlob: jpgBlob };
+            });
+        })
+        .then(function (files) {
+            doneLoading();
+            try { printWindow.close(); } catch (e) {}
+
+            // Prefer PDF for share; JPEG as backup (WhatsApp-friendly)
+            const pdfOk = files.pdfBlob && files.pdfBlob.size > 5000;
+            const jpgOk = files.jpgBlob && files.jpgBlob.size > 3000;
+            if (pdfOk) {
+                offerSharePdfFile(files.pdfBlob, pdfName, order);
+            } else if (jpgOk) {
+                offerSharePdfFile(files.jpgBlob, jpgName, order);
+            } else {
+                throw new Error('empty output');
+            }
+        })
+        .catch(function (err) {
+            console.error(err);
+            doneLoading();
+            // Inject Share button on the visible print slip (same content as Print)
+            try {
+                printWindow.focus();
+                const bar = printWindow.document.createElement('div');
+                bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0f766e;color:#fff;padding:12px;text-align:center;font:600 14px sans-serif;';
+                bar.innerHTML = 'Click <b>Share PDF</b> to send this slip &nbsp;' +
+                    '<button type="button" id="pwShareBtn" style="padding:8px 16px;cursor:pointer;font-weight:700;background:#25D366;color:#fff;border:0;border-radius:8px;">Share PDF</button> ' +
+                    '<button type="button" id="pwPrintBtn" style="padding:8px 16px;cursor:pointer;font-weight:700;">Print / Save PDF</button>';
+                printWindow.document.body.insertBefore(bar, printWindow.document.body.firstChild);
+                printWindow.document.getElementById('pwPrintBtn').onclick = function () { printWindow.print(); };
+                printWindow.document.getElementById('pwShareBtn').onclick = function () {
+                    // Retry capture on user click (fresh gesture)
+                    if (window.opener && typeof window.opener.__retryShareFromPrint === 'function') {
+                        // no-op path
+                    }
+                    loadShareCaptureLibs().then(function () {
+                        return html2canvas(printWindow.document.body, {
+                            scale: 1.5, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false
+                        });
+                    }).then(function (canvas) {
+                        const pdfBlob = canvasToPdfBlob(canvas);
+                        try { printWindow.close(); } catch (e) {}
+                        offerSharePdfFile(pdfBlob, pdfName, order);
+                    }).catch(function () {
+                        printWindow.print();
+                    });
+                };
+            } catch (e2) {
+                alert('Could not prepare share file. Allow popups and try again.');
+            }
+        });
+}
+
+function loadHtml2PdfLib() {
+    return loadShareCaptureLibs();
+}
+
+
+
+
 
 // Helper functions to format date and time for print
 function formatDateForPrint(dateString) {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    try {
+        const raw = String(dateString).trim();
+        const date = /^\d{1,2}:\d{2}/.test(raw) ? new Date('1970-01-01T' + raw) : new Date(raw);
+        if (isNaN(date.getTime())) return raw;
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch (e) {
+        return String(dateString);
+    }
 }
 
 function formatTimeForPrint(dateString) {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    try {
+        const raw = String(dateString).trim();
+        const timeMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if (timeMatch) {
+            let h = parseInt(timeMatch[1], 10);
+            const min = timeMatch[2];
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            let h12 = h % 12;
+            if (h12 === 0) h12 = 12;
+            return h12 + ':' + min + ' ' + ampm;
+        }
+        const date = new Date(raw);
+        if (isNaN(date.getTime())) return raw;
+        let h = date.getHours();
+        const min = String(date.getMinutes()).padStart(2, '0');
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        let h12 = h % 12;
+        if (h12 === 0) h12 = 12;
+        return h12 + ':' + min + ' ' + ampm;
+    } catch (e) {
+        return String(dateString);
+    }
 }
 
 function formatDateTimeForPrint(dateString) {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString('en-GB', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return String(dateString);
+        return date.toLocaleString('en-GB', { 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+    } catch (e) {
+        return String(dateString);
+    }
 }
 
 // Dish Selection Modal Functions
@@ -6500,7 +7000,7 @@ function showCategoriesInModal() {
     const backBtn = document.getElementById('backToCategoriesBtn');
     const searchInput = document.getElementById('dishSearchInput');
     
-    if (categoriesGrid) categoriesGrid.style.display = 'block';
+    if (categoriesGrid) categoriesGrid.style.display = 'flex';
     if (dishesGrid) dishesGrid.style.display = 'none';
     if (backBtn) backBtn.style.display = 'none';
     if (searchInput) {
@@ -6526,7 +7026,7 @@ function selectCategoryInModal(categoryId, categoryName) {
     const searchInput = document.getElementById('dishSearchInput');
     
     if (categoriesGrid) categoriesGrid.style.display = 'none';
-    if (dishesGrid) dishesGrid.style.display = 'block';
+    if (dishesGrid) dishesGrid.style.display = 'flex';
     if (backBtn) backBtn.style.display = 'block';
     if (searchInput) {
         searchInput.value = '';
@@ -6545,10 +7045,10 @@ function selectCategoryInModal(categoryId, categoryName) {
         const itemCategoryId = item.getAttribute('data-category-id');
         if (categoryId == 0) {
             // Show uncategorized dishes
-            item.style.display = (!itemCategoryId || itemCategoryId == '0') ? 'block' : 'none';
+            item.style.display = (!itemCategoryId || itemCategoryId == '0') ? '' : 'none';
         } else {
             // Show dishes from selected category
-            item.style.display = (itemCategoryId == categoryId) ? 'block' : 'none';
+            item.style.display = (itemCategoryId == categoryId) ? '' : 'none';
         }
     });
     
@@ -6565,29 +7065,35 @@ function filterItemsInModal(searchTerm) {
         // Filtering categories
         const categoryItems = document.querySelectorAll('.modal-category-item');
         categoryItems.forEach(item => {
-            const categoryName = item.getAttribute('data-category-name').toLowerCase();
+            const categoryName = (item.getAttribute('data-category-name') || '').toLowerCase();
             const matchesSearch = !searchTerm || categoryName.includes(searchLower);
             
             if (matchesSearch) {
-                item.style.display = 'block';
+                item.style.display = '';
                 visibleCount++;
             } else {
                 item.style.display = 'none';
             }
         });
     } else {
-        // Filtering dishes
+        // Filtering dishes within selected category
         const dishItems = document.querySelectorAll('.modal-dish-item');
         dishItems.forEach(item => {
-            // Only filter visible dishes (already filtered by category)
-            if (item.style.display === 'none') return;
+            const itemCategoryId = item.getAttribute('data-category-id');
+            const inCategory = (currentSelectedCategoryId == 0)
+                ? (!itemCategoryId || itemCategoryId == '0')
+                : (itemCategoryId == currentSelectedCategoryId);
+            if (!inCategory) {
+                item.style.display = 'none';
+                return;
+            }
             
-            const dishName = item.getAttribute('data-dish-name').toLowerCase();
-            const category = item.getAttribute('data-category').toLowerCase();
+            const dishName = (item.getAttribute('data-dish-name') || '').toLowerCase();
+            const category = (item.getAttribute('data-category') || '').toLowerCase();
             const matchesSearch = !searchTerm || dishName.includes(searchLower) || category.includes(searchLower);
             
             if (matchesSearch) {
-                item.style.display = 'block';
+                item.style.display = '';
                 visibleCount++;
             } else {
                 item.style.display = 'none';

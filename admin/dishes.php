@@ -13,6 +13,27 @@ $conn = getDBConnection();
 $error = '';
 $success = '';
 
+// Ensure dish images can be stored (data URIs need TEXT, not VARCHAR(255))
+try {
+    if (!db_column_exists($conn, 'dishes', 'image')) {
+        $conn->exec('ALTER TABLE dishes ADD COLUMN image TEXT DEFAULT NULL');
+    } else {
+        $col = db_fetch(
+            $conn,
+            "SELECT data_type, character_maximum_length
+             FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'dishes' AND column_name = 'image'"
+        );
+        $dtype = strtolower((string)($col['data_type'] ?? ''));
+        $maxlen = isset($col['character_maximum_length']) ? (int)$col['character_maximum_length'] : null;
+        if ($dtype === 'character varying' || ($maxlen !== null && $maxlen > 0 && $maxlen < 100000)) {
+            $conn->exec('ALTER TABLE dishes ALTER COLUMN image TYPE TEXT');
+        }
+    }
+} catch (Throwable $e) {
+    error_log('dishes.image ensure TEXT: ' . $e->getMessage());
+}
+
 // Handle form submission - Create or Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
@@ -29,26 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = translateForDatabase($name);
     $description = translateForDatabase($description);
     
-    // Handle image upload — store as data URI in Postgres (survives Render redeploys)
-    $image_path = null;
-    if (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] === UPLOAD_ERR_OK) {
-        $uploadError = null;
-        $image_path = dish_image_from_upload($_FILES['dish_image'], $uploadError, 2 * 1024 * 1024);
-        if ($image_path === null) {
-            $error = $uploadError ?: 'Error uploading image.';
-        } else {
-            // Best-effort local cache (optional; may be wiped on Render redeploy)
-            $upload_dir = __DIR__ . '/../uploads/dishes/';
-            if (!is_dir($upload_dir)) {
-                @mkdir($upload_dir, 0755, true);
-            }
-            if (is_dir($upload_dir) && is_writable($upload_dir)) {
-                $ext = strtolower(pathinfo($_FILES['dish_image']['name'], PATHINFO_EXTENSION)) ?: 'jpg';
-                $cache_name = uniqid('dish_', true) . '.' . $ext;
-                @copy($_FILES['dish_image']['tmp_name'], $upload_dir . $cache_name);
-            }
-        }
-    } elseif (isset($_FILES['dish_image']) && $_FILES['dish_image']['error'] !== UPLOAD_ERR_NO_FILE) {
+    // Handle image upload AFTER we know dish save will proceed (processed below once we have dish id)
+    $uploaded_image_file = null;
+    if (isset($_FILES['dish_image']) && (int)$_FILES['dish_image']['error'] === UPLOAD_ERR_OK) {
+        $uploaded_image_file = $_FILES['dish_image'];
+    } elseif (isset($_FILES['dish_image']) && (int)$_FILES['dish_image']['error'] !== UPLOAD_ERR_NO_FILE) {
         $upload_errors = [
             UPLOAD_ERR_INI_SIZE => 'File exceeds upload_max_filesize directive.',
             UPLOAD_ERR_FORM_SIZE => 'File exceeds MAX_FILE_SIZE directive.',
@@ -58,11 +64,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk.',
             UPLOAD_ERR_EXTENSION => 'File upload stopped by extension.'
         ];
-        $error_code = $_FILES['dish_image']['error'];
+        $error_code = (int)$_FILES['dish_image']['error'];
         $error = 'Error uploading image: ' . ($upload_errors[$error_code] ?? 'Unknown error (' . $error_code . ')');
     }
+
+    // Empty POST often means file too large (post_max_size) — PHP drops all fields
+    if (empty($_POST) && empty($_FILES) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        $error = 'Upload too large for server limits. Use an image under 2MB.';
+    }
     
-    if (empty($name)) {
+    if (!empty($error)) {
+        // Keep error (image or size) — do not save
+    } elseif (empty($name)) {
         $error = 'Dish name is required.';
     } else {
         // Allow NULL category_id if the column is currently NOT NULL
@@ -89,38 +102,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->exec("ALTER TABLE dishes ADD COLUMN base_unit VARCHAR(50) DEFAULT 'serving'");
         }
         if (!db_column_exists($conn, 'dishes', 'image')) {
-            $conn->exec("ALTER TABLE dishes ADD COLUMN image VARCHAR(255) DEFAULT NULL");
+            $conn->exec("ALTER TABLE dishes ADD COLUMN image TEXT DEFAULT NULL");
+        } else {
+            // data URIs need TEXT — VARCHAR(255) silently fails / truncates uploads
+            try {
+                $col = db_fetch(
+                    $conn,
+                    "SELECT data_type, character_maximum_length
+                     FROM information_schema.columns
+                     WHERE table_schema = 'public' AND table_name = 'dishes' AND column_name = 'image'"
+                );
+                $dtype = strtolower((string)($col['data_type'] ?? ''));
+                $maxlen = isset($col['character_maximum_length']) ? (int)$col['character_maximum_length'] : null;
+                if ($dtype === 'character varying' || ($maxlen !== null && $maxlen > 0 && $maxlen < 100000)) {
+                    $conn->exec('ALTER TABLE dishes ALTER COLUMN image TYPE TEXT');
+                }
+            } catch (Throwable $e) {
+                error_log('dishes.image TEXT migration: ' . $e->getMessage());
+            }
         }
         
         // Start transaction
         $conn->beginTransaction();
         
         try {
+            $current_dish_id = null;
             if ($dish_id) {
-                // Keep existing image if no new upload
-                if ($image_path === null) {
-                    $existing_row = db_fetch($conn, "SELECT image FROM dishes WHERE id = ?", [$dish_id]);
-                    $image_path = $existing_row['image'] ?? null;
-                }
+                // Keep existing image until new upload is processed after commit
+                $existing_row = db_fetch($conn, "SELECT image FROM dishes WHERE id = ?", [$dish_id]);
+                $keep_image = $existing_row['image'] ?? null;
                 
-                // Update existing dish
                 db_exec(
                     $conn,
                     "UPDATE dishes SET name = ?, description = ?, category_id = ?, number_of_persons = ?, base_quantity = ?, base_unit = ?, image = ? WHERE id = ?",
-                    [$name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path, $dish_id]
+                    [$name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $keep_image, $dish_id]
                 );
                 
-                // Delete existing dish ingredients
                 db_exec($conn, "DELETE FROM dish_ingredients WHERE dish_id = ?", [$dish_id]);
-                
-                $current_dish_id = $dish_id;
+                $current_dish_id = (int)$dish_id;
             } else {
-                // Create new dish
-                $current_dish_id = db_insert(
+                $current_dish_id = (int) db_insert(
                     $conn,
                     "INSERT INTO dishes (name, description, category_id, number_of_persons, base_quantity, base_unit, image)
                      VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                    [$name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, $image_path]
+                    [$name, $description, $category_id, $number_of_persons, $base_quantity, $base_unit, null]
                 );
                 if (!$current_dish_id) {
                     throw new Exception('Failed to get dish ID after insert');
@@ -143,22 +168,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             
-            // Commit transaction
             $conn->commit();
+
+            // Save image AFTER commit (stable file name dish_{id}.jpg)
+            $image_ok = false;
+            $image_err = null;
+            if ($uploaded_image_file !== null) {
+                $savedPath = dish_image_from_upload($uploaded_image_file, $image_err, 2 * 1024 * 1024);
+                if ($savedPath) {
+                    $uploadDir = __DIR__ . '/../uploads/dishes/';
+                    $stableName = 'dish_' . $current_dish_id . '.jpg';
+                    $stableRel = 'uploads/dishes/' . $stableName;
+                    $srcFull = __DIR__ . '/../' . str_replace(['/', '\\'], '/', $savedPath);
+                    $srcFull = str_replace('/', DIRECTORY_SEPARATOR, $srcFull);
+                    // Normalize path from DB-style relative
+                    if (!is_file($srcFull)) {
+                        $srcFull = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($savedPath, '/\\'));
+                    }
+                    $destFull = $uploadDir . $stableName;
+                    if (is_file($srcFull)) {
+                        @copy($srcFull, $destFull);
+                        // Remove unique temp name if different
+                        if (realpath($srcFull) !== realpath($destFull)) {
+                            @unlink($srcFull);
+                        }
+                    }
+                    if (is_file($destFull)) {
+                        db_exec($conn, "UPDATE dishes SET image = ? WHERE id = ?", [$stableRel, $current_dish_id]);
+                        $image_ok = true;
+                    } else {
+                        // Fall back to whatever path upload helper returned
+                        db_exec($conn, "UPDATE dishes SET image = ? WHERE id = ?", [$savedPath, $current_dish_id]);
+                        $image_ok = true;
+                    }
+                }
+            }
+
             $success = $dish_id ? 'Dish updated successfully!' : 'Dish created successfully!';
-            
-            // Redirect after update to show success message and reload edit form
-            if ($dish_id) {
-                header('Location: dishes.php?edit=' . $dish_id . '&success=1');
-                exit();
-            } else {
-                // Redirect after creating new dish to refresh the list (go to page 1 to show newest)
-                header('Location: dishes.php?success=1&created=1&page=1');
-                exit();
+            if ($uploaded_image_file !== null) {
+                if ($image_ok) {
+                    $success .= ' Image saved.';
+                } else {
+                    $success .= ' (Image failed: ' . ($image_err ?: 'unknown error') . ')';
+                }
             }
             
+            if ($dish_id) {
+                header('Location: dishes.php?edit=' . $dish_id . '&success=1' . ($image_ok ? '&img=1' : ($uploaded_image_file ? '&img=0' : '')));
+                exit();
+            }
+            header('Location: dishes.php?success=1&created=1&page=1' . ($image_ok ? '&img=1' : ($uploaded_image_file ? '&img=0' : '')));
+            exit();
+            
         } catch (Exception $e) {
-            // Rollback transaction on error
             if ($conn->inTransaction()) {
                 $conn->rollBack();
             }
@@ -189,7 +251,12 @@ if (isset($_GET['success'])) {
     } elseif (isset($_GET['created'])) {
         $success = 'Dish created successfully!';
     } else {
-        $success = 'Dish created successfully!';
+        $success = 'Dish updated successfully!';
+    }
+    if (isset($_GET['img']) && $_GET['img'] === '1') {
+        $success .= ' Image saved.';
+    } elseif (isset($_GET['img']) && $_GET['img'] === '0') {
+        $error = 'Dish saved, but image upload failed. Try a JPG/PNG under 2MB.';
     }
 }
 
@@ -243,8 +310,9 @@ $offset_int = intval($offset);
 $dishes = db_fetch_all(
     $conn,
     "SELECT d.id, d.name, d.description, d.category_id, d.number_of_persons, d.base_quantity, d.base_unit,
-            d.created_at, c.name as category_name,
+            d.image, d.created_at, c.name as category_name,
             CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN 1 ELSE 0 END as has_image,
+            CASE WHEN d.image IS NOT NULL AND d.image <> '' THEN LENGTH(d.image) ELSE 0 END as image_ver,
             (SELECT COUNT(*) FROM dish_ingredients WHERE dish_id = d.id) as ingredients_count
     FROM dishes d 
     LEFT JOIN categories c ON d.category_id = c.id 
@@ -394,8 +462,8 @@ include __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                     
                     <div class="row g-3">
-                        <!-- Left Column -->
-                        <div class="col-md-6">
+                        <!-- Left Column (narrower) -->
+                        <div class="col-md-4">
                             <!-- Dish Name -->
                             <div class="mb-3">
                                 <label for="name" class="form-label fw-semibold">
@@ -460,15 +528,24 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="file" class="form-control" id="dish_image" name="dish_image" 
                                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                                        onchange="previewImage(this)">
-                                <small class="form-text text-muted">Allowed formats: JPG, JPEG, PNG, GIF, WEBP (max 2MB). Images are saved in the database.</small>
+                                <small class="form-text text-muted">Allowed: JPG, PNG, GIF, WEBP (max 2MB).</small>
                                 <?php if ($edit_dish && !empty($edit_dish['image'])): ?>
-                                    <?php $edit_image_src = dish_image_url((int) $edit_dish['id'], '../'); ?>
+                                    <?php
+                                    $edit_image_src = dish_image_src($edit_dish['image'], '../');
+                                    if (!$edit_image_src) {
+                                        $edit_image_src = dish_image_url((int) $edit_dish['id'], '../', (string) strlen((string)$edit_dish['image']));
+                                    } else {
+                                        $fp = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim((string)$edit_dish['image'], '/\\'));
+                                        if (is_file($fp)) {
+                                            $edit_image_src .= '?v=' . filemtime($fp);
+                                        }
+                                    }
+                                    ?>
                                     <div class="mt-2">
                                         <img src="<?php echo htmlspecialchars($edit_image_src); ?>" 
                                              alt="<?php echo htmlspecialchars($edit_dish['name']); ?>" 
                                              id="current_image_preview"
-                                             class="img-thumbnail mt-2" 
-                                             style="max-width: 200px; max-height: 200px; object-fit: cover;">
+                                             style="max-width: 180px; max-height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0;">
                                         <p class="text-muted small mb-0 mt-1">Current image</p>
                                     </div>
                                 <?php endif; ?>
@@ -479,8 +556,8 @@ include __DIR__ . '/../includes/header.php';
                             </div>
                         </div>
                         
-                        <!-- Right Column -->
-                        <div class="col-md-6">
+                        <!-- Right Column (wider — ingredients / category names) -->
+                        <div class="col-md-8">
                             <!-- Serves and Quantity -->
                             <div class="row g-3 mb-3">
                                 <div class="col-6">
@@ -602,24 +679,41 @@ include __DIR__ . '/../includes/header.php';
                             $ingredients_count = intval($dish['ingredients_count'] ?? 0);
                             $category_name = htmlspecialchars($dish['category_name'] ?? 'Uncategorized');
                             ?>
-                            <div class="col-md-6 col-lg-4 col-xl-3 dish-item" 
+                            <div class="col-md-6 col-lg-3 dish-item" 
                                  data-name="<?php echo strtolower(htmlspecialchars($dish['name'])); ?>"
                                  data-category="<?php echo strtolower($category_name); ?>">
                                 <div class="card h-100 border-0 shadow-lg dish-card" 
                                      style="cursor: pointer;" 
                                      onclick="window.location.href='?edit=<?php echo $dish['id']; ?>'">
                                     <?php 
-                                    $dish_image_src = dish_image_url((int) $dish['id'], '../');
+                                    $has_dish_image = !empty($dish['has_image']) || !empty($dish['image']);
+                                    // Prefer direct file URL (fast + reliable on XAMPP)
+                                    $dish_image_src = dish_image_src($dish['image'] ?? null, '../');
+                                    if ($dish_image_src) {
+                                        $fullPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim((string)$dish['image'], '/\\'));
+                                        $ver = is_file($fullPath) ? filemtime($fullPath) : (string)($dish['image_ver'] ?? time());
+                                        $dish_image_src .= (strpos($dish_image_src, '?') === false ? '?' : '&') . 'v=' . $ver;
+                                    } elseif ($has_dish_image) {
+                                        $dish_image_src = dish_image_url((int) $dish['id'], '../', (string)($dish['image_ver'] ?? time()));
+                                    } else {
+                                        $dish_image_src = '';
+                                    }
                                     ?>
                                     <div style="height: 150px; overflow: hidden; background: #f8f9fa;">
+                                        <?php if ($dish_image_src !== ''): ?>
                                         <img src="<?php echo htmlspecialchars($dish_image_src); ?>" 
                                              alt="<?php echo htmlspecialchars($dish['name']); ?>" 
                                              loading="lazy" decoding="async"
                                              style="width: 100%; height: 100%; object-fit: cover;"
                                              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                                        <div style="display:none;height:150px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);align-items:center;justify-content:center;">
+                                        <div style="display:none;height:150px;background:linear-gradient(135deg,#0f766e 0%,#115e59 100%);align-items:center;justify-content:center;">
                                             <i class="bi bi-egg-fried text-white" style="font-size:3rem;"></i>
                                         </div>
+                                        <?php else: ?>
+                                        <div style="display:flex;height:150px;background:linear-gradient(135deg,#0f766e 0%,#115e59 100%);align-items:center;justify-content:center;">
+                                            <i class="bi bi-egg-fried text-white" style="font-size:3rem;"></i>
+                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="card-body p-3">
                                         <div class="d-flex align-items-start justify-content-between mb-2">
@@ -784,6 +878,21 @@ include __DIR__ . '/../includes/header.php';
 
 .ingredient-row-item .searchable-select-wrapper {
     margin-bottom: 0;
+}
+
+/* Keep Category / Ingredient / Qty / Unit / Remove on one row (desktop) */
+@media (min-width: 992px) {
+    .ingredient-fields-row {
+        flex-wrap: nowrap !important;
+    }
+    .ingredient-fields-row > [class*="col-"] {
+        min-width: 0;
+    }
+    .ingredient-fields-row .btn-remove-ingredient {
+        white-space: nowrap;
+        padding-left: 0.65rem;
+        padding-right: 0.65rem;
+    }
 }
 
 /* Custom dropdown styling - clean and simple */
@@ -1586,7 +1695,7 @@ window.addIngredientRow = function() {
     row.innerHTML = `
         <div class="card border shadow-sm ingredient-row-card">
             <div class="card-body p-3">
-                <div class="row g-3 align-items-end">
+                <div class="row g-2 align-items-end ingredient-fields-row">
                                 <div class="col-lg-3 col-md-6">
                                     <label class="form-label fw-semibold mb-2 d-block">
                                         <i class="bi bi-folder-fill me-2 text-primary"></i>
@@ -1656,12 +1765,13 @@ window.addIngredientRow = function() {
                             <option value="lb">lb</option>
                             <option value="oz_fluid">fl oz</option>
                             <option value="گچھی">گچھی</option>
+                            <option value="افراد">افراد</option>
                         </select>
                     </div>
                     <div class="col-lg-2 col-md-4 col-sm-6">
                         <label class="form-label fw-semibold mb-2 d-block text-transparent">Action</label>
-                        <button type="button" class="btn btn-danger w-100 d-flex align-items-center justify-content-center" onclick="removeIngredientRow('${rowId}')" title="Remove ingredient">
-                            <i class="bi bi-trash-fill me-2"></i>
+                        <button type="button" class="btn btn-danger w-100 d-flex align-items-center justify-content-center btn-remove-ingredient" onclick="removeIngredientRow('${rowId}')" title="Remove ingredient">
+                            <i class="bi bi-trash-fill me-1"></i>
                             <span>Remove</span>
                         </button>
                     </div>
@@ -1899,7 +2009,8 @@ window.populateEditForm = function() {
                     {value: 'oz', label: 'oz'},
                     {value: 'lb', label: 'lb'},
                     {value: 'oz_fluid', label: 'fl oz'},
-                    {value: 'گچھی', label: 'گچھی'}
+                    {value: 'گچھی', label: 'گچھی'},
+                    {value: 'افراد', label: 'افراد'}
                 ];
                 
                 unitList.forEach(unit => {
@@ -1913,7 +2024,7 @@ window.populateEditForm = function() {
                 row.innerHTML = `
                     <div class="card border shadow-sm ingredient-row-card">
                         <div class="card-body p-3">
-                            <div class="row g-3 align-items-end">
+                            <div class="row g-2 align-items-end ingredient-fields-row">
                                 <div class="col-lg-3 col-md-6">
                                     <label class="form-label fw-semibold mb-2 d-block">
                                         <i class="bi bi-folder-fill me-2 text-primary"></i>
@@ -1974,8 +2085,8 @@ window.populateEditForm = function() {
                                 </div>
                                 <div class="col-lg-2 col-md-4 col-sm-6">
                                     <label class="form-label fw-semibold mb-2 d-block text-transparent">Action</label>
-                                    <button type="button" class="btn btn-danger w-100 d-flex align-items-center justify-content-center" onclick="removeIngredientRow('${rowId}')" title="Remove ingredient">
-                                        <i class="bi bi-trash-fill me-2"></i>
+                                    <button type="button" class="btn btn-danger w-100 d-flex align-items-center justify-content-center btn-remove-ingredient" onclick="removeIngredientRow('${rowId}')" title="Remove ingredient">
+                                        <i class="bi bi-trash-fill me-1"></i>
                                         <span>Remove</span>
                                     </button>
                                 </div>
@@ -2265,7 +2376,7 @@ function displayCategoriesInModal(categories, searchTerm = '') {
     
     container.innerHTML = '<div class="row g-2">' + 
         filtered.map(cat => `
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-6 col-lg-3">
                 <div class="card h-100 border shadow-sm category-card-modal" 
                      style="cursor: pointer;"
                      onclick="selectCategory(${cat.id}, '${cat.name.replace(/'/g, "\\'")}')">
@@ -2388,7 +2499,7 @@ function displayIngredientsInModal(ingredients, searchTerm = '') {
                 </h6>
                 <div class="row g-2">
                     ${categoryIngredients.map(ing => `
-                        <div class="col-md-6 col-lg-4">
+                        <div class="col-md-6 col-lg-3">
                             <div class="card border shadow-sm ingredient-card-modal" 
                                  style="cursor: pointer;"
                                  onclick="selectIngredient(${ing.id}, ${ing.category_id}, '${ing.name.replace(/'/g, "\\'")}')">

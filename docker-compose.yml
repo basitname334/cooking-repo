@@ -20,7 +20,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=food_management_system
     ports:
-      - "5433:5432"
+      - "5436:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./database/schema.pgsql.sql:/docker-entrypoint-initdb.d/01-schema.sql

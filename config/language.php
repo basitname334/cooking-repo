@@ -160,28 +160,8 @@ function translateToUrdu($text, $source_lang = 'en') {
  * @return string Translated text
  */
 function translateText($text, $source = 'en', $target = 'ur') {
-    // Use MyMemory Translation API (free, no API key needed for small volumes)
-    $url = "https://api.mymemory.translated.net/get?q=" . urlencode($text) . "&langpair=" . $source . "|" . $target;
-    
-    // Initialize cURL
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($http_code === 200 && $response) {
-        $data = json_decode($response, true);
-        if (isset($data['responseData']['translatedText']) && !empty($data['responseData']['translatedText'])) {
-            return $data['responseData']['translatedText'];
-        }
-    }
-    
-    // Fallback: Return original text if translation fails
+    // Remote translation API was blocking page loads / order create (5s × many items).
+    // Names are already stored in Urdu in this app — return as-is for speed.
     return $text;
 }
 
