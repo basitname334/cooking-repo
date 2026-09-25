@@ -25,10 +25,13 @@ if (isset($_GET['id'])) {
     );
 
     if ($selected_dish) {
-        // Get dish ingredients with quantities
+        // Prefer dish-specific unit; fall back to ingredient unit when di.unit is null/empty.
+        // Do not use di.* + i.unit (duplicate "unit" column — PDO keeps the empty di.unit).
         $dish_ingredients = db_fetch_all(
             $conn,
-            'SELECT di.*, i.name as ingredient_name, i.unit
+            'SELECT di.quantity,
+                    i.name AS ingredient_name,
+                    COALESCE(NULLIF(TRIM(di.unit), \'\'), i.unit) AS unit
              FROM dish_ingredients di
              JOIN ingredients i ON di.ingredient_id = i.id
              WHERE di.dish_id = ?
